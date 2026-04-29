@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+After every meaningful unit of work — a bug fix, a new feature, a refactor, or any change that compiles and leaves the code in a coherent state — commit the changed source files and push to GitHub:
+
+```
+git add <changed files>
+git commit -m "<concise description of what changed and why>"
+git push
+```
+
+Commit messages should state **what** changed and **why** (the physics or numerical motivation), not just repeat the diff. Examples of good messages:
+- `Fix Neumann BC weight normalisation in fd_stencil_2d at i=1`
+- `Add self-collision term to timefp_7pt time loop`
+- `Increase nnz_max estimate to accommodate denser stencil near boundaries`
+
+Never batch unrelated changes into a single commit. Never commit build outputs, `.obj`/`.mod`/`.exe` files, or simulation result files — those are covered by `.gitignore`.
+
 ## Build and Run
 
 **Build:** Open `FP2D_QLRF_NL/FP2D_QLRF_NL.sln` in Visual Studio and build the `Debug|x64` configuration. This uses the Intel `ifx` compiler with Intel MKL (sequential). The executable lands at `FP2D_QLRF_NL/x64/Debug/FP2D_QLRF_NL.exe`.
