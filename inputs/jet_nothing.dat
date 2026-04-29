@@ -1,0 +1,21 @@
+&INPUT
+   nperp=151,npar=151,
+   vperp_min=0.d-6,vperp_max=0.7d7,
+   vpar_min=-0.7d7,vpar_max=0.7d7,
+   ising=1,nsing=25,vbound=0.7d6,
+   nbulk=2,
+   t=15.d3,10.d3,8*0.d0,
+   aa=1.d0,ab=2.d0,8*0.d0,
+   za=1.d0,zb=1.d0,8*0.d0,
+   ne=5.d19,xpart=1.d-2,
+   xb=0.99d0,8*0.d0,
+   isource=0,
+   beam_ekin=120.d0, beam_angle_deg=45.d0, 
+   beam_dvperp=0.12d6, beam_dvpar = 0.2d6,
+   taus = 200.d-3,
+   irf=0,eplus=(4.50d3,1.0d2),emin=(4.d3,1.0d0),kperp=(37.d0,0.d0),
+   kpar=8.d0,frek=53.d6,delta_RF=2.5d6,b0=3.45d0,nharm=1,
+   icn = -1,ntimes = 0, timestep = 5.d-2, iold = 0, isc = 0,
+   ifd7 = -1
+
+  /

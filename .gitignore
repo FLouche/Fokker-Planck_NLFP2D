@@ -1,0 +1,13 @@
+# Visual Studio build outputs
+FP2D_QLRF_NL/x64/
+
+# Visual Studio user-specific state
+FP2D_QLRF_NL/.vs/
+FP2D_QLRF_NL/*.u2d
+
+# Intel Fortran auto-generated interface files
+*__genmod.f90
+*__genmod.mod
+
+# Claude Code local settings
+.claude/

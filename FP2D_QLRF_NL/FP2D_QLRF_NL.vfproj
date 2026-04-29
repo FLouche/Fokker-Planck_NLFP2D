@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VisualStudioProject ProjectCreator="Intel Fortran" Keyword="Console Application" Version="11.0" ProjectIdGuid="{427B171C-67A9-6B19-E02C-CE81D85C814D}">
+	<Platforms>
+		<Platform Name="Win32"/>
+		<Platform Name="x64"/>
+	</Platforms>
+	<Configurations>
+		<Configuration Name="Debug|Win32" UseCompiler="ifortCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" WarnInterfaces="true" Traceback="true" BoundsCheck="true" StackFrameCheck="true" RuntimeLibrary="rtMultiThreadedDebugDLL"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" GenerateDebugInformation="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Debug|x64" UseCompiler="ifxCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" HeapArrays="0" WarnInterfaces="true" Traceback="true" BoundsCheck="true" StackFrameCheck="true" RuntimeLibrary="rtMultiThreadedDebugDLL" UseMkl="mklSequential"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" GenerateDebugInformation="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Release|Win32" UseCompiler="ifortCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" RuntimeLibrary="rtMultiThreadedDLL"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+		<Configuration Name="Release|x64" UseCompiler="ifxCompiler">
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" HeapArrays="0" RuntimeLibrary="rtMultiThreadedDLL" UseMkl="mklSequential"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFResourceCompilerTool"/>
+			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
+			<Tool Name="VFCustomBuildTool"/>
+			<Tool Name="VFPreLinkEventTool"/>
+			<Tool Name="VFPreBuildEventTool"/>
+			<Tool Name="VFPostBuildEventTool"/>
+			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
+		</Configuration>
+	</Configurations>
+	<Files>
+		<Filter Name="Header Files" Filter="fi;fd;h;inc"/>
+		<Filter Name="Resource Files" Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe"/>
+		<Filter Name="Source Files" Filter="f90;for;f;fpp;ftn;def;odl;idl">
+			<File RelativePath="..\Fortran sources\analysis.f90"/>
+			<File RelativePath="..\Fortran sources\apply_operator.f90"/>
+			<File RelativePath="..\Fortran sources\beam_source.f90"/>
+			<File RelativePath="..\Fortran sources\build_matrix_ss.f90"/>
+			<File RelativePath="..\Fortran sources\build_matrix_td.f90"/>
+			<File RelativePath="..\Fortran sources\CBESSEL.F90"/>
+			<File RelativePath="..\Fortran sources\cblin_vperp.f90"/>
+			<File RelativePath="..\Fortran sources\consts.f90"/>
+			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
+			<File RelativePath="..\Fortran sources\eigen_bigm-5.f90"/>
+			<File RelativePath="..\Fortran sources\fd_grid.f90"/>
+			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
+			<File RelativePath="..\Fortran sources\functions.f90"/>
+			<File RelativePath="..\Fortran sources\grid.f90"/>
+			<File RelativePath="..\Fortran sources\integrate_2d.f90"/>
+			<File RelativePath="..\Fortran sources\interpolation_module2.f90"/>
+			<File RelativePath="..\Fortran sources\main-FP_Coll_2D.f90"/>
+			<File RelativePath="..\Fortran sources\ncint.f90"/>
+			<File RelativePath="..\Fortran sources\nlterm_test.f90"/>
+			<File RelativePath="..\Fortran sources\pardiso_solver (2).f90"/>
+			<File RelativePath="..\Fortran sources\qlrfterm.f90"/>
+			<File RelativePath="..\Fortran sources\self_coll_max.f90"/>
+			<File RelativePath="..\Fortran sources\shared_data.f90"/>
+			<File RelativePath="..\Fortran sources\simpson_integration_1D.f90"/>
+			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
+			<File RelativePath="..\Fortran sources\sparse_matrix_vect_mult.f90"/>
+			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
+			<File RelativePath="..\Fortran sources\steady_state.f90"/>
+			<File RelativePath="..\Fortran sources\test_density_balance.f90"/>
+			<File RelativePath="..\Fortran sources\test_density_balance_7pt.f90"/>
+			<File RelativePath="..\Fortran sources\test_power_balance.f90"/>
+			<File RelativePath="..\Fortran sources\test_power_balance_7pt.f90"/>
+			<File RelativePath="..\Fortran sources\time_density.f90"/>
+			<File RelativePath="..\Fortran sources\time_energy.f90"/>
+			<File RelativePath="..\Fortran sources\time_power.f90"/>
+			<File RelativePath="..\Fortran sources\time_power_7pt.f90"/>
+			<File RelativePath="..\Fortran sources\TimeFP3.f90"/>
+			<File RelativePath="..\Fortran sources\TimeFP_7pt.f90">
+			</File>
+		</Filter>
+	</Files>
+	<Globals/>
+</VisualStudioProject>
