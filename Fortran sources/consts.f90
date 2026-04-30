@@ -83,7 +83,6 @@ do ib=1,nbulk
 enddo
 
 vcr=9.d-2*(z1/aa)**.33333333d0*vt(1)
-ecr=aa/2.d0/(9.79d0)**2*vcr**2*1.d-9
 
 !  Vcr is the critical velocity where an equal amount of energy is transferred
 !   from heated ions to background ions and electrons 

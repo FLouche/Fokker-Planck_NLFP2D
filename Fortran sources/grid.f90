@@ -65,23 +65,6 @@ dmu2 = dvpar**2
 dvleft=(vbound-vperp_min)/(nsing-1)
 dvright=(vperp_max-vbound)/(nperp-nsing)
 
-! Second derivative constant
-
-dvl2 = dvleft**2
-dvr2 = dvright**2
-
-! Mixed products for mixed second derivative
-
-del4l = 4.d0*dvleft*dvpar
-del4r = 4.d0*dvright*dvpar
-
-! Evaluation on separation line
-
-dvtilde=(dvleft+dvright)/2.d0
-dv2tilde=(dvleft**2+dvright**2)/2.d0
-
-dvbound=(dvright-dvleft)/(dvright+dvleft)
-del4n = 4.d0*dvtilde*dvpar
 
 do i=1,nperp
 
