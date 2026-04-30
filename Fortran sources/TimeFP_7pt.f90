@@ -284,12 +284,12 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 !  to subtracting a uniform isotropic sink -(ndot/n)*f from the
 !  operator at each step.  Velocity-space SHAPE is preserved exactly;
 !  only the bulk normalisation is corrected.
-!
-       IF (isource == 0 .AND. dens_tmp > 0.0_dp) THEN
-         fout  = fout  * npart / dens_tmp
-         x_vec = x_vec * npart / dens_tmp
-         dens_tmp = npart
-       END IF
+!!
+!       IF (isource == 0 .AND. dens_tmp > 0.0_dp) THEN
+!         fout  = fout  * npart / dens_tmp
+!         x_vec = x_vec * npart / dens_tmp
+!         dens_tmp = npart
+!       END IF
 !  ----- end band-aid --------
 
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar)

@@ -300,7 +300,7 @@ if(isource==-1) write(490,*) time,psource/1.d6,plosses/1.d6
 if(isc==-1) write(500,*) time,pcoll_self/1.d6
 
 
-fstart = xout*npart/dens_tmp
+fstart = xout!*npart/dens_tmp
    
     enddo time_loop
     
@@ -329,17 +329,17 @@ deallocate(a,ia)
 ! =======================================================================    
 ! For sourceless case the solution is re-normalised
     
-!    if (isource == 0) then
-!        
-!write(*,*)''
-!write(*,*) 'Renormalizing...'
-!
-!write(*,*)''
-!
-!
-!fout = fout*npart/dens_tmp
-!
-!    endif
+    if (isource == 0) then
+        
+write(*,*)''
+write(*,*) 'Renormalizing...'
+
+write(*,*)''
+
+
+fout = fout*npart/dens_tmp
+
+    endif
     
 ! =======================================================================    
 
