@@ -15,7 +15,7 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 0.4 - 11 February 2026
+!   Version 1.4 - 4 May 2026
 
 !    
 !    Fabrice Louche
@@ -123,14 +123,15 @@ data pi/3.141592653589793238462643d0/
 !           +1: Quadratic spacing for higher resolution near vperp=0 (or vperp_min)
 !                 ==> FD scheme needs to be adapted ===> DO NOT USE !!!!
 
-namelist /INPUT/ nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
+namelist /INPUT/ casename, &
+                 nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
                 ising,nsing,vbound,&
                nbulk,t,aa,ab,za,zb,ne,xpart,xb, &
                 isource,beam_ekin,beam_angle_deg, & 
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, isc, ifd7, casename
+                icn, ntimes, timestep, iold, isc, ifd7
 
 !write(*,*) 'Read namelist'
 
