@@ -39,7 +39,8 @@ use mod_grid
 use mod_beam
 !
 use mod_linear
-use mod_timefp3!3
+!use mod_timefp3!3
+use mod_timefp3_upd
 use mod_timefp_7pt
 !
 use mod_anal
@@ -368,7 +369,8 @@ else steady_state
         call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
     else
         
-        call timefp(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        !call timefp(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        call timefp_upd(all00,all10,all01,all11,all20,all02,fin,fout,time1)
     endif
     
     !endif

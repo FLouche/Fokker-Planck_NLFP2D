@@ -58,7 +58,6 @@
 			<File RelativePath="..\Fortran sources\apply_operator.f90"/>
 			<File RelativePath="..\Fortran sources\beam_source.f90"/>
 			<File RelativePath="..\Fortran sources\build_matrix_ss.f90"/>
-			<File RelativePath="..\Fortran sources\build_matrix_td.f90"/>
 			<File RelativePath="..\Fortran sources\CBESSEL.F90"/>
 			<File RelativePath="..\Fortran sources\cblin_vperp.f90"/>
 			<File RelativePath="..\Fortran sources\consts.f90"/>
@@ -66,6 +65,7 @@
 			<File RelativePath="..\Fortran sources\eigen_bigm-5.f90"/>
 			<File RelativePath="..\Fortran sources\fd_grid.f90"/>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
+			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
 			<File RelativePath="..\Fortran sources\integrate_2d.f90"/>
@@ -90,9 +90,9 @@
 			<File RelativePath="..\Fortran sources\time_energy.f90"/>
 			<File RelativePath="..\Fortran sources\time_power.f90"/>
 			<File RelativePath="..\Fortran sources\time_power_7pt.f90"/>
-			<File RelativePath="..\Fortran sources\TimeFP3.f90"/>
-			<File RelativePath="..\Fortran sources\TimeFP_7pt.f90">
+			<File RelativePath="..\Fortran sources\TimeFP3_upd.f90">
 			</File>
+			<File RelativePath="..\Fortran sources\TimeFP_7pt.f90"/>
 		</Filter>
 	</Files>
 	<Globals/>
