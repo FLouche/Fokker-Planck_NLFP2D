@@ -92,7 +92,7 @@ fout = fout*npart/dens_tmp
 
 ! The properly renormalized solution is stored on disk
 
-open(40,file='fout.txt', status='unknown')
+open(40,file=TRIM(outfile('fout.txt')), status='unknown')
 
 do iv=1,nperp
         do imu=1,npar
@@ -104,7 +104,7 @@ close(40)
 
 ! We also store the solution (in column vector form) 
 
- open(42,file='xout.dat',status='unknown')
+ open(42,file=TRIM(outfile('xout.dat')),status='unknown')
  write(42,*) 0.d0 !First timestep
  do iv=1,nperp
         do imu=1,npar
@@ -122,7 +122,8 @@ subroutine FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
 
 use shared_grid
 use shared_plasma
-use shared_beam 
+use shared_beam
+use shared_timer
 
 !use func_index
 
@@ -167,7 +168,7 @@ fout = fout*npart/dens_tmp
 
 ! The properly renormalized solution is stored on disk
 
-open(40,file='fout.txt', status='unknown')
+open(40,file=TRIM(outfile('fout.txt')), status='unknown')
 
 do iv=1,nperp
         do imu=1,npar
@@ -179,7 +180,7 @@ close(40)
 
 ! We also store the solution (in column vector form) 
 
- open(42,file='xout.dat',status='unknown')
+ open(42,file=TRIM(outfile('xout.dat')),status='unknown')
  write(42,*) 0.d0 !First timestep
  do iv=1,nperp
         do imu=1,npar
