@@ -145,7 +145,7 @@ write(77,81) teff*1.d-3
 
 cinit=npart/(2.d0*pi*vteff**2)**1.5d0
 
-open(40, file='fstix.dat',status='unknown')	
+open(40, file=TRIM(outfile('fstix.dat')),status='unknown')	
 do i=1,nperp
     do j=1,npar
         arg=(vpar(j)**2+vperp(i)**2)/(2.d0*vteff**2)

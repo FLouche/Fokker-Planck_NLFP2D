@@ -82,7 +82,28 @@ save
 integer :: ntimes,iold,icn,isc
 double precision :: timestep
 double precision, dimension(:,:), allocatable :: fstix
+character(len=64) :: casename = ''
 !
+contains
+
+  ! Returns 'stem-casename.ext' when casename is non-empty,
+  ! or 'stem.ext' unchanged when casename = ''.
+  function outfile(name) result(fname)
+    character(len=*), intent(in) :: name
+    character(len=256) :: fname
+    integer :: idot
+    if (len_trim(casename) == 0) then
+      fname = trim(name)
+    else
+      idot = index(name, '.', back=.true.)
+      if (idot > 0) then
+        fname = name(1:idot-1) // '-' // trim(casename) // name(idot:len_trim(name))
+      else
+        fname = trim(name) // '-' // trim(casename)
+      end if
+    end if
+  end function outfile
+
     end module shared_timer
 
 !! ***************************************

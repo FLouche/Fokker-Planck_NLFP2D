@@ -78,7 +78,8 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
   INTEGER :: error, ib
-  CHARACTER(len=2) :: ibString
+  CHARACTER(len=2)   :: ibString
+  CHARACTER(len=256) :: dynfname
 
   EXTERNAL :: time_density, time_energy, time_power_7pt, &
               sparse_matrix_vect_mult
@@ -174,37 +175,37 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   ! 3.  Open output files (same convention as timefp / timefp_7pt)
   !================================================================
   IF (otime == 0.d0) THEN
-    OPEN(45, file='density_vs_time.txt',         status='unknown')
-    OPEN(46, file='energy_vs_time.txt',           status='unknown')
-    OPEN(470,file='power_coll_tot_vs_time.txt',   status='unknown')
+    OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='unknown')
+    OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='unknown')
+    OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
     DO ib = 1, nbulk
       IF (ib == 1) THEN
-        OPEN(471,file='power_coll_e_vs_time.txt', status='unknown')
+        OPEN(471,file=TRIM(outfile('power_coll_e_vs_time.txt')), status='unknown')
       ELSE
         WRITE(ibString,'(i2)') ib-1
-        OPEN(470+ib, file='power_coll_ion'//ibString//'_vs_time.txt', &
-             status='unknown')
+        dynfname = 'power_coll_ion'//ibString//'_vs_time.txt'
+        OPEN(470+ib, file=TRIM(outfile(dynfname)), status='unknown')
       END IF
     END DO
-    IF (irf    == -1) OPEN(480,file='power_RF_vs_time.txt',        status='unknown')
-    IF (isource== -1) OPEN(490,file='power_NBI_vs_time.txt',       status='unknown')
-    IF (isc    /=  0) OPEN(500,file='power_coll_self_vs_time.txt', status='unknown')
+    IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
+    IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
+    IF (isc    /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
   ELSE
-    OPEN(45, file='density_vs_time.txt',         status='old', access='append')
-    OPEN(46, file='energy_vs_time.txt',           status='old', access='append')
-    OPEN(470,file='power_coll_tot_vs_time.txt',   status='old', access='append')
+    OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
+    OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
+    OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
     DO ib = 1, nbulk
       IF (ib == 1) THEN
-        OPEN(471,file='power_coll_e_vs_time.txt', status='old', access='append')
+        OPEN(471,file=TRIM(outfile('power_coll_e_vs_time.txt')), status='old', access='append')
       ELSE
         WRITE(ibString,'(i2)') ib-1
-        OPEN(470+ib, file='power_coll_ion'//ibString//'_vs_time.txt', &
-             status='old', access='append')
+        dynfname = 'power_coll_ion'//ibString//'_vs_time.txt'
+        OPEN(470+ib, file=TRIM(outfile(dynfname)), status='old', access='append')
       END IF
     END DO
-    IF (irf    == -1) OPEN(480,file='power_RF_vs_time.txt',        status='old', access='append')
-    IF (isource== -1) OPEN(490,file='power_NBI_vs_time.txt',       status='old', access='append')
-    IF (isc    /=  0) OPEN(500,file='power_coll_self_vs_time.txt', status='old', access='append')
+    IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
+    IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
+    IF (isc    /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
   END IF
 
   !================================================================
@@ -307,8 +308,8 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   !================================================================
   ! 8.  Write output files
   !================================================================
-  OPEN(40, file='fout.txt',  status='unknown')
-  OPEN(42, file='xout.dat',  status='unknown')
+  OPEN(40, file=TRIM(outfile('fout.txt')), status='unknown')
+  OPEN(42, file=TRIM(outfile('xout.dat')), status='unknown')
   WRITE(42,*) time
   DO iv = 1, nperp
     DO imu = 1, npar

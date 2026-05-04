@@ -20,6 +20,7 @@ module mod_anal
     use shared_grid
     use shared_plasma
     use shared_beam
+    use shared_timer
         
     use mod_ncint
     use func_index
@@ -72,7 +73,7 @@ module mod_anal
     
     write(*,*) 'Total Kinetic Energy is ', 0.5*pmass*aa*mod2/kev_in_J, 'keV'
     
-    open(40,file='Ekin.txt', status='unknown')
+    open(40,file=TRIM(outfile('Ekin.txt')), status='unknown')
 
 
 do iv=1,nperp
@@ -98,8 +99,8 @@ close(40)
     
     write(*,*) 'Perpendicular Kinetic Energy is ', 0.5*pmass*aa*mod2_perp/kev_in_J, 'keV'
     
-    open(40,file='Ekin_perp.txt', status='unknown')
-    open(41,file='Ekin_perp_at_vpar0.txt',status='unknown')
+    open(40,file=TRIM(outfile('Ekin_perp.txt')), status='unknown')
+    open(41,file=TRIM(outfile('Ekin_perp_at_vpar0.txt')),status='unknown')
 
 
 do iv=1,nperp

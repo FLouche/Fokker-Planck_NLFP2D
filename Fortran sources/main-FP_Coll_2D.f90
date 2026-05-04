@@ -130,7 +130,7 @@ namelist /INPUT/ nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, isc, ifd7
+                icn, ntimes, timestep, iold, isc, ifd7, casename
 
 !write(*,*) 'Read namelist'
 
@@ -204,7 +204,7 @@ if (isource == -1) then
 
     call beam_source
     
-    open(40,file='beam.txt', status='unknown')
+    open(40,file=TRIM(outfile('beam.txt')), status='unknown')
 
 
 do iv=1,nperp
@@ -332,7 +332,7 @@ else steady_state
     
     if(iold == -1) then !we start from previousy stored solution
     
-        open(40,file='xout.dat',status='old')
+        open(40,file=TRIM(outfile('xout.dat')),status='old')
         read(40,*) time1
         do ix=1,nbig
             read(40,*) fin(ix)
@@ -389,8 +389,8 @@ if(isc /= 0) deallocate(sc20,sc02,sc11,sc10,sc01,sc00)
 
 ! TEST: plot the solution at vpar = 0
 
-open(40,file='fout_at_vpar0.txt',status='unknown')
-open(41,file='fstix_at_vpar0.txt',status='unknown')	
+open(40,file=TRIM(outfile('fout_at_vpar0.txt')),status='unknown')
+open(41,file=TRIM(outfile('fstix_at_vpar0.txt')),status='unknown')
 
 do iv = 1,nperp
     write(40,*) vperp(iv),fout(iv,jmid)
@@ -399,10 +399,10 @@ enddo
 close(41)
 close(40)
 
-open(40,file='fout_at_vperp0.txt',status='unknown')
-open(41,file='fstix_at_vperp0.txt',status='unknown')
-open(42,file='fout_at_vperpmax.txt',status='unknown')
-open(43,file='fstix_at_vperpmax.txt',status='unknown')
+open(40,file=TRIM(outfile('fout_at_vperp0.txt')),status='unknown')
+open(41,file=TRIM(outfile('fstix_at_vperp0.txt')),status='unknown')
+open(42,file=TRIM(outfile('fout_at_vperpmax.txt')),status='unknown')
+open(43,file=TRIM(outfile('fstix_at_vperpmax.txt')),status='unknown')
 
 do iv = 1,npar
     write(40,*) vpar(iv),fout(1,iv)
@@ -415,8 +415,8 @@ close(42)
 close(41)
 close(40)
 
-open(40,file='fout_at_vparmax.txt',status='unknown')
-open(41,file='fstix_at_vparmax.txt',status='unknown')	
+open(40,file=TRIM(outfile('fout_at_vparmax.txt')),status='unknown')
+open(41,file=TRIM(outfile('fstix_at_vparmax.txt')),status='unknown')	
 do iv = 1,nperp
     write(40,*) vperp(iv),fout(iv,1)
     write(41,*) vperp(iv),fstix(iv,1)
