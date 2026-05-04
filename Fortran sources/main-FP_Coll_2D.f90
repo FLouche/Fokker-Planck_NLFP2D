@@ -42,6 +42,8 @@ use mod_linear
 !use mod_timefp3!3
 use mod_timefp3_upd
 use mod_timefp_7pt
+use mod_timefp3_nl
+use mod_timefp_7pt_nl
 !
 use mod_anal
 !
@@ -365,16 +367,19 @@ else steady_state
     
     !close(40)
             
-    !if (isc /= -1) then
     if(ifd7 == -1) then
-        call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        if(isc == -1) then
+            call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        else
+            call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        endif
     else
-        
-        !call timefp(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        call timefp_upd(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        if(isc == -1) then
+            call timefp_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        else
+            call timefp_upd(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        endif
     endif
-    
-    !endif
     
  !  
 endif steady_state
