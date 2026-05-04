@@ -99,7 +99,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
   !================================================================
   ! 2.  Self-collision power density
   !================================================================
-  IF (isc == -1) THEN
+  IF (isc /= 0) THEN
 
     CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
 
