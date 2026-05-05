@@ -126,6 +126,7 @@ data pi/3.141592653589793238462643d0/
 !                 ==> FD scheme needs to be adapted ===> DO NOT USE !!!!
 
 namelist /INPUT/ casename, &
+                 new_grid, &
                  nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
                 ising,nsing,vbound,&
                nbulk,t,aa,ab,za,zb,ne,xpart,xb, &
@@ -138,6 +139,14 @@ namelist /INPUT/ casename, &
 !write(*,*) 'Read namelist'
 
 read(5,INPUT)
+
+! Coherence check: restarting from a previous solution requires the same grid
+if (new_grid == -1 .and. iold == -1) then
+    write(*,*) 'ERROR: new_grid=-1 (new grid) is incompatible with iold=-1 (restart).'
+    write(*,*) 'A restart uses the solution from a previous run, which requires the same grid.'
+    write(*,*) 'Set new_grid=0 to reuse the existing grid, or iold=0 to start fresh.'
+    stop
+endif
 
 twopi=2.d0*pi
 

@@ -108,14 +108,31 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ALLOCATE(rhs_vec(ndof), x_vec(ndof), Lf(ndof))
 
   !================================================================
-  ! 1.  Pre-compute the phi-distance kernel (once, grid-dependent)
+  ! 1.  phi-distance kernel (grid-dependent, expensive O(nbig^2))
+  !     new_grid=-1: compute via Gauss-Legendre and save to sum_phi.dat
+  !     new_grid= 0: load from sum_phi.dat (same grid as previous run)
   !================================================================
   ALLOCATE(sum_phi(nbig, nbig))
-  WRITE(*,*) 'Computing phi-distance kernel for non-linear self-collisions...'
-  CALL cpu_time(t_start)
-  CALL distance_v_gauss_legendre
-  CALL cpu_time(t_end)
-  WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
+  IF (new_grid == -1) THEN
+    WRITE(*,*) 'Computing phi-distance kernel for non-linear self-collisions...'
+    CALL cpu_time(t_start)
+    CALL distance_v_gauss_legendre
+    CALL cpu_time(t_end)
+    WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
+    OPEN(55, file='sum_phi.dat', status='replace', form='unformatted', access='stream')
+    WRITE(55) sum_phi
+    CLOSE(55)
+    WRITE(*,*) '  sum_phi saved to sum_phi.dat'
+  ELSE
+    WRITE(*,*) 'Loading phi-distance kernel from sum_phi.dat...'
+    OPEN(55, file='sum_phi.dat', status='old', form='unformatted', access='stream', iostat=error)
+    IF (error /= 0) THEN
+      WRITE(*,*) 'timefp_7pt_nl: cannot open sum_phi.dat -- run with new_grid=-1 first'; STOP
+    END IF
+    READ(55) sum_phi
+    CLOSE(55)
+    WRITE(*,*) '  sum_phi loaded.'
+  END IF
 
   !================================================================
   ! 2.  Build sparsity pattern of L using linear coefficients.

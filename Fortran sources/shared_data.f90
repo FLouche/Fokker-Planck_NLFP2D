@@ -80,6 +80,7 @@ implicit none
 save
 !
 integer :: ntimes,iold,icn,isc
+integer :: new_grid = -1    ! -1: new grid (compute+save sum_phi); 0: same grid (load sum_phi)
 double precision :: timestep
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''
