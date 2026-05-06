@@ -48,7 +48,8 @@
 
     double precision pi,twopi
     double precision coef
-   
+
+    external cblin
 
     do ipe=1,nperp
         do ipa=1,npar
@@ -79,7 +80,7 @@
 !! d3Psi/Dvperp3
 !
 
-  call deriv_x2(d2psidpe2,vperp,nperp,npar,d3psidpe3)
+  call deriv_x3(psi,vperp,nperp,npar,d3psidpe3)
 
    
 !
@@ -165,24 +166,67 @@ call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)
     !
 
  coef = -4.d0*pi*gammaa/npart
- 
+
     do ipa=1,npar
-        
+
         do ipe=1,nperp
-            
+
             sc00(ipe,ipa) = -coef*(dphidpe(ipe,ipa)/vperp(ipe)+d2phidpe2(ipe,ipa)+d2phidpa2(ipe,ipa))
             sc10(ipe,ipa) = coef*(d2psidpe2(ipe,ipa)/vperp(ipe)+d3psidpe3(ipe,ipa)+d3psidpepa2(ipe,ipa)-dphidpe(ipe,ipa))
             sc01(ipe,ipa) = coef*(d2psidpepa(ipe,ipa)/vperp(ipe)+d3psidpe2pa(ipe,ipa)+d3psidpa3(ipe,ipa)-dphidpa(ipe,ipa))
-           !!             
+           !!
             sc20(ipe,ipa) = coef*d2psidpe2(ipe,ipa)
             sc11(ipe,ipa) = coef*2.d0*d2psidpepa(ipe,ipa)
             sc02(ipe,ipa) = coef*d2psidpa2(ipe,ipa)
-            
-    
+
+
         enddo
     enddo
-        
-    
+
+    ! -----------------------------------------------------------------------
+    ! DIAGNOSTICS: compare NL self-collision coefficients with linear cblin
+    ! -----------------------------------------------------------------------
+    !block
+    !  integer  :: imid_loc, jmid_loc, iaxis_loc
+    !  double precision :: c20r, c02r, c11r, c10r, c01r, c00r
+    !
+    !  imid_loc  = nperp/2
+    !  jmid_loc  = (npar+1)/2
+    !  iaxis_loc = 1          ! near-axis row
+    !
+    !  write(*,'(A)')       '--- main_nlterm diagnostics ---'
+    !  write(*,'(A,2ES14.5)') '  psi        min/max:', MINVAL(psi),        MAXVAL(psi)
+    !  write(*,'(A,2ES14.5)') '  d2psi/dpe2 min/max:', MINVAL(d2psidpe2),  MAXVAL(d2psidpe2)
+    !  write(*,'(A,2ES14.5)') '  sc20       min/max:', MINVAL(sc20),       MAXVAL(sc20)
+    !  write(*,'(A,2ES14.5)') '  sc02       min/max:', MINVAL(sc02),       MAXVAL(sc02)
+    !  write(*,'(A,2ES14.5)') '  sc10       min/max:', MINVAL(sc10),       MAXVAL(sc10)
+    !  write(*,'(A,2ES14.5)') '  sc01       min/max:', MINVAL(sc01),       MAXVAL(sc01)
+    !  write(*,'(A,2ES14.5)') '  sc00       min/max:', MINVAL(sc00),       MAXVAL(sc00)
+    !  write(*,'(A,2ES14.5)') '  coef, gammaa/npart:', coef, gammaa/npart
+    !
+    !  ! Midpoint comparison
+    !  call cblin(imid_loc, jmid_loc, vteff, gammaa, 1.d0, &
+    !             c20r, c02r, c11r, c10r, c01r, c00r)
+    !  write(*,'(A,I4,A,I4,A)') '  At midpoint (', imid_loc, ',', jmid_loc, '):'
+    !  write(*,'(A,2ES14.5)') '    sc20 (NL) vs c20 (lin):', sc20(imid_loc,jmid_loc), c20r
+    !  write(*,'(A,2ES14.5)') '    sc02 (NL) vs c02 (lin):', sc02(imid_loc,jmid_loc), c02r
+    !  write(*,'(A,2ES14.5)') '    sc10 (NL) vs c10 (lin):', sc10(imid_loc,jmid_loc), c10r
+    !  write(*,'(A,2ES14.5)') '    sc01 (NL) vs c01 (lin):', sc01(imid_loc,jmid_loc), c01r
+    !  write(*,'(A,2ES14.5)') '    sc00 (NL) vs c00 (lin):', sc00(imid_loc,jmid_loc), c00r
+    !
+    !  ! Near-axis comparison (i=1, j=jmid)
+    !  call cblin(iaxis_loc, jmid_loc, vteff, gammaa, 1.d0, &
+    !             c20r, c02r, c11r, c10r, c01r, c00r)
+    !  write(*,'(A,I4,A,I4,A)') '  At axis    (', iaxis_loc, ',', jmid_loc, '):'
+    !  write(*,'(A,2ES14.5)') '    sc20 (NL) vs c20 (lin):', sc20(iaxis_loc,jmid_loc), c20r
+    !  write(*,'(A,2ES14.5)') '    sc02 (NL) vs c02 (lin):', sc02(iaxis_loc,jmid_loc), c02r
+    !  write(*,'(A,2ES14.5)') '    sc10 (NL) vs c10 (lin):', sc10(iaxis_loc,jmid_loc), c10r
+    !  write(*,'(A,2ES14.5)') '    sc01 (NL) vs c01 (lin):', sc01(iaxis_loc,jmid_loc), c01r
+    !  write(*,'(A,2ES14.5)') '    sc00 (NL) vs c00 (lin):', sc00(iaxis_loc,jmid_loc), c00r
+    !  write(*,'(A,2ES14.5)') '    vperp(1), d2psi/dpe2(1,jmid):', vperp(iaxis_loc), d2psidpe2(iaxis_loc,jmid_loc)
+    !  write(*,'(A)')       '-------------------------------'
+    !end block
+
     end subroutine main_nlterm
     
    !***********************************************************************

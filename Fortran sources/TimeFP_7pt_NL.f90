@@ -32,6 +32,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   USE pardiso_solver
   USE shared_grid
   USE shared_plasma
+  USE shared_FPterms
   USE shared_timer
   USE shared_beam
   USE shared_RF
@@ -71,8 +72,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !--- Working vectors ---------------------------------------------
   REAL(dp), ALLOCATABLE :: rhs_vec(:), x_vec(:), Lf(:)
 
-  !--- Self-collision coefficients (updated each step) -------------
-  REAL(dp), DIMENSION(nperp,npar) :: sc00, sc10, sc01, sc20, sc11, sc02
+  !--- Total coefficients (linear + self-collision, updated each step) ---
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
 
   !--- Scalars and temporaries -------------------------------------
@@ -141,13 +141,19 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !================================================================
 
   !--- Pass 1: count non-zeros per row ----------------------------
+  ! Use sentinel 1.0 for E_ij when all11_lin=0 so the pattern always
+  ! includes mixed-derivative off-diagonal entries.  sc11 is added in
+  ! step 5b and may be non-zero there even when all11_lin==0; without
+  ! the sentinel, step 5c would generate more entries than ja_L holds.
   ia_L(1) = 1
   DO i = 1, nperp
     DO j = 1, npar
       row = (i-1)*npar + j
       CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
                          all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
-                         all20_lin(i,j), all11_lin(i,j), all02_lin(i,j), &
+                         all20_lin(i,j), &
+                         MERGE(all11_lin(i,j), 1.0_dp, all11_lin(i,j) /= 0.0_dp), &
+                         all02_lin(i,j), &
                          col_idx, stencil_coeff, n_entries, rhs_ij)
       ia_L(row+1) = ia_L(row) + n_entries
     END DO
@@ -164,7 +170,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     DO j = 1, npar
       CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
                          all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
-                         all20_lin(i,j), all11_lin(i,j), all02_lin(i,j), &
+                         all20_lin(i,j), &
+                         MERGE(all11_lin(i,j), 1.0_dp, all11_lin(i,j) /= 0.0_dp), &
+                         all02_lin(i,j), &
                          col_idx, stencil_coeff, n_entries, rhs_ij)
       CALL sort_stencil(col_idx, stencil_coeff, n_entries)
       DO k = 1, n_entries
@@ -282,6 +290,14 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         END DO
       END DO
     END DO
+    IF (itime == 1) THEN
+      IF (ptr-1 /= nnz_L) THEN
+        WRITE(*,'(A,I0,A,I0)') '  *** PATTERN MISMATCH: ptr-1=', ptr-1, ' nnz_L=', nnz_L
+      ELSE
+        WRITE(*,'(A,I0)')      '  Pattern OK: nnz_L=', nnz_L
+      END IF
+   !   WRITE(*,'(A,2ES14.5)')   '  aa_L min/max:', MINVAL(aa_L(1:nnz_L)), MAXVAL(aa_L(1:nnz_L))
+    END IF
 
     !--- 5d. Rebuild aa_lhs = I - theta*dt*L ----------------------
     DO ptr = 1, nnz_L
@@ -295,6 +311,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         END IF
       END DO
     END DO
+    !IF (itime == 1) THEN
+    !  WRITE(*,'(A,2ES14.5)') '  aa_lhs min/max:', MINVAL(aa_lhs(1:nnz_L)), MAXVAL(aa_lhs(1:nnz_L))
+    !END IF
 
     !--- 5e. Build RHS: (I + (1-theta)*dt*L)*f^n + dt*S -----------
     CALL sparse_matvec_csr(ndof, ia_L, ja_L, aa_L, fstart, Lf)
@@ -303,12 +322,20 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
                    + (1.0_dp - theta) * timestep * Lf(row) &
                    + timestep * source_v(row)
     END DO
+    !IF (itime == 1) THEN
+    !  WRITE(*,'(A,2ES14.5)') '  ||fstart||, ||Lf||:', SQRT(SUM(fstart**2)), SQRT(SUM(Lf**2))
+    !  WRITE(*,'(A,2ES14.5)') '  ||rhs||, ||rhs-f||:', SQRT(SUM(rhs_vec**2)), SQRT(SUM((rhs_vec-fstart)**2))
+    !  WRITE(*,'(A,2ES14.5)') '  Lf min/max:', MINVAL(Lf), MAXVAL(Lf)
+    !END IF
 
     !--- 5f. Numerical factorisation + solve (phases 22 + 33) ------
     CALL pardiso_solve_step(handle_lhs, aa_lhs, ia_lhs, ja_lhs, &
                             rhs_vec, x_vec, a_changed=.TRUE., error=error)
     IF (error /= 0) THEN
       WRITE(*,*) 'timefp_7pt_nl: pardiso_solve_step failed, error=', error; STOP
+    END IF
+    IF (itime == 1) THEN
+      WRITE(*,'(A,2ES14.5)') '  ||x_vec||, x min/max:', SQRT(SUM(x_vec**2)), MINVAL(x_vec), MAXVAL(x_vec)
     END IF
 
     !--- Unpack solution into fout ---------------------------------

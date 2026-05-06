@@ -32,6 +32,7 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
   USE pardiso_solver
   USE shared_grid
   USE shared_plasma
+  USE shared_FPterms
   USE shared_timer
   USE shared_beam
   USE shared_RF
@@ -71,8 +72,7 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
   !--- Working vectors ---------------------------------------------
   REAL(dp), ALLOCATABLE :: rhs_vec(:), x_vec(:), Lf(:)
 
-  !--- Self-collision coefficients (updated each step) -------------
-  REAL(dp), DIMENSION(nperp,npar) :: sc00, sc10, sc01, sc20, sc11, sc02
+  !--- Total coefficients (linear + self-collision, updated each step) ---
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
 
   !--- Scalars and temporaries -------------------------------------
