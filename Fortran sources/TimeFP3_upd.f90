@@ -279,7 +279,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     END DO
     IF (irf    == -1) WRITE(480,*) time, pRF/1.d6
     IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-    IF (isc    == -1) WRITE(500,*) time, pcoll_self/1.d6
+    IF (isc    /=  0) WRITE(500,*) time, pcoll_self/1.d6
 
     !--- Advance solution -----------------------------------------
     fstart = x_vec

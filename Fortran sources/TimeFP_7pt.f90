@@ -306,7 +306,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END DO
     IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
     IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-    IF (isc   == -1) WRITE(500,*) time, pcoll_self/1.d6
+    IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
 
     !--- Advance solution -----------------------------------------
     fstart = x_vec!*npart/dens_tmp
@@ -321,7 +321,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   IF (isource == -1) CLOSE(490)
   IF (irf     == -1) CLOSE(480)
-  IF (isc     == -1) CLOSE(500)
+  IF (isc     /=  0) CLOSE(500)
   CLOSE(470); CLOSE(46); CLOSE(45)
 
   !================================================================
