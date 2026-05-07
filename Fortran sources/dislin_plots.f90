@@ -159,8 +159,8 @@ contains
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
     call grid(1, 1)
-    call thkcrv(2)
-    call setrgb(0.0_dp, 0.0_dp, 0.6_dp)   ! dark blue
+    call thkcrv(4)
+    call setrgb(0.6_dp, 0.0_dp, 0.0_dp)   ! dark red
     call curve(xd(1:n), yd(1:n), n)
     call color('FORE')
     call disfin()
@@ -199,7 +199,7 @@ contains
     close(lun)
 
     xmin = vpar(1);  xmax = vpar(npar)
-    ymin = vperp(1); ymax = vperp(nperp)
+    ymin = 0.0_dp;   ymax = vperp(nperp)
     dx = nice_step(xmax - xmin)
     dy = nice_step(ymax - ymin)
 
