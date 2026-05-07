@@ -80,6 +80,7 @@ implicit none
 save
 !
 integer :: ntimes,iold,icn,isc
+integer :: iplot_traces = 0 ! -1: generate time-trace PNG plots; 0: no plots
 integer :: new_grid = -1    ! -1: new grid (compute+save sum_phi); 0: same grid (load sum_phi)
 double precision :: timestep
 double precision, dimension(:,:), allocatable :: fstix

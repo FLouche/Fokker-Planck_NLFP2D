@@ -46,6 +46,7 @@ use mod_timefp3_nl
 use mod_timefp_7pt_nl
 !
 use mod_anal
+use mod_dislin_plots
 !
 use func_index
 !
@@ -124,7 +125,7 @@ namelist /INPUT/ casename, &
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, isc, ifd7
+                icn, ntimes, timestep, iold, isc, ifd7, iplot_traces
 
 !write(*,*) 'Read namelist'
 
@@ -427,5 +428,8 @@ enddo
 close(41)
 close(40)
 
+
+call plot_endof_run()
+if (ntimes /= 0 .and. iplot_traces == -1) call plot_time_traces()
 
 end program FP_Coll_2D
