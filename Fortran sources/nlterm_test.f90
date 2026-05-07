@@ -232,82 +232,67 @@ call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)
    !***********************************************************************
  
 !=======================================================================
-! Program to compute Rosenbluth potential
-!     Psi(r,z) = -1/(8π) ∫ |x-x'| f(x') d^3x'
-! in cylindrical coordinates with axisymmetry (no φ dependence)
+! Compute the first Rosenbluth potential:
+!     Psi(v) = -1/(8π) ∫ |v-v'| f(v') d^3v'
+! in cylindrical velocity-space (v⊥, v∥) with axisymmetry.
 !
-!  Version 0.1 (02/03/2026)
+! Replaces the original O(N^4) quadruple loop + per-point integrate_2d
+! call with a single MKL DGEMV: psi_vec = prefactor * sum_phi * g,
+! where g(ix2) = f(ip,jp)*vperp(ip)*w_vperp(ip)*w_vpar(jp).
+! Weights are the standard 2D trapezoidal rule, identical to integrate_2d.
 !=======================================================================
 
-subroutine compute_psi(f_values,psi_values)
-  
- use shared_grid
-use func_index
-use integrate_2d_module
+subroutine compute_psi(f_values, psi_values)
+
+  use shared_grid
+  use func_index
 
   implicit none
-  
- 
-  ! Parameters
+
   integer, parameter :: dp = kind(1.0d0)
-  real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
-  real(dp), parameter :: prefactor = -1.0_dp / (8.0_dp * pi)
-  
- double precision, dimension(nperp,npar),intent(in) :: f_values
- double precision, dimension(nperp,npar),intent(out) :: psi_values
- 
- !  real(dp) :: r_weights(nperp)        ! Integration weights for vperp
+  real(dp), parameter :: prefactor = -1.0_dp / (32.0_dp * atan(1.0_dp))
 
- 
-    integer :: i, j, ip, jp
-    real(dp) :: r, z, rp, zp
-    real(dp), dimension(nperp,npar):: integrand
+  double precision, dimension(nperp,npar), intent(in)  :: f_values
+  double precision, dimension(nperp,npar), intent(out) :: psi_values
 
- integer :: ix1,ix2
- 
-! -------
- 
-! Compute integration weights for non-uniform radial grid
-    
+  double precision :: g(nbig), psi_vec(nbig)
+  double precision :: w_vperp(nperp), w_vpar(npar)
+  integer :: i, j
 
- ! Initialize result
-    psi_values = 0.0_dp
-   
-    ! Loop over observation points
-    do i = 1, nperp
-      r = vperp(i)
-      do j = 1, npar
-        z = vpar(j)
-       
-        ! Sum over source points
-        do ip = 1, nperp
-          rp = vperp(ip)
-          do jp = 1, npar
-            zp = vpar(jp)
-            
-             ix1=index_mat(i,j)
-             ix2=index_mat(ip,jp)
-           
-            if (f_values(ip,jp) == 0.0_dp) cycle
-           
-            ! Add contribution: f(rp,zp) * rp * drp * dzp * [∫ dφ |x-x'|]
-            integrand(ip,jp) = f_values(ip,jp) * vperp(ip) * sum_phi(ix1,ix2)
-            
-          end do ! jp
-        end do ! ip
-           
-        psi_values(i,j) = integrate_2d(integrand,vperp,vpar,nperp,npar)
-       
-        ! Apply prefactor
-        psi_values(i,j) = prefactor * psi_values(i,j)
-        
-       
-      end do ! j
-    end do ! i
- 
-      
- 
-end subroutine compute_psi    
+  external dgemv
+
+  ! Trapezoidal weights for v⊥ (non-uniform grid)
+  w_vperp(1) = 0.5_dp * (vperp(2) - vperp(1))
+  do i = 2, nperp-1
+    w_vperp(i) = 0.5_dp * (vperp(i+1) - vperp(i-1))
+  end do
+  w_vperp(nperp) = 0.5_dp * (vperp(nperp) - vperp(nperp-1))
+
+  ! Trapezoidal weights for v∥ (uniform grid)
+  w_vpar(1)    = 0.5_dp * dvpar
+  w_vpar(npar) = 0.5_dp * dvpar
+  do j = 2, npar-1
+    w_vpar(j) = dvpar
+  end do
+
+  ! Source vector: g(ix) = f * v⊥ * integration weights
+  do i = 1, nperp
+    do j = 1, npar
+      g(index_mat(i,j)) = f_values(i,j) * vperp(i) * w_vperp(i) * w_vpar(j)
+    end do
+  end do
+
+  ! psi_vec = prefactor * sum_phi * g  ('N': column-major access, cache-friendly)
+  call dgemv('N', nbig, nbig, prefactor, sum_phi, nbig, g, 1, 0.0_dp, psi_vec, 1)
+
+  ! Unpack to 2D
+  do i = 1, nperp
+    do j = 1, npar
+      psi_values(i,j) = psi_vec(index_mat(i,j))
+    end do
+  end do
+
+end subroutine compute_psi
 
 
 SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
