@@ -82,6 +82,7 @@ contains
     call titlin(trim(title_str), 1)
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
+    call grid(1, 1)
     call curve(xd(1:n), yd(1:n), n)
     call disfin()
 
@@ -145,6 +146,7 @@ contains
     call titlin(trim(title_str), 1)
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
+    call grid(1, 1)
     call conshd(vpar, npar, vperp, nperp, zmat, zlev, nc)
     call disfin()
 
@@ -230,6 +232,7 @@ contains
         call leglin(legbuf, 'Tperp', 2)
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
+        call grid(1, 1)
         call color('RED')
         call curve(t(1:nt), y1(1:nt), nt)
         call color('BLUE')
@@ -325,6 +328,7 @@ contains
         if (isc /= 0) call leglin(legbuf, 'self', n_leg)
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
+        call grid(1, 1)
         call color('RED')
         call curve(t(1:nt), pcoll_e(1:nt), nt)
         if (nbulk > 1) then
@@ -339,7 +343,7 @@ contains
           end do
         end if
         if (isc /= 0) then
-          call color('YELLO')
+          call color('CYAN')
           call curve(t(1:nt), pcoll_self(1:nt), nt)
         end if
         call color('FORE')
@@ -437,6 +441,7 @@ contains
         end if
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
+        call grid(1, 1)
         call color('RED')
         call curve(t(1:nt), pcoll_tot(1:nt), nt)
         if (irf == -1) then
