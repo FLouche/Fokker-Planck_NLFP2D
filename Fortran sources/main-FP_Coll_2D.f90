@@ -55,8 +55,6 @@ implicit none
 
 external cblin, consts, self_coll_max
 
-external dgemv
-
 
 ! Elements of the Fokker-Planck linearized collision operator
 
@@ -74,9 +72,6 @@ double precision, dimension (:,:), allocatable :: fout
 
 double precision time1
 
-double precision:: start_time, end_time
-
-
 ! do loops indexes
 
 integer :: ib,iv,imu,ix
@@ -88,11 +83,6 @@ integer :: ib,iv,imu,ix
 ! Math constants
 
 double precision :: pi,twopi
-
-double precision, dimension(:,:), allocatable :: ta,tb,tc,td,te,tf,sum_t
-double precision :: dvp_local
-double precision, allocatable, dimension(:) :: dndt
-character*17 filename
 
 common/mathcons/pi,twopi
 
@@ -173,8 +163,6 @@ allocate(colin00(nperp,npar))
 allocate(colin10,colin01,colin20,colin02,colin11,mold=colin00)
 
 !
-
-allocate(ta(nperp,npar),tb(nperp,npar),tc(nperp,npar),td(nperp,npar),te(nperp,npar),tf(nperp,npar),sum_t(nperp,npar))
 
 vperp_loop: do iv = 1,nperp
     

@@ -62,14 +62,11 @@
 			<File RelativePath="..\Fortran sources\cblin_vperp.f90"/>
 			<File RelativePath="..\Fortran sources\consts.f90"/>
 			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
-			<File RelativePath="..\Fortran sources\eigen_bigm-5.f90"/>
-			<File RelativePath="..\Fortran sources\fd_grid.f90"/>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
 			<File RelativePath="..\Fortran sources\integrate_2d.f90"/>
-			<File RelativePath="..\Fortran sources\interpolation_module2.f90"/>
 			<File RelativePath="..\Fortran sources\main-FP_Coll_2D.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\ncint.f90"/>
@@ -83,19 +80,11 @@
 			<File RelativePath="..\Fortran sources\simpson_integration_1D.f90"/>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90">
 			</File>
-			<File RelativePath="..\Fortran sources\sparse_matrix_vect_mult.f90"/>
 			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
 			<File RelativePath="..\Fortran sources\steady_state.f90">
 			</File>
-			<File RelativePath="..\Fortran sources\test_density_balance.f90"/>
-			<File RelativePath="..\Fortran sources\test_density_balance_7pt.f90">
-			</File>
-			<File RelativePath="..\Fortran sources\test_power_balance.f90"/>
-			<File RelativePath="..\Fortran sources\test_power_balance_7pt.f90">
-			</File>
 			<File RelativePath="..\Fortran sources\time_density.f90"/>
 			<File RelativePath="..\Fortran sources\time_energy.f90"/>
-			<File RelativePath="..\Fortran sources\time_power.f90"/>
 			<File RelativePath="..\Fortran sources\time_power_7pt.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\TimeFP3_NL.f90"/>

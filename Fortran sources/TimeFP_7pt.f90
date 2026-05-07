@@ -76,7 +76,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
-  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, vtk
+  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
@@ -84,8 +84,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  EXTERNAL :: time_density, time_energy, time_power, &
-              sparse_matrix_vect_mult
+  EXTERNAL :: time_density, time_energy, time_power_7pt
   
   real(dp), dimension(nperp,npar) :: f_init
 
@@ -295,8 +294,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar)
     WRITE(46,*) time, tk, tkperp
-
-    vtk = 9.79d3*SQRT(tk*1.d3/aa)
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
 

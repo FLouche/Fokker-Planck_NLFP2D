@@ -25,8 +25,6 @@ use shared_beam, only: isource
 
 use func_index
 
-use nlterm
-
 
 implicit none
 
@@ -36,9 +34,9 @@ double precision, dimension(nperp,npar),intent(in) :: all20,all02,all11,all10,al
 double precision, dimension(nperp,npar),intent(out) :: fout
 double precision, dimension(nbig) :: xout
 
-double precision :: bigm(nbig,nbig),bigv(nbig),bigm_1(nbig,nbig),bigv_1(nbig)
-      
-double precision dens_tmp,delta_b,dvp_local,pi,twopi
+double precision :: bigm(nbig,nbig),bigv(nbig)
+
+double precision dens_tmp
 
 integer iv,imu,ix,ipe,ipa
 logical steady_no_beam
