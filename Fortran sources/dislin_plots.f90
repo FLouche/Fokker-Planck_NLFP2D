@@ -44,6 +44,23 @@ contains
   end function count_lines
 
   !-----------------------------------------------------------------
+  ! Round xrange/5 to the nearest 1, 2, or 5 × power-of-10
+  !-----------------------------------------------------------------
+  real(dp) function nice_step(xrange)
+    real(dp), intent(in) :: xrange
+    real(dp) :: raw, mag, norm
+    if (xrange <= 0.0_dp) then; nice_step = 1.0_dp; return; end if
+    raw  = xrange / 5.0_dp
+    mag  = 10.0_dp ** floor(log10(raw))
+    norm = raw / mag
+    if      (norm < 1.5_dp) then; nice_step = mag
+    else if (norm < 3.5_dp) then; nice_step = 2.0_dp * mag
+    else if (norm < 7.5_dp) then; nice_step = 5.0_dp * mag
+    else                         ; nice_step = 10.0_dp * mag
+    end if
+  end function nice_step
+
+  !-----------------------------------------------------------------
   ! 2-column file -> single 1D PNG plot
   !-----------------------------------------------------------------
   subroutine plot_1d(fname, xlabel, ylabel, title_str, pngname)
@@ -65,9 +82,10 @@ contains
     if (n < 2) then; deallocate(xd, yd); return; end if
 
     xmin = minval(xd(1:n)); xmax = maxval(xd(1:n))
+    if (xmin >= 0.0_dp) xmin = 0.0_dp   ! non-negative axis (v_perp): start from 0
     ymin = minval(yd(1:n)); ymax = maxval(yd(1:n))
-    dx = (xmax - xmin) / 5.0_dp; if (dx == 0.0_dp) dx = 1.0_dp
-    dy = (ymax - ymin) / 5.0_dp; if (dy == 0.0_dp) dy = 1.0_dp
+    dx = nice_step(xmax - xmin)
+    dy = nice_step(ymax - ymin)
 
     call metafl('PNG')
     call setfil(trim(pngname))
