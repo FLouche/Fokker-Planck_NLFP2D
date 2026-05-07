@@ -187,8 +187,10 @@ contains
     real(dp), allocatable :: pcoll_tot(:), pRF(:), psource(:), plosses(:)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy, tmp, tmp2
     character(len=256) :: fn, pn, dynfn
-    character(len=2) :: ibstr
-    integer :: nt, n, ib, io, i, lun
+    character(len=512) :: legbuf
+    character(len=8)   :: ion_label
+    character(len=2)   :: ibstr
+    integer :: nt, n, ib, io, i, lun, n_leg
 
     !-- Plot 1: kinetic energy vs time --------------------------------
     fn = trim(outfile('energy_vs_time.txt'))
@@ -220,13 +222,17 @@ contains
         call name('Time (s)', 'X')
         call name('Energy (keV)', 'Y')
         call titlin('Kinetic energy vs time', 1)
+        call legini(legbuf, 2, 8)
+        call leglin(legbuf, 'Temp', 1)
+        call leglin(legbuf, 'Tperp', 2)
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
         call color('RED')
-        call curve(t(1:nt), y1(1:nt), nt)    ! total KE
+        call curve(t(1:nt), y1(1:nt), nt)
         call color('BLUE')
-        call curve(t(1:nt), y2(1:nt), nt)    ! perp KE
+        call curve(t(1:nt), y2(1:nt), nt)
         call color('FORE')
+        call legend(legbuf, 1)
         call disfin()
       end if
       deallocate(t, y1, y2)
@@ -293,6 +299,8 @@ contains
         dx = (xmax - xmin) / 5.0_dp; if (dx == 0.0_dp) dx = 1.0_dp
         dy = (ymax - ymin) / 5.0_dp; if (dy == 0.0_dp) dy = 1.0_dp
 
+        n_leg = nbulk + merge(1, 0, isc /= 0)
+
         pn = trim(outfile('power_coll_vs_time.png'))
         call metafl('PNG')
         call setfil(trim(pn))
@@ -304,6 +312,13 @@ contains
         call name('Time (s)', 'X')
         call name('Power density (MW/m3)', 'Y')
         call titlin('Collisional power density vs time', 1)
+        call legini(legbuf, n_leg, 8)
+        call leglin(legbuf, 'e-', 1)
+        do ib = 1, nbulk - 1
+          write(ion_label, '(a,i0)') 'ion ', ib
+          call leglin(legbuf, trim(ion_label), 1 + ib)
+        end do
+        if (isc /= 0) call leglin(legbuf, 'self', n_leg)
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
         call color('RED')
@@ -324,6 +339,7 @@ contains
           call curve(t(1:nt), pcoll_self(1:nt), nt)
         end if
         call color('FORE')
+        call legend(legbuf, 1)
         call disfin()
       end if
 
@@ -391,6 +407,8 @@ contains
         dx = (xmax - xmin) / 5.0_dp; if (dx == 0.0_dp) dx = 1.0_dp
         dy = (ymax - ymin) / 5.0_dp; if (dy == 0.0_dp) dy = 1.0_dp
 
+        n_leg = 1 + merge(1, 0, irf == -1) + merge(1, 0, isource == -1)
+
         pn = trim(outfile('power_balance_vs_time.png'))
         call metafl('PNG')
         call setfil(trim(pn))
@@ -402,6 +420,16 @@ contains
         call name('Time (s)', 'X')
         call name('Power density (MW/m3)', 'Y')
         call titlin('Power balance vs time', 1)
+        call legini(legbuf, n_leg, 8)
+        call leglin(legbuf, 'coll', 1)
+        if (irf == -1 .and. isource == -1) then
+          call leglin(legbuf, 'RF',   2)
+          call leglin(legbuf, 'beam', 3)
+        else if (irf == -1) then
+          call leglin(legbuf, 'RF',   2)
+        else if (isource == -1) then
+          call leglin(legbuf, 'beam', 2)
+        end if
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
         call color('RED')
@@ -415,6 +443,7 @@ contains
           call curve(t(1:nt), psource(1:nt), nt)
         end if
         call color('FORE')
+        call legend(legbuf, 1)
         call disfin()
       end if
 
