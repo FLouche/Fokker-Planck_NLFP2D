@@ -83,6 +83,12 @@
 			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
 			<File RelativePath="..\Fortran sources\steady_state.f90">
 			</File>
+			<File RelativePath="..\Fortran sources\test_density_balance.f90"/>
+			<File RelativePath="..\Fortran sources\test_density_balance_7pt.f90">
+			</File>
+			<File RelativePath="..\Fortran sources\test_power_balance.f90"/>
+			<File RelativePath="..\Fortran sources\test_power_balance_7pt.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\time_density.f90"/>
 			<File RelativePath="..\Fortran sources\time_energy.f90"/>
 			<File RelativePath="..\Fortran sources\time_power_7pt.f90">
