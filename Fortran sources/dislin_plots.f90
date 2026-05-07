@@ -20,6 +20,7 @@ module mod_dislin_plots
   public :: plot_endof_run, plot_time_traces
 
   integer, parameter :: dp = kind(1.0d0)
+  integer, save :: overwrite_mode = -1  ! -1=unasked, 0=append suffix, 1=overwrite
 
 contains
 
@@ -42,6 +43,73 @@ contains
     end do
     close(lun)
   end function count_lines
+
+  !-----------------------------------------------------------------
+  ! Build 'stem_N.ext' by inserting '_N' before the last '.'
+  !-----------------------------------------------------------------
+  subroutine insert_suffix(base, n, res)
+    character(len=*),   intent(in)  :: base
+    integer,            intent(in)  :: n
+    character(len=256), intent(out) :: res
+    integer :: idot
+    character(len=6) :: ns
+    write(ns,'(i0)') n
+    idot = index(trim(base), '.', back=.true.)
+    if (idot > 0) then
+      res = base(1:idot-1)//'_'//trim(ns)//base(idot:len_trim(base))
+    else
+      res = trim(base)//'_'//trim(ns)
+    end if
+  end subroutine insert_suffix
+
+  !-----------------------------------------------------------------
+  ! Resolve the output PNG filename.
+  ! - If file does not exist: return it unchanged.
+  ! - First collision: prompt once (Y = delete & reuse, N = suffix).
+  !   Answer is remembered for all subsequent files in the same run.
+  ! - N path: returns the first free 'stem_1.png', 'stem_2.png', …
+  !-----------------------------------------------------------------
+  function png_name(base) result(resolved)
+    character(len=*),  intent(in) :: base
+    character(len=256)            :: resolved
+    logical :: exists
+    integer :: k, io, lun, con
+    character(len=1) :: ans
+
+    inquire(file=trim(base), exist=exists)
+    if (.not. exists) then
+      resolved = trim(base); return
+    end if
+
+    if (overwrite_mode == -1) then
+      write(*,'(/,a)') 'PNG files already present for this case.'
+      write(*,'(a)',advance='no') 'Confirm they can be deleted (Y/N): '
+      open(newunit=con, file='CON', status='old', action='read', iostat=io)
+      if (io == 0) then
+        read(con,'(a)',iostat=io) ans
+        close(con)
+      else
+        ans = 'N'
+      end if
+      if (ans == 'Y' .or. ans == 'y') then
+        overwrite_mode = 1
+      else
+        overwrite_mode = 0
+      end if
+    end if
+
+    if (overwrite_mode == 1) then
+      open(newunit=lun, file=trim(base), status='old', iostat=io)
+      if (io == 0) close(lun, status='delete')
+      resolved = trim(base)
+    else
+      do k = 1, 999
+        call insert_suffix(trim(base), k, resolved)
+        inquire(file=trim(resolved), exist=exists)
+        if (.not. exists) return
+      end do
+    end if
+  end function png_name
 
   !-----------------------------------------------------------------
   ! Round xrange/5 to the nearest 1, 2, or 5 × power-of-10
@@ -67,6 +135,7 @@ contains
     character(len=*), intent(in) :: fname, xlabel, ylabel, title_str, pngname
     real(dp), allocatable :: xd(:), yd(:)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy
+    character(len=256) :: pn_out
     integer :: n, i, io, lun
 
     n = count_lines(fname)
@@ -87,8 +156,9 @@ contains
     dx = nice_step(xmax - xmin)
     dy = nice_step(ymax - ymin)
 
+    pn_out = png_name(trim(pngname))
     call metafl('PNG')
-    call setfil(trim(pngname))
+    call setfil(trim(pn_out))
     call scrmod('REVERS')
     call disini()
     call pagera()
@@ -118,6 +188,7 @@ contains
     real(dp) :: zlev(20)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy
     real(dp) :: zmin, zmax, dz, dum1, dum2, val
+    character(len=256) :: pn_out
     integer :: i, j, io, nc, lun
     logical :: exists
 
@@ -150,8 +221,9 @@ contains
       zlev(i) = zmin + (i - 0.5_dp) * dz
     end do
 
+    pn_out = png_name(trim(pngname))
     call metafl('PNG')
-    call setfil(trim(pngname))
+    call setfil(trim(pn_out))
     call scrmod('REVERS')
     call disini()
     call pagera()
@@ -236,6 +308,7 @@ contains
         dy = (ymax - ymin) / 5.0_dp; if (dy == 0.0_dp) dy = 1.0_dp
 
         pn = trim(outfile('temperature_vs_time.png'))
+        pn = png_name(trim(pn))
         call metafl('PNG')
         call setfil(trim(pn))
         call scrmod('REVERS')
@@ -329,6 +402,7 @@ contains
         n_leg = nbulk + merge(1, 0, isc /= 0)
 
         pn = trim(outfile('power_coll_vs_time.png'))
+        pn = png_name(trim(pn))
         call metafl('PNG')
         call setfil(trim(pn))
         call scrmod('REVERS')
@@ -440,6 +514,7 @@ contains
         n_leg = 1 + merge(1, 0, irf == -1) + merge(1, 0, isource == -1)
 
         pn = trim(outfile('power_balance_vs_time.png'))
+        pn = png_name(trim(pn))
         call metafl('PNG')
         call setfil(trim(pn))
         call scrmod('REVERS')
