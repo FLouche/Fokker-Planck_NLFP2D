@@ -82,6 +82,7 @@ save
 integer :: ntimes,iold,icn,isc
 integer :: iplot_traces = 0 ! -1: generate time-trace PNG plots; 0: no plots
 integer :: new_grid = -1    ! -1: new grid (compute+save sum_phi); 0: same grid (load sum_phi)
+integer :: ioverwrite = 1   ! 1: overwrite existing PNG files; 0: append _1, _2, ...
 double precision :: timestep
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''

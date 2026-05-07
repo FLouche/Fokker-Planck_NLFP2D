@@ -125,7 +125,7 @@ namelist /INPUT/ casename, &
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, isc, ifd7, iplot_traces
+                icn, ntimes, timestep, iold, isc, ifd7, iplot_traces, ioverwrite
 
 !write(*,*) 'Read namelist'
 

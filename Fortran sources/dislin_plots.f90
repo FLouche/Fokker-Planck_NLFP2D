@@ -20,7 +20,6 @@ module mod_dislin_plots
   public :: plot_endof_run, plot_time_traces
 
   integer, parameter :: dp = kind(1.0d0)
-  integer, save :: overwrite_mode = -1  ! -1=unasked, 0=append suffix, 1=overwrite
 
 contains
 
@@ -65,44 +64,23 @@ contains
   !-----------------------------------------------------------------
   ! Resolve the output PNG filename.
   ! - If file does not exist: return it unchanged.
-  ! - First collision: prompt once (Y = delete & reuse, N = suffix).
-  !   Answer is remembered for all subsequent files in the same run.
-  ! - N path: returns the first free 'stem_1.png', 'stem_2.png', …
+  ! - Collision: behaviour controlled by ioverwrite (from shared_timer):
+  !     ioverwrite=1 -> delete existing file, reuse same name (default)
+  !     ioverwrite=0 -> return first free 'stem_1.png', 'stem_2.png', …
   !-----------------------------------------------------------------
   function png_name(base) result(resolved)
     character(len=*),  intent(in) :: base
     character(len=256)            :: resolved
     logical :: exists
-    integer :: k, io, lun, con
-    character(len=1) :: ans
+    integer :: k, io, lun
 
     inquire(file=trim(base), exist=exists)
     if (.not. exists) then
       resolved = trim(base); return
     end if
 
-    if (overwrite_mode == -1) then
-      write(*,'(/,a)') 'PNG files already present for this case.'
-      write(*,'(a)') 'Confirm they can be deleted (Y/N, default=N): '
-      flush(6)   ! ensure the prompt appears before blocking on read
-      ans = 'N'
-      ! CONIN$ is the Windows console input device; works even when stdin
-      ! is redirected from a file.  Fall back to CON if CONIN$ is rejected.
-      open(newunit=con, file='CONIN$', status='unknown', action='read', iostat=io)
-      if (io /= 0) &
-        open(newunit=con, file='CON', status='unknown', action='read', iostat=io)
-      if (io == 0) then
-        read(con,'(a1)',iostat=io) ans
-        close(con)
-      end if
-      if (ans == 'Y' .or. ans == 'y') then
-        overwrite_mode = 1
-      else
-        overwrite_mode = 0
-      end if
-    end if
-
-    if (overwrite_mode == 1) then
+    if (ioverwrite == 1) then
+      write(*,'(a,a,a)') ' PNG exists: ', trim(base), ' -- overwriting'
       open(newunit=lun, file=trim(base), status='old', iostat=io)
       if (io == 0) close(lun, status='delete')
       resolved = trim(base)
@@ -110,7 +88,11 @@ contains
       do k = 1, 999
         call insert_suffix(trim(base), k, resolved)
         inquire(file=trim(resolved), exist=exists)
-        if (.not. exists) return
+        if (.not. exists) then
+          write(*,'(a,a,a,a)') ' PNG exists: ', trim(base), &
+              ' -- saving as ', trim(resolved)
+          return
+        end if
       end do
     end if
   end function png_name
