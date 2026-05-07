@@ -83,13 +83,17 @@ contains
 
     if (overwrite_mode == -1) then
       write(*,'(/,a)') 'PNG files already present for this case.'
-      write(*,'(a)',advance='no') 'Confirm they can be deleted (Y/N): '
-      open(newunit=con, file='CON', status='old', action='read', iostat=io)
+      write(*,'(a)') 'Confirm they can be deleted (Y/N, default=N): '
+      flush(6)   ! ensure the prompt appears before blocking on read
+      ans = 'N'
+      ! CONIN$ is the Windows console input device; works even when stdin
+      ! is redirected from a file.  Fall back to CON if CONIN$ is rejected.
+      open(newunit=con, file='CONIN$', status='unknown', action='read', iostat=io)
+      if (io /= 0) &
+        open(newunit=con, file='CON', status='unknown', action='read', iostat=io)
       if (io == 0) then
-        read(con,'(a)',iostat=io) ans
+        read(con,'(a1)',iostat=io) ans
         close(con)
-      else
-        ans = 'N'
       end if
       if (ans == 'Y' .or. ans == 'y') then
         overwrite_mode = 1
@@ -157,6 +161,7 @@ contains
     dy = nice_step(ymax - ymin)
 
     pn_out = png_name(trim(pngname))
+    write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
     call metafl('PNG')
     call setfil(trim(pn_out))
     call scrmod('REVERS')
@@ -222,6 +227,7 @@ contains
     end do
 
     pn_out = png_name(trim(pngname))
+    write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
     call metafl('PNG')
     call setfil(trim(pn_out))
     call scrmod('REVERS')
@@ -309,6 +315,7 @@ contains
 
         pn = trim(outfile('temperature_vs_time.png'))
         pn = png_name(trim(pn))
+        write(*,'(a,a)') ' Writing plot: ', trim(pn)
         call metafl('PNG')
         call setfil(trim(pn))
         call scrmod('REVERS')
@@ -403,6 +410,7 @@ contains
 
         pn = trim(outfile('power_coll_vs_time.png'))
         pn = png_name(trim(pn))
+        write(*,'(a,a)') ' Writing plot: ', trim(pn)
         call metafl('PNG')
         call setfil(trim(pn))
         call scrmod('REVERS')
@@ -515,6 +523,7 @@ contains
 
         pn = trim(outfile('power_balance_vs_time.png'))
         pn = png_name(trim(pn))
+        write(*,'(a,a)') ' Writing plot: ', trim(pn)
         call metafl('PNG')
         call setfil(trim(pn))
         call scrmod('REVERS')
