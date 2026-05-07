@@ -256,7 +256,7 @@ contains
       if (nbulk > 1) then
         do ib = 1, nbulk - 1
           write(ibstr, '(i2)') ib
-          dynfn = 'power_coll_ion'//trim(adjustl(ibstr))//'_vs_time.txt'
+          dynfn = 'power_coll_ion'//ibstr//'_vs_time.txt'
           fn = trim(outfile(trim(dynfn)))
           n = min(count_lines(fn), nt)
           if (n > 0) then
