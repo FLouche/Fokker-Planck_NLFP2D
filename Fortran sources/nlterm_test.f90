@@ -1,8 +1,8 @@
-﻿!***********************************************************************
+!***********************************************************************
 !
 ! Test module to derive the self-collisions FP coefficients
-! in terms of the Rosenbluth-Trubnikov potentials 
-! 
+! in terms of the Rosenbluth-Trubnikov potentials
+!
 ! Method
 !
 ! - elements of diffusion and frictions evaluated from Karney expressions
@@ -12,38 +12,38 @@
 !***********************************************************************
 
     module nlterm
-    
+
     implicit none
-            
+
     contains
-    
+
     subroutine main_nlterm(xout,sc00,sc10,sc01,sc20,sc11,sc02)
-    
+
     use shared_grid
     use mod_grid
     use shared_timer
     use mod_ncint
-    
+
     use func_index
-    
+
     use shared_plasma
-    
+
     use derivatives_2d
-    
-    
+
+
     double precision, intent(in), dimension (nbig):: xout
     double precision, dimension (nperp,npar):: fout,psi,dpsidpe,d2psidpe2,d2psidpepa
     double precision, dimension (nperp,npar):: dpsidpa,d2psidpa2,phi,dphidpe,dphidpa,d2phidpe2,d2phidpa2
     double precision, dimension (nperp,npar):: d3psidpe3, d3psidpepa2,d3psidpe2pa,d3psidpa3
     double precision, dimension (nperp,npar):: Lphi_radial
     double precision, intent(out), dimension (nperp,npar):: sc00,sc10,sc01,sc20,sc11,sc02
-        
+
 !integer, parameter :: dp = selected_real_kind(15, 307)
     integer ipe,ipa,ix
-        
+
     !double precision, allocatable, dimension(:,:) :: dpepe,dpepa,dpapa,fpe,fpa
     !double precision, allocatable, dimension(:,:) :: dfpe,dfpa,d_dpepe_1,d_dpapa_2,d_dpepa_1,d_dpepa_2
-        
+
     common/mathcons/pi,twopi
 
     double precision pi,twopi
@@ -57,68 +57,68 @@
          fout(ipe,ipa) = xout(ix)
         enddo
     enddo
-    
-    ! The first Rosenbluth potential is computed on the grid
-    
-  call compute_psi(fout,psi)      
 
-  
+    ! The first Rosenbluth potential is computed on the grid
+
+  call compute_psi(fout,psi)
+
+
     ! Various derivatives are evaluated
-    
+
 !! dPsi/Dvperp
-!    
+!
 
   call deriv_x1(psi,vperp,nperp,npar,dpsidpe)
-       
+
 !
 !! d2Psi/Dvperp2
 !
 
   call deriv_x2(psi,vperp,nperp,npar,d2psidpe2)
-  
+
   !
 !! d3Psi/Dvperp3
 !
 
   call deriv_x3(psi,vperp,nperp,npar,d3psidpe3)
 
-   
+
 !
 !! d2Psi/DvperpDvpar
-!    
- call deriv_xy(psi, vperp, nperp, npar, dvpar, d2psidpepa)!  
- 
- 
+!
+ call deriv_xy(psi, vperp, nperp, npar, dvpar, d2psidpepa)!
+
+
  !
 !! d3Psi/DvperpDvpar2
-!    
- call deriv_y1(d2psidpepa,  nperp, npar, dvpar, d3psidpepa2)!  
- 
+!
+ call deriv_y1(d2psidpepa,  nperp, npar, dvpar, d3psidpepa2)!
+
   !
 !! d3Psi/Dvperp2Dvpar
-!     
- call deriv_x1(d2psidpepa, vperp, nperp, npar, d3psidpe2pa)!  
+!
+ call deriv_x1(d2psidpepa, vperp, nperp, npar, d3psidpe2pa)!
 
 
- 
+
 !! dPsi/Dvpar
-!    
+!
 
  call  deriv_y1(psi, nperp, npar, dvpar, dpsidpa)
-  
-  !    
+
+  !
 !! d2Psi/Dvpar2
-!    
+!
  call  deriv_y2(psi, nperp, npar, dvpar, d2psidpa2)
- 
+
  !! d3Psi/Dvpar3
-!    
+!
  call  deriv_y1(d2psidpa2, nperp, npar, dvpar, d3psidpa3)
 
-  
-!     
+
+!
 !! The second potential phi is obtained from Poisson's equation
-!    
+!
 ! OLD (singular at vperp=0):
 !do ipe = 1, nperp
 !  phi(ipe,:) = d2psidpe2(ipe,:) + dpsidpe(ipe,:)/vperp(ipe) + d2psidpa2(ipe,:)
@@ -143,15 +143,15 @@ CALL deriv_x1(phi, vperp, nperp, npar, dphidpe)
 CALL deriv_x2(phi, vperp, nperp, npar, d2phidpe2)
 
 
-!    
+!
 !    ! Dphi/Dvpar
-!    
-call deriv_y1(phi, nperp, npar, dvpar, dphidpa)    
+!
+call deriv_y1(phi, nperp, npar, dvpar, dphidpa)
 
-!    
+!
 !    ! D2phi/Dvpar2
-!    
-call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)    
+!
+call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)
 
 
 ! -------------------------------------------------------------------------
@@ -228,86 +228,74 @@ call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)
     !end block
 
     end subroutine main_nlterm
-    
+
    !***********************************************************************
- 
+
 !=======================================================================
-! Program to compute Rosenbluth potential
+! Compute the first Rosenbluth potential:
 !     Psi(r,z) = -1/(8π) ∫ |x-x'| f(x') d^3x'
-! in cylindrical coordinates with axisymmetry (no φ dependence)
+! in cylindrical velocity-space coordinates (v⊥, v∥) with axisymmetry.
 !
-!  Version 0.1 (02/03/2026)
+! The φ-integrated distance kernel sum_phi(ix1,ix2) is precomputed once
+! per grid. Here ψ is assembled as a dense matrix-vector product via
+! MKL DGEMV, replacing the original O(N^4) quadruple loop with a single
+! O(N^2) BLAS call. Trapezoidal weights are used, identical to the
+! integrate_2d rule previously called inside the loop.
 !=======================================================================
 
-subroutine compute_psi(f_values,psi_values)
-  
- use shared_grid
-use func_index
-use integrate_2d_module
+subroutine compute_psi(f_values, psi_values)
+
+  use shared_grid
+  use func_index
 
   implicit none
-  
- 
-  ! Parameters
+
   integer, parameter :: dp = kind(1.0d0)
-  real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
-  real(dp), parameter :: prefactor = -1.0_dp / (8.0_dp * pi)
-  
- double precision, dimension(nperp,npar),intent(in) :: f_values
- double precision, dimension(nperp,npar),intent(out) :: psi_values
- 
- !  real(dp) :: r_weights(nperp)        ! Integration weights for vperp
+  ! prefactor = -1/(8π) = -1/(32*atan(1))
+  real(dp), parameter :: prefactor = -1.0_dp / (32.0_dp * atan(1.0_dp))
 
- 
-    integer :: i, j, ip, jp
-    real(dp) :: r, z, rp, zp
-    real(dp), dimension(nperp,npar):: integrand
+  double precision, dimension(nperp,npar), intent(in)  :: f_values
+  double precision, dimension(nperp,npar), intent(out) :: psi_values
 
- integer :: ix1,ix2
- 
-! -------
- 
-! Compute integration weights for non-uniform radial grid
-    
+  double precision :: g(nbig), psi_vec(nbig)
+  double precision :: w_vperp(nperp), w_vpar(npar)
+  integer :: i, j
 
- ! Initialize result
-    psi_values = 0.0_dp
-   
-    ! Loop over observation points
-    do i = 1, nperp
-      r = vperp(i)
-      do j = 1, npar
-        z = vpar(j)
-       
-        ! Sum over source points
-        do ip = 1, nperp
-          rp = vperp(ip)
-          do jp = 1, npar
-            zp = vpar(jp)
-            
-             ix1=index_mat(i,j)
-             ix2=index_mat(ip,jp)
-           
-            if (f_values(ip,jp) == 0.0_dp) cycle
-           
-            ! Add contribution: f(rp,zp) * rp * drp * dzp * [∫ dφ |x-x'|]
-            integrand(ip,jp) = f_values(ip,jp) * vperp(ip) * sum_phi(ix1,ix2)
-            
-          end do ! jp
-        end do ! ip
-           
-        psi_values(i,j) = integrate_2d(integrand,vperp,vpar,nperp,npar)
-       
-        ! Apply prefactor
-        psi_values(i,j) = prefactor * psi_values(i,j)
-        
-       
-      end do ! j
-    end do ! i
- 
-      
- 
-end subroutine compute_psi    
+  external dgemv
+
+  ! Trapezoidal weights for vperp (non-uniform grid)
+  w_vperp(1) = 0.5_dp * (vperp(2) - vperp(1))
+  do i = 2, nperp-1
+    w_vperp(i) = 0.5_dp * (vperp(i+1) - vperp(i-1))
+  end do
+  w_vperp(nperp) = 0.5_dp * (vperp(nperp) - vperp(nperp-1))
+
+  ! Trapezoidal weights for vpar (uniform grid)
+  w_vpar(1)    = 0.5_dp * dvpar
+  w_vpar(npar) = 0.5_dp * dvpar
+  do j = 2, npar-1
+    w_vpar(j) = dvpar
+  end do
+
+  ! Source vector: g(ix) = f(i,j) * vperp(i) * w_vperp(i) * w_vpar(j)
+  do i = 1, nperp
+    do j = 1, npar
+      g(index_mat(i,j)) = f_values(i,j) * vperp(i) * w_vperp(i) * w_vpar(j)
+    end do
+  end do
+
+  ! psi_vec = prefactor * sum_phi * g
+  ! Column-major 'N' accesses each column of sum_phi contiguously (cache-friendly).
+  call dgemv('N', nbig, nbig, prefactor, sum_phi, nbig, g, 1, 0.0_dp, psi_vec, 1)
+
+  ! Unpack flat result back to 2D array
+  do i = 1, nperp
+    do j = 1, npar
+      psi_values(i,j) = psi_vec(index_mat(i,j))
+    end do
+  end do
+
+end subroutine compute_psi
 
 
 SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
@@ -430,7 +418,7 @@ SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
 
 END SUBROUTINE regularise_axis_3
 
-    
+
 subroutine test_maxwell
 
 use shared_grid
@@ -455,7 +443,7 @@ double precision pi,twopi
     ! ==============================
     ! TEST : maxwellian background
     ! ==============================
-    
+
 ! We compare Dperperp with the analytical expression for a
     !  Maxwellian background
 ! Dperpperpis the factor in front of d2fdvperp2
@@ -472,7 +460,7 @@ double precision pi,twopi
 
 do ipa=1,npar
         do ipe=1,nperp
-    
+
 !call cblin(ipe,ipa,vteff,gammaa,1.d0,c20,c02,c11,c10,c01,c00)
 
 
@@ -480,13 +468,13 @@ do ipa=1,npar
 
     ! We compare Psi with the analytical expression for a
     !  Maxwellian background
-!         
+!
             sq2 = dsqrt(2.d0)
 !
 !
 v1=dSQRT(vperp(ipe)**2+vpar(ipa)**2)
 v2=vperp(ipe)**2+vpar(ipa)**2
-    
+
 ! Main mathematical functions
 
 arg=v1/sq2/vteff
@@ -529,7 +517,7 @@ dGonv = (arg*chandrap-chandra)/v2
 if (arg < 1d-4) then
     phi(ipe,ipa) =  -npart/4.d0/pi*coef1/sq2/vteff*(1.d0-arg2/3.d0)
 else
- phi(ipe,ipa) =  -npart/4.d0/pi*func1/v1   
+ phi(ipe,ipa) =  -npart/4.d0/pi*func1/v1
 endif
 
 !dphidpe(ipe,ipa) =  npart/4.d0/pi/vteff**2*chandra*vperp(ipe)/v1
@@ -542,16 +530,16 @@ call deriv_x2(phi,vperp,nperp,npar,d2phidpe2)
 call deriv_x1(phi,vperp,nperp,npar,dphidpe)
 
 do ipe=1,nperp
-    
-!if(ipa == (npar+1)/2) 
+
+!if(ipa == (npar+1)/2)
     write(41,*) vperp(ipe),d2phidpe2(ipe,(npar+1)/2)!then!(2*npar+1)/3)
-      write(42,*) vperp(ipe),phi(ipe,(npar+1)/2)  
+      write(42,*) vperp(ipe),phi(ipe,(npar+1)/2)
       write(43,*) vperp(ipe),dphidpe(ipe,(npar+1)/2)
 !endif
 !
 enddo
 !enddo
-    
+
 close(43)
 close(42)
     close(41)
@@ -562,7 +550,7 @@ close(42)
 !open(61,file='d2PsiDpe2_max_z=0_3.txt',status='unknown')
 
   !   call deriv_x1(dpsidve_max,vperp,nperp,npar,d2p)
-     
+
 !do ipe=1,nperp
 !      !  psi_max_0(ipe) = c20*(-npart/4.d0/pi/gammaa)
 !  !  c20_lim = 2/dsqrt(2.d0*pi)/vteff*(1.d0/3.d0-arg2/5.d0)
@@ -572,18 +560,18 @@ close(42)
 !
 !close(61)
 
-    
+
     ! ==============================
     ! END TEST : maxwellian background
     ! ==============================
-    
+
 end subroutine test_maxwell
 
 !=====================================================================
   ! Output results to file
   !=====================================================================
   subroutine output_results(psi_values)!,psi_0
-  
+
   use shared_grid
 
     implicit none
@@ -591,12 +579,12 @@ end subroutine test_maxwell
     character(len=*), parameter :: filename = "D2PhiDvperp2_integral_6_6.txt"
  !   character(len=*), parameter :: filename0 = "d2psidpe2_results_z=0_1.txt"
 !    character(len=*), parameter :: filename_c = "d2psi_results_z=0-comp.txt"
-    
+
 double precision, dimension(nperp,npar), intent(in) :: psi_values
 !double precision, dimension(nperp), intent(in) :: psi_0
 
-    
-   
+
+
     open(unit=10, file=filename, status='replace', action='write', iostat=ios)
     if (ios /= 0) then
       print *, "Error opening file for writing"
@@ -615,11 +603,11 @@ double precision, dimension(nperp,npar), intent(in) :: psi_values
 
 
    write(*,*) 'Slice at vpar = ',vpar((npar+1)/2)
-   
+
     ! Write header
     write(10, '(A)') "# Vperp Phi(vperp,0)"
     write(10, *)
-   
+
     ! Write data
     do i = 1, nperp
       do j = 1, npar
@@ -628,17 +616,16 @@ double precision, dimension(nperp,npar), intent(in) :: psi_values
             write(10, '(4ES15.6)') vperp(i), psi_values(i,j)
        !     write(12, '(4ES15.6)') vperp(i), dabs(psi_values(i,j)-psi_0(i))/psi_0(i)*100.d0
         endif
-        
+
       end do
 !      write(10, *)  ! Blank line between radial slices for gnuplot
     end do
-    
+
 !    close(12)
     close(11)
 !    close(10)
 !    print *, "Results written to ", filename
-   
+
   end subroutine output_results
 
     end module nlterm
-    

@@ -66,7 +66,6 @@
 			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
-			<File RelativePath="..\Fortran sources\integrate_2d.f90"/>
 			<File RelativePath="..\Fortran sources\main-FP_Coll_2D.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\ncint.f90"/>
