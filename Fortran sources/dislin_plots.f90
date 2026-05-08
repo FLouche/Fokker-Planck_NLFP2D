@@ -230,6 +230,8 @@ contains
     call name('v_perp (v_th)', 'Y')
     call titlin(trim(title_str), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
+    call labels('EXP', 'X')
+    call labels('EXP', 'Y')
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
     call grid(1, 1)
@@ -266,7 +268,7 @@ contains
 
     fn = trim(outfile('fout.txt'))
     pn = trim(outfile('fout.png'))
-    call plot_2d(fn, '2D VDF f(v_perp, v_par)', pn)
+    call plot_2d(fn, '2D VDF f(v_perp, v_par)', pn, 'EXP')
 
     fn = trim(outfile('Ekin_perp.txt'))
     pn = trim(outfile('Ekin_perp.png'))
