@@ -330,6 +330,7 @@ contains
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
         call grid(1, 1)
+        call thkcrv(5)
         call color('RED')
         call curve(t(1:nt), y1(1:nt), nt)
         call color('BLUE')
@@ -429,6 +430,7 @@ contains
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
         call grid(1, 1)
+        call thkcrv(5)
         call color('RED')
         call curve(t(1:nt), pcoll_e(1:nt), nt)
         if (nbulk > 1) then
@@ -545,6 +547,7 @@ contains
         call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
         call title()
         call grid(1, 1)
+        call thkcrv(5)
         call color('RED')
         call curve(t(1:nt), pcoll_tot(1:nt), nt)
         if (irf == -1) then
