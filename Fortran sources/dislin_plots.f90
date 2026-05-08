@@ -233,7 +233,11 @@ contains
     call title()
     call grid(1, 1)
     call conshd(vpar, npar, vperp, nperp, zmat, zlev, nc)
-    call colorb()
+    ! Colour bar: vertical, right of axis (axis right edge = 350+1900=2250)
+    ! zaxis(a, b, or, step, nl, cstr, it, ndir, nx, ny)
+    !   nl=bar length (matches axslen height), ndir=0 vertical,
+    !   it=0 ticks clockwise (right side), nx/ny = lower-left corner
+    call zaxis(zmin, zmax, zmin, nice_step(zmax-zmin), 1200, '', 0, 0, 2350, 1800)
     call disfin()
 
     deallocate(zmat)
