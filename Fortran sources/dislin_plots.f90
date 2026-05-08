@@ -174,8 +174,9 @@ contains
   ! 3-column file (outer loop=vperp, inner loop=vpar) ->
   ! filled contour PNG with v_par on x-axis, v_perp on y-axis
   !-----------------------------------------------------------------
-  subroutine plot_2d(fname, title_str, pngname)
-    character(len=*), intent(in) :: fname, title_str, pngname
+  subroutine plot_2d(fname, title_str, pngname, zformat)
+    character(len=*), intent(in)           :: fname, title_str, pngname
+    character(len=*), intent(in), optional :: zformat   ! e.g. 'EXP' for scientific notation
     real(dp), allocatable :: zmat(:,:)
     real(dp) :: zlev(20)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy
@@ -237,6 +238,7 @@ contains
     ! zaxis(a, b, or, step, nl, cstr, it, ndir, nx, ny)
     !   nl=bar length (matches axslen height), ndir=0 vertical,
     !   it=0 ticks clockwise (right side), nx/ny = lower-left corner
+    if (present(zformat)) call labels(trim(zformat), 'Z')
     call zaxis(zmin, zmax, zmin, nice_step(zmax-zmin), 1200, '', 0, 0, 2350, 1800)
     call disfin()
 
@@ -251,11 +253,11 @@ contains
 
     fn = trim(outfile('fout_at_vpar0.txt'))
     pn = trim(outfile('fout_at_vpar0.png'))
-    call plot_1d(fn, 'v_perp (v_th)', 'f', 'VDF at v_par = 0', pn)
+    call plot_1d(fn, 'v_perp (v_th)', 'f', 'VDF at v_par = 0', pn, 'EXP')
 
     fn = trim(outfile('fout_at_vperp0.txt'))
     pn = trim(outfile('fout_at_vperp0.png'))
-    call plot_1d(fn, 'v_par (v_th)', 'f', 'VDF at v_perp = 0', pn)
+    call plot_1d(fn, 'v_par (v_th)', 'f', 'VDF at v_perp = 0', pn, 'EXP')
 
     fn = trim(outfile('Ekin_perp_at_vpar0.txt'))
     pn = trim(outfile('Ekin_perp_at_vpar0.png'))
@@ -268,7 +270,7 @@ contains
 
     fn = trim(outfile('Ekin_perp.txt'))
     pn = trim(outfile('Ekin_perp.png'))
-    call plot_2d(fn, 'Perp. kinetic energy (keV)', pn)
+    call plot_2d(fn, 'Perp. kinetic energy (keV)', pn, 'EXP')
 
   end subroutine plot_endof_run
 
