@@ -13,7 +13,7 @@
 !*   - sum_phi (phi-distance kernel) is allocated and computed     *
 !*     once before the time loop via distance_v_gauss_legendre.    *
 !*                                                                 *
-!*   Version 1.0 - F. Louche                                       *
+!*   Version 1.1 - F. Louche                                       *
 !*******************************************************************
 
 MODULE mod_timefp_7pt_nl
@@ -96,12 +96,14 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ndof    = nperp * npar
   nnz_max = ndof * 49
 
-  IF (icn == -1) THEN
-    theta = 0.5_dp
+ IF (icn == -1) THEN
+      theta = 0.5_dp          ! Crank-Nicolson (may be unstable with NL SC)
+  ELSE IF (icn == 1) THEN
+      theta = 0.75_dp         ! intermediate
   ELSE
-    theta = 1.0_dp
+      theta = 1.0_dp          ! fully implicit
   END IF
-
+  
   ALLOCATE(ia_L(ndof+1), ja_L(nnz_max), aa_L(nnz_max))
   ALLOCATE(ia_lhs(ndof+1), ja_lhs(nnz_max), aa_lhs(nnz_max))
   ALLOCATE(rhs_vec(ndof), x_vec(ndof), Lf(ndof))
