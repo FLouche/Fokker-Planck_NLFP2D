@@ -117,8 +117,9 @@ contains
   !-----------------------------------------------------------------
   ! 2-column file -> single 1D PNG plot
   !-----------------------------------------------------------------
-  subroutine plot_1d(fname, xlabel, ylabel, title_str, pngname)
-    character(len=*), intent(in) :: fname, xlabel, ylabel, title_str, pngname
+  subroutine plot_1d(fname, xlabel, ylabel, title_str, pngname, yformat)
+    character(len=*), intent(in)           :: fname, xlabel, ylabel, title_str, pngname
+    character(len=*), intent(in), optional :: yformat   ! e.g. 'EXP' for scientific notation
     real(dp), allocatable :: xd(:), yd(:)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy
     character(len=256) :: pn_out
@@ -156,6 +157,7 @@ contains
     call name(trim(ylabel), 'Y')
     call titlin(trim(title_str), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
+    if (present(yformat)) call labels(trim(yformat), 'Y')
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
     call grid(1, 1)
@@ -221,8 +223,8 @@ contains
     call hwfont()
     call setvlt('RAIN')
     call zscale(zmin, zmax)
-    call axspos(450, 1800)
-    call axslen(2200, 1200)
+    call axspos(350, 1800)
+    call axslen(1900, 1200)
     call name('v_par (v_th)', 'X')
     call name('v_perp (v_th)', 'Y')
     call titlin(trim(title_str), 1)
@@ -231,6 +233,7 @@ contains
     call title()
     call grid(1, 1)
     call conshd(vpar, npar, vperp, nperp, zmat, zlev, nc)
+    call colorb()
     call disfin()
 
     deallocate(zmat)
@@ -253,7 +256,7 @@ contains
     fn = trim(outfile('Ekin_perp_at_vpar0.txt'))
     pn = trim(outfile('Ekin_perp_at_vpar0.png'))
     call plot_1d(fn, 'v_perp (v_th)', 'E_kin_perp (keV)', &
-                 'Perp. kinetic energy at v_par = 0', pn)
+                 'Perp. kinetic energy at v_par = 0', pn, 'EXP')
 
     fn = trim(outfile('fout.txt'))
     pn = trim(outfile('fout.png'))
