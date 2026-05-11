@@ -115,7 +115,18 @@ data pi/3.141592653589793238462643d0/
 !                      for vperp <= vbound: nsing points (increase the density for small vperp)
 !           +1: Quadratic spacing for higher resolution near vperp=0 (or vperp_min)
 !                 ==> FD scheme needs to be adapted ===> DO NOT USE !!!!
-
+!
+! Convergence for time-dependent simulation:
+!
+!1. Every n_ss_window steps, a line like [SS] step=50  dE/E= 1.23E-02  dn/n= 4.56E-03  dP/Pd= 7.89E-03 [tol= 1.00E-03]
+!should appear on stdout.
+!2. When all three criteria drop below ss_tol, the run stops early and prints [SS] CONVERGED at step NNN ....
+!3. After early exit, all output files (fout.txt, xout.dat, *_vs_time.txt) should be complete and the end-of-run plots
+!should still be produced.
+!
+!If ss_tol is too tight (run never converges) or too loose (stops too early), adjust it together with n_ss_window. A
+!wider window is more immune to short-term fluctuations.
+!
 namelist /INPUT/ casename, &
                  new_grid, &
                  nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
@@ -125,7 +136,8 @@ namelist /INPUT/ casename, &
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, isc, ifd7, iplot_traces, ioverwrite
+                icn, ntimes, timestep, iold, isc, ifd7, iplot_traces, ioverwrite, &
+                i_ss_check, n_ss_window, ss_tol
 
 !write(*,*) 'Read namelist'
 

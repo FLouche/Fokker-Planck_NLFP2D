@@ -40,6 +40,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   USE shared_beam
   USE shared_RF
   USE func_index
+  USE mod_ss_check
 
   IMPLICIT NONE
 
@@ -85,7 +86,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=256) :: dynfname
 
   EXTERNAL :: time_density, time_energy, time_power_7pt
-  
+
+  logical  :: ss_converged
+  real(dp) :: p_net_ss, p_drive_ss
+
   real(dp), dimension(nperp,npar) :: f_init
 
   !================================================================
@@ -304,6 +308,21 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
     IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
     IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
+
+    !--- Steady-state convergence check (optional) ----------------
+    if (i_ss_check == -1) then
+      p_net_ss   = sum(pcoll(1:nbulk)) + pcoll_self + pRF + psource + plosses
+      p_drive_ss = max(abs(pRF), abs(pcoll_self), abs(psource))
+      do ib = 1, nbulk
+        p_drive_ss = max(p_drive_ss, abs(pcoll(ib)))
+      end do
+      p_drive_ss = max(p_drive_ss, 1.0_dp)
+      call ss_check(itime, tk, dens_tmp, p_net_ss, p_drive_ss, ss_converged)
+      if (ss_converged) then
+        write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (steady state reached).'
+        exit time_loop
+      end if
+    end if
 
     !--- Advance solution -----------------------------------------
     fstart = x_vec!*npart/dens_tmp
