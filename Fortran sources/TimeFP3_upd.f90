@@ -85,7 +85,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   EXTERNAL :: time_density, time_energy, time_power_7pt
 
   logical  :: ss_converged
-  real(dp) :: p_net_ss, p_drive_ss
+  real(dp) :: p_net_ss, p_drive_ss, anisotropy
 
   REAL(dp), DIMENSION(nperp,npar) :: f_init
 
@@ -180,6 +180,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   IF (otime == 0.d0) THEN
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='unknown')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='unknown')
+    OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')),    status='unknown')
     OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
     DO ib = 1, nbulk
       IF (ib == 1) THEN
@@ -196,6 +197,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
+    OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')),    status='old', access='append')
     OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
     DO ib = 1, nbulk
       IF (ib == 1) THEN
@@ -271,6 +273,8 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
 
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar)
     WRITE(46,*) time, tk, tkperp
+    anisotropy = merge(100.0_dp*(tkperp/tk - 2.0_dp/3.0_dp)/(2.0_dp/3.0_dp), 0.0_dp, tk > 0.0_dp)
+    WRITE(47,*) time, anisotropy
 
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
@@ -312,7 +316,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   IF (isource == -1) CLOSE(490)
   IF (irf     == -1) CLOSE(480)
   IF (isc     /=  0) CLOSE(500)
-  CLOSE(470); CLOSE(46); CLOSE(45)
+  CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
 
   !================================================================
   ! 7.  Renormalise (sourceless case)

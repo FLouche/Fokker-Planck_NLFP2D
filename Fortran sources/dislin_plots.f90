@@ -569,6 +569,12 @@ contains
       if (allocated(plosses)) deallocate(plosses)
     end if
 
+    !-- Plot 4: anisotropy factor vs time ----------------------------
+    call plot_1d(trim(outfile('anisotropy_vs_time.txt')), &
+                 'Time (s)', 'Anisotropy (%)', &
+                 'Anisotropy factor vs time', &
+                 trim(outfile('anisotropy_vs_time.png')))
+
   end subroutine plot_time_traces
 
 end module mod_dislin_plots
