@@ -378,7 +378,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         p_drive_ss = max(p_drive_ss, abs(pcoll(ib)))
       end do
       p_drive_ss = max(p_drive_ss, 1.0_dp)
-      call ss_check(itime, tk, dens_tmp, p_net_ss, p_drive_ss, ss_converged)
+      call ss_check(itime, tk, tkperp, dens_tmp, p_net_ss, p_drive_ss, ss_converged)
       if (ss_converged) then
         write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (steady state reached).'
         exit time_loop
