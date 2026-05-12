@@ -15,7 +15,7 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 1.4 - 4 May 2026
+!   Version 1.5 - 11 May 2026
 
 !    
 !    Fabrice Louche
@@ -88,6 +88,8 @@ double precision :: pi,twopi
 common/mathcons/pi,twopi
 
 data pi/3.141592653589793238462643d0/
+
+double precision start_time,end_time
 
 !external derf
 
@@ -174,6 +176,8 @@ if (ntimes /= 0 .and. iold /= -1) then
 endif
 
 twopi=2.d0*pi
+
+call cpu_time(start_time)
 
 !====================================================================
 !
@@ -358,6 +362,7 @@ else steady_state
 !            
 !  TIME-DEPENDANT SOLVER
 !  ---------------------
+    
 
 !  --> Initial distribution construction 
 !      ---------------------------------
@@ -533,5 +538,8 @@ close(40)
 
 call plot_endof_run()
 if (ntimes /= 0 .and. iplot_traces == -1) call plot_time_traces()
+
+call cpu_time(end_time)
+    write(*,*) 'Simulation duration: ',end_time-start_time,'seconds'
 
 end program FP_Coll_2D
