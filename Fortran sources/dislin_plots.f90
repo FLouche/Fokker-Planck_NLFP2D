@@ -121,7 +121,7 @@ contains
     character(len=*), intent(in)           :: fname, xlabel, ylabel, title_str, pngname
     character(len=*), intent(in), optional :: yformat   ! e.g. 'EXP' for scientific notation
     real(dp), allocatable :: xd(:), yd(:)
-    real(dp) :: xmin, xmax, ymin, ymax, dx, dy
+    real(dp) :: xmin, xmax, ymin, ymax, dx, dy, yor
     character(len=256) :: pn_out
     integer :: n, i, io, lun
 
@@ -140,11 +140,15 @@ contains
     xmin = minval(xd(1:n)); xmax = maxval(xd(1:n))
     if (xmin >= 0.0_dp) xmin = 0.0_dp   ! non-negative axis (v_perp): start from 0
     ymin = minval(yd(1:n)); ymax = maxval(yd(1:n))
-    ! Clamp sub-noise negative values to 0; DISLIN's graf misbehaves when yor is
-    ! a tiny negative number (numerical noise) while the axis scale is very small.
-    if (ymin < 0.0_dp .and. ymax > 0.0_dp .and. ymin > -1.0e-3_dp * ymax) ymin = 0.0_dp
     dx = nice_step(xmax - xmin)
     dy = nice_step(ymax - ymin)
+    ! When ymin is sub-noise negative, keep ya=ymin (non-zero) but start y labels at 0.
+    ! Setting ya=yor=0 exactly triggers DISLIN 11.5.2 Warning 9; a tiny-negative ya is safe.
+    if (ymin < 0.0_dp .and. ymax > 0.0_dp .and. ymin > -1.0e-3_dp * ymax) then
+      yor = 0.0_dp
+    else
+      yor = ymin
+    end if
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
@@ -161,7 +165,10 @@ contains
     call titlin(trim(title_str), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
     if (present(yformat)) call labels(trim(yformat), 'Y')
-    call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
+    write(*,'(a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4)') &
+      '  graf1d: xmin=', xmin, ' xmax=', xmax, ' dx=', dx, &
+      '  ymin=', ymin, ' ymax=', ymax, ' yor=', yor, ' dy=', dy
+    call graf(xmin, xmax, xmin, dx, ymin, ymax, yor, dy)
     call title()
     call grid(1, 1)
     call thkcrv(8)
@@ -238,6 +245,9 @@ contains
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
     call labels('EXP', 'X')
     call labels('EXP', 'Y')
+    write(*,'(a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4)') &
+      '  graf2d: xmin=', xmin, ' xmax=', xmax, ' dx=', dx, &
+      '  ymin=', ymin, ' ymax=', ymax, ' dy=', dy, ' zmin=', zmin, ' zmax=', zmax
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
     call grid(1, 1)
