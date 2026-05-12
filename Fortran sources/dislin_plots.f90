@@ -162,8 +162,8 @@ contains
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
-    write(*,'(a,6(a,es11.4))') '  graf1d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
-                                '  ya=', ymin, ' ye=', ymax, ' dy=', dy
+    write(*,'(6(a,es11.4))') '  graf1d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
+                             '  ya=', ymin, ' ye=', ymax, ' dy=', dy
     call disfin()    ! pre-reset: flush any residual DISLIN state before new session
     call metafl('PNG')
     call setfil(trim(pn_out))
@@ -251,9 +251,9 @@ contains
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
-    write(*,'(a,8(a,es11.4))') '  graf2d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
-                                '  ya=', ymin, ' ye=', ymax, ' dy=', dy, &
-                                '  za=', zmin, ' ze=', zmax
+    write(*,'(8(a,es11.4))') '  graf2d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
+                             '  ya=', ymin, ' ye=', ymax, ' dy=', dy, &
+                             '  za=', zmin, ' ze=', zmax
     call disfin()    ! pre-reset: flush any residual DISLIN state before new session
     call metafl('PNG')
     call setfil(trim(pn_out))
