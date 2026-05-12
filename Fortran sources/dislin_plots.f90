@@ -154,10 +154,17 @@ contains
       ymax = ymax * yscale
       write(ylabel_local, '(a,a,i0,a)') trim(ylabel), ' [x10^', pow10_y, ']'
     end if
+    ! DISLIN 11.5.2: when xa=0 and ya is sub-noise near 0, DISLIN treats ya as
+    ! zero internally and fires Warning 9. Push ya down to 0.01% of ymax.
+    if (xmin == 0.0_dp .and. ymax > 0.0_dp .and. abs(ymin) < 1.0e-4_dp * ymax) &
+        ymin = -1.0e-4_dp * ymax
     dy = nice_step(ymax - ymin)
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
+    write(*,'(a,6(a,es11.4))') '  graf1d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
+                                '  ya=', ymin, ' ye=', ymax, ' dy=', dy
+    call disfin()    ! pre-reset: flush any residual DISLIN state before new session
     call metafl('PNG')
     call setfil(trim(pn_out))
     call scrmod('REVERS')
@@ -244,6 +251,10 @@ contains
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
+    write(*,'(a,8(a,es11.4))') '  graf2d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
+                                '  ya=', ymin, ' ye=', ymax, ' dy=', dy, &
+                                '  za=', zmin, ' ze=', zmax
+    call disfin()    ! pre-reset: flush any residual DISLIN state before new session
     call metafl('PNG')
     call setfil(trim(pn_out))
     call scrmod('REVERS')
