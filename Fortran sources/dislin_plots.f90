@@ -140,6 +140,9 @@ contains
     xmin = minval(xd(1:n)); xmax = maxval(xd(1:n))
     if (xmin >= 0.0_dp) xmin = 0.0_dp   ! non-negative axis (v_perp): start from 0
     ymin = minval(yd(1:n)); ymax = maxval(yd(1:n))
+    ! Clamp sub-noise negative values to 0; DISLIN's graf misbehaves when yor is
+    ! a tiny negative number (numerical noise) while the axis scale is very small.
+    if (ymin < 0.0_dp .and. ymax > 0.0_dp .and. ymin > -1.0e-3_dp * ymax) ymin = 0.0_dp
     dx = nice_step(xmax - xmin)
     dy = nice_step(ymax - ymin)
 
@@ -207,6 +210,9 @@ contains
     dy = nice_step(ymax - ymin)
 
     zmin = minval(zmat); zmax = maxval(zmat)
+    ! Clamp sub-noise negative values to 0; zscale() with a tiny negative zmin
+    ! corrupts DISLIN's colour axis setup, triggering Warning 9 in the following graf.
+    if (zmin < 0.0_dp .and. zmax > 0.0_dp .and. zmin > -1.0e-3_dp * zmax) zmin = 0.0_dp
     if (zmin == zmax) zmax = zmin + 1.0_dp
     nc = 20
     dz = (zmax - zmin) / real(nc, dp)
