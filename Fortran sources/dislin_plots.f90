@@ -121,9 +121,10 @@ contains
     character(len=*), intent(in)           :: fname, xlabel, ylabel, title_str, pngname
     character(len=*), intent(in), optional :: yformat   ! e.g. 'EXP' for scientific notation
     real(dp), allocatable :: xd(:), yd(:)
-    real(dp) :: xmin, xmax, ymin, ymax, dx, dy, yor
+    real(dp) :: xmin, xmax, ymin, ymax, dx, dy, yscale
     character(len=256) :: pn_out
-    integer :: n, i, io, lun
+    character(len=512) :: ylabel_local
+    integer :: n, i, io, lun, pow10_y
 
     n = count_lines(fname)
     if (n < 2) return
@@ -141,14 +142,19 @@ contains
     if (xmin >= 0.0_dp) xmin = 0.0_dp   ! non-negative axis (v_perp): start from 0
     ymin = minval(yd(1:n)); ymax = maxval(yd(1:n))
     dx = nice_step(xmax - xmin)
-    dy = nice_step(ymax - ymin)
-    ! When ymin is sub-noise negative, keep ya=ymin (non-zero) but start y labels at 0.
-    ! Setting ya=yor=0 exactly triggers DISLIN 11.5.2 Warning 9; a tiny-negative ya is safe.
-    if (ymin < 0.0_dp .and. ymax > 0.0_dp .and. ymin > -1.0e-3_dp * ymax) then
-      yor = 0.0_dp
-    else
-      yor = ymin
+    ! Scale y data if ymax is below DISLIN 11.5.2's effective minimum step threshold (~1e-10).
+    ! Aligns yor with ya by always setting yor=ymin after any rescaling.
+    yscale = 1.0_dp
+    ylabel_local = trim(ylabel)
+    if (ymax > 0.0_dp .and. ymax < 1.0e-4_dp) then
+      pow10_y = -floor(log10(ymax))
+      yscale = 10.0_dp ** pow10_y
+      yd(1:n) = yd(1:n) * yscale
+      ymin = ymin * yscale
+      ymax = ymax * yscale
+      write(ylabel_local, '(a,a,i0,a)') trim(ylabel), ' [x10^', pow10_y, ']'
     end if
+    dy = nice_step(ymax - ymin)
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
@@ -161,14 +167,11 @@ contains
     call axspos(450, 1800)
     call axslen(2200, 1200)
     call name(trim(xlabel), 'X')
-    call name(trim(ylabel), 'Y')
+    call name(trim(ylabel_local), 'Y')
     call titlin(trim(title_str), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
     if (present(yformat)) call labels(trim(yformat), 'Y')
-    write(*,'(a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4)') &
-      '  graf1d: xmin=', xmin, ' xmax=', xmax, ' dx=', dx, &
-      '  ymin=', ymin, ' ymax=', ymax, ' yor=', yor, ' dy=', dy
-    call graf(xmin, xmax, xmin, dx, ymin, ymax, yor, dy)
+    call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
     call grid(1, 1)
     call thkcrv(8)
@@ -190,9 +193,10 @@ contains
     real(dp), allocatable :: zmat(:,:)
     real(dp) :: zlev(20)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy
-    real(dp) :: zmin, zmax, dz, dum1, dum2, val
+    real(dp) :: zmin, zmax, dz, dum1, dum2, val, zscale_fac
     character(len=256) :: pn_out
-    integer :: i, j, io, nc, lun
+    character(len=512) :: title_local
+    integer :: i, j, io, nc, lun, pow10_z
     logical :: exists
 
     inquire(file=trim(fname), exist=exists)
@@ -221,6 +225,17 @@ contains
     ! corrupts DISLIN's colour axis setup, triggering Warning 9 in the following graf.
     if (zmin < 0.0_dp .and. zmax > 0.0_dp .and. zmin > -1.0e-3_dp * zmax) zmin = 0.0_dp
     if (zmin == zmax) zmax = zmin + 1.0_dp
+    ! Scale z data if zmax is below DISLIN 11.5.2's effective minimum step threshold (~1e-10)
+    zscale_fac = 1.0_dp
+    title_local = trim(title_str)
+    if (zmax > 0.0_dp .and. zmax < 1.0e-4_dp) then
+      pow10_z = -floor(log10(zmax))
+      zscale_fac = 10.0_dp ** pow10_z
+      zmat = zmat * zscale_fac
+      zmin = zmin * zscale_fac
+      zmax = zmax * zscale_fac
+      write(title_local, '(a,a,i0,a)') trim(title_str), ' [x10^', pow10_z, ']'
+    end if
     nc = 20
     dz = (zmax - zmin) / real(nc, dp)
     do i = 1, nc
@@ -241,13 +256,10 @@ contains
     call axslen(1900, 1200)
     call name('v_par (v_th)', 'X')
     call name('v_perp (v_th)', 'Y')
-    call titlin(trim(title_str), 1)
+    call titlin(trim(title_local), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
     call labels('EXP', 'X')
     call labels('EXP', 'Y')
-    write(*,'(a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4,a,es12.4)') &
-      '  graf2d: xmin=', xmin, ' xmax=', xmax, ' dx=', dx, &
-      '  ymin=', ymin, ' ymax=', ymax, ' dy=', dy, ' zmin=', zmin, ' zmax=', zmax
     call graf(xmin, xmax, xmin, dx, ymin, ymax, ymin, dy)
     call title()
     call grid(1, 1)
