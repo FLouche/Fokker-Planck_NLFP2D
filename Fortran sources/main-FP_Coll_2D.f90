@@ -89,6 +89,8 @@ common/mathcons/pi,twopi
 
 data pi/3.141592653589793238462643d0/
 
+integer iplot_all
+
 double precision start_time,end_time
 
 !external derf
@@ -146,7 +148,7 @@ namelist /INPUT/ casename, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, ifd7,&
-                iplot_traces, ioverwrite, &
+                iplot_all, iplot_traces, ioverwrite, &
                 i_ss_check, n_ss_window, ss_tol
                 
 
@@ -535,11 +537,13 @@ enddo
 close(41)
 close(40)
 
-
+if (iplot_all == -1) then
 call plot_endof_run()
 if (ntimes /= 0 .and. iplot_traces == -1) call plot_time_traces()
+endif
 
 call cpu_time(end_time)
+write(*,*) ' '
     write(*,*) 'Simulation duration: ',end_time-start_time,'seconds'
 
 end program FP_Coll_2D

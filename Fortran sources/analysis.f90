@@ -1,4 +1,4 @@
-
+﻿
 !   analysis.f90
 !
 !   FPColl_2D
@@ -35,6 +35,7 @@ module mod_anal
     
     double precision pmass, kev_in_J
     double PRECISION mod0,mod2,mod2_perp,mod2_par
+    double precision teff
     
     integer iv,ip
     
@@ -127,6 +128,14 @@ close(40)
     
     write(*,*) 'Parallel Kinetic Energy is ', 0.5*pmass*aa*mod2_par/kev_in_J, 'keV'
     
+    ! Effective temperature (13/05/2026)
+    ! 〈mv^2/2〉 = 3/2NkTeff
+    
+    Teff = 2.d0/3.d0* 0.5*pmass*aa*(mod2_perp+mod2_par)/kev_in_J
+    
+    write(*,*) 'Effective temperature is ',Teff, 'keV'
+    
+    
 !    open(40,file='Ekin_par.txt', status='unknown')
 !
 !
@@ -162,39 +171,6 @@ endif
 
 
 deallocate(xout)
-
-
-
-! -------------------------------------------------------------------------------------
-! TEST: shape of the vdf along boundaries
-!
-    
-
-! Curves of F along boundaries
-
-!open(40,file='F_at_vperp0.txt',status='unknown')
-!
-!do ip=1,npar
-!    write(40,*) vpar(ip),f(1,ip)
-!enddo
-!
-!close(40)
-!
-!open(40,file='F_at_vparmin.txt',status='unknown')
-!
-!do iv=1,nperp
-!    write(40,*) vperp(iv),f(iv,1)
-!enddo
-!
-!close(40)
-!
-!open(40,file='F_at_vparmax.txt',status='unknown')
-!
-!do iv=1,nperp
-!    write(40,*) vperp(iv),f(iv,npar)
-!enddo
-!
-!close(40)
 
     
     !***************************************
