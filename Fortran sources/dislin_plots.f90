@@ -121,10 +121,9 @@ contains
     character(len=*), intent(in)           :: fname, xlabel, ylabel, title_str, pngname
     character(len=*), intent(in), optional :: yformat   ! e.g. 'EXP' for scientific notation
     real(dp), allocatable :: xd(:), yd(:)
-    real(dp) :: xmin, xmax, ymin, ymax, dx, dy, yscale
+    real(dp) :: xmin, xmax, ymin, ymax, dx, dy
     character(len=256) :: pn_out
-    character(len=512) :: ylabel_local
-    integer :: n, i, io, lun, pow10_y
+    integer :: n, i, io, lun
 
     n = count_lines(fname)
     if (n < 2) return
@@ -142,29 +141,10 @@ contains
     if (xmin >= 0.0_dp) xmin = 0.0_dp   ! non-negative axis (v_perp): start from 0
     ymin = minval(yd(1:n)); ymax = maxval(yd(1:n))
     dx = nice_step(xmax - xmin)
-    ! Scale y data if ymax is below DISLIN 11.5.2's effective minimum step threshold (~1e-10).
-    ! Aligns yor with ya by always setting yor=ymin after any rescaling.
-    yscale = 1.0_dp
-    ylabel_local = trim(ylabel)
-    if (ymax > 0.0_dp .and. ymax < 1.0e-4_dp) then
-      pow10_y = -floor(log10(ymax))
-      yscale = 10.0_dp ** pow10_y
-      yd(1:n) = yd(1:n) * yscale
-      ymin = ymin * yscale
-      ymax = ymax * yscale
-      write(ylabel_local, '(a,a,i0,a)') trim(ylabel), ' [x10^', pow10_y, ']'
-    end if
-    ! DISLIN 11.5.2: when xa=0 and ya is sub-noise near 0, DISLIN treats ya as
-    ! zero internally and fires Warning 9. Push ya down to 0.01% of ymax.
-    if (xmin == 0.0_dp .and. ymax > 0.0_dp .and. abs(ymin) < 1.0e-4_dp * ymax) &
-        ymin = -1.0e-4_dp * ymax
     dy = nice_step(ymax - ymin)
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
-    write(*,'(6(a,es11.4))') '  graf1d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
-                             '  ya=', ymin, ' ye=', ymax, ' dy=', dy
-    call disfin()    ! pre-reset: flush any residual DISLIN state before new session
     call metafl('PNG')
     call setfil(trim(pn_out))
     call scrmod('REVERS')
@@ -174,7 +154,7 @@ contains
     call axspos(450, 1800)
     call axslen(2200, 1200)
     call name(trim(xlabel), 'X')
-    call name(trim(ylabel_local), 'Y')
+    call name(trim(ylabel), 'Y')
     call titlin(trim(title_str), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
     if (present(yformat)) call labels(trim(yformat), 'Y')
@@ -200,10 +180,9 @@ contains
     real(dp), allocatable :: zmat(:,:)
     real(dp) :: zlev(20)
     real(dp) :: xmin, xmax, ymin, ymax, dx, dy
-    real(dp) :: zmin, zmax, dz, dum1, dum2, val, zscale_fac
+    real(dp) :: zmin, zmax, dz, dum1, dum2, val
     character(len=256) :: pn_out
-    character(len=512) :: title_local
-    integer :: i, j, io, nc, lun, pow10_z
+    integer :: i, j, io, nc, lun
     logical :: exists
 
     inquire(file=trim(fname), exist=exists)
@@ -228,21 +207,7 @@ contains
     dy = nice_step(ymax - ymin)
 
     zmin = minval(zmat); zmax = maxval(zmat)
-    ! Clamp sub-noise negative values to 0; zscale() with a tiny negative zmin
-    ! corrupts DISLIN's colour axis setup, triggering Warning 9 in the following graf.
-    if (zmin < 0.0_dp .and. zmax > 0.0_dp .and. zmin > -1.0e-3_dp * zmax) zmin = 0.0_dp
     if (zmin == zmax) zmax = zmin + 1.0_dp
-    ! Scale z data if zmax is below DISLIN 11.5.2's effective minimum step threshold (~1e-10)
-    zscale_fac = 1.0_dp
-    title_local = trim(title_str)
-    if (zmax > 0.0_dp .and. zmax < 1.0e-4_dp) then
-      pow10_z = -floor(log10(zmax))
-      zscale_fac = 10.0_dp ** pow10_z
-      zmat = zmat * zscale_fac
-      zmin = zmin * zscale_fac
-      zmax = zmax * zscale_fac
-      write(title_local, '(a,a,i0,a)') trim(title_str), ' [x10^', pow10_z, ']'
-    end if
     nc = 20
     dz = (zmax - zmin) / real(nc, dp)
     do i = 1, nc
@@ -251,10 +216,6 @@ contains
 
     pn_out = png_name(trim(pngname))
     write(*,'(a,a)') ' Writing plot: ', trim(pn_out)
-    write(*,'(8(a,es11.4))') '  graf2d: xa=', xmin, ' xe=', xmax, ' dx=', dx, &
-                             '  ya=', ymin, ' ye=', ymax, ' dy=', dy, &
-                             '  za=', zmin, ' ze=', zmax
-    call disfin()    ! pre-reset: flush any residual DISLIN state before new session
     call metafl('PNG')
     call setfil(trim(pn_out))
     call scrmod('REVERS')
@@ -267,7 +228,7 @@ contains
     call axslen(1900, 1200)
     call name('v_par (v_th)', 'X')
     call name('v_perp (v_th)', 'Y')
-    call titlin(trim(title_local), 1)
+    call titlin(trim(title_str), 1)
     if (len_trim(casename) > 0) call titlin(trim(casename), 2)
     call labels('EXP', 'X')
     call labels('EXP', 'Y')
