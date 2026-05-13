@@ -39,7 +39,7 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Release|x64" UseCompiler="ifxCompiler">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" HeapArrays="0" RuntimeLibrary="rtMultiThreadedDLL" UseMkl="mklSequential" AdditionalIncludeDirectories="C:\dislin\ifc\real64"/>
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" HeapArrays="0" RuntimeLibrary="rtMultiThreadedDLL" UseMkl="mklSequential" AdditionalIncludeDirectories="C:\dislin\ifc\real64" AdditionalOptions="/fp:source"/>
 			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" SubSystem="subSystemConsole" AdditionalDependencies="disifd.lib gdi32.lib user32.lib opengl32.lib legacy_stdio_definitions.lib" AdditionalLibraryDirectories="C:\dislin"/>
 			<Tool Name="VFResourceCompilerTool"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
