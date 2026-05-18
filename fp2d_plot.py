@@ -38,6 +38,7 @@ Examples
 
 import argparse
 import fnmatch
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -198,6 +199,8 @@ def plot_1d(data, meta, stem, save_dir, show, log, casename):
     ax.set_ylabel(meta.get("ylabel", "y"))
     ax.set_title(_title(meta, stem, casename))
     ax.grid(True, alpha=0.3)
+    if x.min() >= 0:
+        ax.set_xlim(left=0)
     if log and np.any(y > 0):
         ax.set_yscale("log")
     elif meta.get("sci_y"):
@@ -248,6 +251,7 @@ def plot_ts(data, meta, stem, save_dir, show, casename):
     ax.set_xlabel("Time (s)")
     ax.set_ylabel(meta.get("ylabel", ""))
     ax.set_title(_title(meta, stem, casename))
+    ax.set_xlim(left=0)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     _finish(fig, stem, save_dir, show)
@@ -263,6 +267,7 @@ def plot_ts2(data, meta, stem, save_dir, show, casename):
     ax.set_xlabel("Time (s)")
     ax.set_ylabel(meta.get("ylabel", ""))
     ax.set_title(_title(meta, stem, casename))
+    ax.set_xlim(left=0)
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -319,6 +324,7 @@ def plot_power_coll(outdir: Path, save_dir, show: bool, casename: str) -> None:
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Power density (MW·m⁻³)")
     ax.set_title(_title({}, "Collisional power density vs time", casename))
+    ax.set_xlim(left=0)
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -361,6 +367,7 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Power density (MW·m⁻³)")
     ax.set_title(_title({}, "Power balance vs time", casename))
+    ax.set_xlim(left=0)
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -420,6 +427,32 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
 
     if show:
         plt.show()  # single blocking call — all windows open simultaneously
+
+
+# ---------------------------------------------------------------------------
+# Casename helpers
+# ---------------------------------------------------------------------------
+
+def _read_casename_from_namelist(input_file: Path) -> str:
+    """Return the casename value from a Fortran namelist, or '' if absent/unset."""
+    try:
+        text = input_file.read_text(errors="replace")
+        m = re.search(r'\bcasename\s*=\s*["\']([^"\']*)["\']', text, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _detect_casename(outdir: Path) -> str:
+    """Infer casename from output files by matching known FILE_META stems."""
+    for path in sorted(outdir.glob("*.txt")):
+        stem = path.stem
+        for key in sorted(FILE_META, key=len, reverse=True):
+            if stem.startswith(key + "-"):
+                return stem[len(key) + 1:]
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -488,6 +521,10 @@ def main(argv=None):
             sys.exit(f"Error: executable not found: {exe}")
         if not input_file.exists():
             sys.exit(f"Error: input file not found: {input_file}")
+        if not args.casename:
+            args.casename = _read_casename_from_namelist(input_file)
+            if args.casename:
+                print(f"Casename (from namelist): {args.casename}")
         rc = run_solver(exe, input_file, run_dir)
         if rc != 0:
             print(f"Warning: solver exited with code {rc}", file=sys.stderr)
@@ -497,6 +534,11 @@ def main(argv=None):
 
     if not outdir.is_dir():
         sys.exit(f"Error: output directory not found: {outdir}")
+
+    if not args.casename:
+        args.casename = _detect_casename(outdir)
+        if args.casename:
+            print(f"Casename (auto-detected): {args.casename}")
 
     if not args.show:
         plt.switch_backend("Agg")
