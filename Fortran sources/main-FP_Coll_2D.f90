@@ -46,7 +46,6 @@ use mod_timefp3_nl
 use mod_timefp_7pt_nl
 !
 use mod_anal
-use mod_dislin_plots
 !
 use func_index
 !
@@ -536,11 +535,6 @@ do iv = 1,nperp
 enddo
 close(41)
 close(40)
-
-if (iplot_all == -1) then
-call plot_endof_run()
-if (ntimes /= 0 .and. iplot_traces == -1) call plot_time_traces()
-endif
 
 call cpu_time(end_time)
 write(*,*) ' '
