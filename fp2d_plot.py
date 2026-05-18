@@ -380,7 +380,7 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
 # ---------------------------------------------------------------------------
 
 def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
-                   casename: str, restrict=None) -> None:
+                   casename: str, restrict=None, steady_state: bool = False) -> None:
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -404,6 +404,9 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         meta  = _get_meta(stem)
         ptype = meta.get("ptype") or _detect_type(path, data)
 
+        if steady_state and ptype in ("ts", "ts2"):
+            continue
+
         print(f"  [{ptype:3s}]  {path.name}")
         try:
             if ptype == "1d":
@@ -419,7 +422,7 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         except Exception as exc:
             print(f"    Error: {exc}")
 
-    if restrict is None:
+    if restrict is None and not steady_state:
         print("  [cmp]  power_coll_vs_time")
         plot_power_coll(outdir, save_dir, show, casename)
         print("  [cmp]  power_balance_vs_time")
@@ -443,6 +446,18 @@ def _read_casename_from_namelist(input_file: Path) -> str:
     except Exception:
         pass
     return ""
+
+
+def _read_ntimes_from_namelist(input_file: Path) -> int:
+    """Return ntimes from a Fortran namelist, or -1 if not found."""
+    try:
+        text = input_file.read_text(errors="replace")
+        m = re.search(r'\bntimes\s*=\s*([+-]?\d+)', text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return -1
 
 
 def _detect_casename(outdir: Path) -> str:
@@ -473,16 +488,18 @@ def run_solver(exe: Path, input_file: Path, run_dir: Path) -> int:
 # ---------------------------------------------------------------------------
 
 def _add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--save",     type=Path, default=None, dest="save_dir", metavar="DIR",
+    p.add_argument("--save",        type=Path, default=None, dest="save_dir", metavar="DIR",
                    help="save PNG files to DIR")
-    p.add_argument("--show",     action="store_true",
+    p.add_argument("--show",        action="store_true",
                    help="display plots interactively")
-    p.add_argument("--log",      action="store_true",
+    p.add_argument("--log",         action="store_true",
                    help="logarithmic scale for distribution functions")
-    p.add_argument("--casename", default="", metavar="STR",
+    p.add_argument("--casename",    default="", metavar="STR",
                    help="case label for plot titles")
-    p.add_argument("--files",    nargs="+", default=None, metavar="F",
+    p.add_argument("--files",       nargs="+", default=None, metavar="F",
                    help="plot only these filenames (basenames)")
+    p.add_argument("--steady-state", action="store_true", dest="steady_state",
+                   help="skip time-trace plots (for ntimes=0 runs)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -525,6 +542,11 @@ def main(argv=None):
             args.casename = _read_casename_from_namelist(input_file)
             if args.casename:
                 print(f"Casename (from namelist): {args.casename}")
+        if not args.steady_state:
+            ntimes = _read_ntimes_from_namelist(input_file)
+            if ntimes == 0:
+                args.steady_state = True
+                print("Steady-state run (ntimes=0): time traces will be skipped.")
         rc = run_solver(exe, input_file, run_dir)
         if rc != 0:
             print(f"Warning: solver exited with code {rc}", file=sys.stderr)
@@ -551,6 +573,7 @@ def main(argv=None):
         log=args.log,
         casename=args.casename,
         restrict=args.files,
+        steady_state=args.steady_state,
     )
     print("Done.")
 
