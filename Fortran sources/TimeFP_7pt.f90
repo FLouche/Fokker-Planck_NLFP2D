@@ -179,6 +179,18 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END DO
   END DO
 
+  ! BC rows must be treated as constraints, not time-evolution equations.
+  ! Restore them to the original L stencil so the solver enforces
+  ! df/dvp=0 (i=1) and f=0 (i=nperp, j=1, j=npar) at every time step.
+  DO row = 1, ndof
+    CALL index_mat_inv(row, iv, imu)
+    IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+      DO ptr = ia_lhs(row), ia_lhs(row+1)-1
+        aa_lhs(ptr) = aa_L(ptr)
+      END DO
+    END IF
+  END DO
+
   !================================================================
   ! 3.  Open output files (same convention as TimeFP3)
   !================================================================
@@ -259,6 +271,15 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       rhs_vec(row) = fstart(row) &
                    + (1.0_dp - theta) * timestep * Lf(row) &
                    + timestep * source_v(row)
+    END DO
+
+    ! BC rows are constraints: RHS must be zero so the solver enforces
+    ! the BC exactly (df/dvp=0 or f=0) at every time step.
+    DO row = 1, ndof
+      CALL index_mat_inv(row, iv, imu)
+      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+        rhs_vec(row) = 0.0_dp
+      END IF
     END DO
 
     !--- Solve M_lhs * f^{n+1} = rhs  (phase 33 only) -------------

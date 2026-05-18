@@ -318,6 +318,15 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         END IF
       END DO
     END DO
+    ! BC rows must remain constraints: restore them to the L stencil.
+    DO row = 1, ndof
+      CALL index_mat_inv(row, iv, imu)
+      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+        DO ptr = ia_lhs(row), ia_lhs(row+1)-1
+          aa_lhs(ptr) = aa_L(ptr)
+        END DO
+      END IF
+    END DO
     !IF (itime == 1) THEN
     !  WRITE(*,'(A,2ES14.5)') '  aa_lhs min/max:', MINVAL(aa_lhs(1:nnz_L)), MAXVAL(aa_lhs(1:nnz_L))
     !END IF
@@ -328,6 +337,13 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       rhs_vec(row) = fstart(row) &
                    + (1.0_dp - theta) * timestep * Lf(row) &
                    + timestep * source_v(row)
+    END DO
+    ! BC rows are constraints: zero RHS so the BC is enforced exactly.
+    DO row = 1, ndof
+      CALL index_mat_inv(row, iv, imu)
+      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+        rhs_vec(row) = 0.0_dp
+      END IF
     END DO
     !IF (itime == 1) THEN
     !  WRITE(*,'(A,2ES14.5)') '  ||fstart||, ||Lf||:', SQRT(SUM(fstart**2)), SQRT(SUM(Lf**2))
