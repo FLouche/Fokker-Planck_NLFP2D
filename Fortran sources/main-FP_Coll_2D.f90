@@ -88,8 +88,6 @@ common/mathcons/pi,twopi
 
 data pi/3.141592653589793238462643d0/
 
-integer iplot_all
-
 double precision start_time,end_time
 
 !external derf
@@ -147,7 +145,6 @@ namelist /INPUT/ casename, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, ifd7,&
-                iplot_all, iplot_traces, ioverwrite, &
                 i_ss_check, n_ss_window, ss_tol
                 
 
