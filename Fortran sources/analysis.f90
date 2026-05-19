@@ -35,7 +35,7 @@ module mod_anal
     
     double precision pmass, kev_in_J
     double PRECISION mod0,mod2,mod2_perp,mod2_par
-    double precision teff
+    double precision teff,Tperp,Tpar
     
     integer iv,ip
     
@@ -72,7 +72,7 @@ module mod_anal
     
     call ncint_2d(fint,mod2)
     
-    write(*,*) 'Total Kinetic Energy is ', 0.5*pmass*aa*mod2/kev_in_J, 'keV'
+    write(*,*) 'Average Kinetic Energy is ', 0.5*pmass*aa*mod2/kev_in_J, 'keV'
     
     open(40,file=TRIM(outfile('Ekin.txt')), status='unknown')
 
@@ -84,8 +84,6 @@ do iv=1,nperp
 enddo
 
 close(40)
-
-
     
     ! -> Perpendicular energy
     
@@ -98,7 +96,8 @@ close(40)
     
     call ncint_2d(fint,mod2_perp)
     
-    write(*,*) 'Perpendicular Kinetic Energy is ', 0.5*pmass*aa*mod2_perp/kev_in_J, 'keV'
+    Tperp = 0.5*pmass*aa*mod2_perp/kev_in_J
+    write(*,*) 'Perpendicular Kinetic Energy is ',Tperp , 'keV'
     
     open(40,file=TRIM(outfile('Ekin_perp.txt')), status='unknown')
     open(41,file=TRIM(outfile('Ekin_perp_at_vpar0.txt')),status='unknown')
@@ -126,26 +125,29 @@ close(40)
 
     call ncint_2d(fint,mod2_par)
     
-    write(*,*) 'Parallel Kinetic Energy is ', 0.5*pmass*aa*mod2_par/kev_in_J, 'keV'
+    Tpar = pmass*aa*mod2_par/kev_in_J
+    
+    write(*,*) 'Parallel Kinetic Energy is ', Tpar, 'keV'
     
     ! Effective temperature (13/05/2026)
     ! 〈mv^2/2〉 = 3/2NkTeff
     
-    Teff = 2.d0/3.d0* 0.5*pmass*aa*(mod2_perp+mod2_par)/kev_in_J
+    !Teff = 2.d0/3.d0* 0.5*pmass*aa*(mod2_perp+mod2_par)/kev_in_J
+    Teff =(2.d0*Tperp+Tpar)/3.d0
     
     write(*,*) 'Effective temperature is ',Teff, 'keV'
     
     
-!    open(40,file='Ekin_par.txt', status='unknown')
-!
-!
-!do iv=1,nperp
-!        do ip=1,npar
-!        write(40,*) v(iv), mu(ip), fint(iv,ip)*0.5*pmass*aa/kev_in_J
-!        enddo
-!enddo
-!
-!close(40)
+    open(40,file=TRIM(outfile('Ekin_par.txt')), status='unknown')
+
+
+do iv=1,nperp
+        do ip=1,npar
+        write(40,*) vperp(iv), vpar(ip), fint(iv,ip)*pmass*aa/kev_in_J
+        enddo
+enddo
+
+close(40)
     
 ! We test the balance of particle density and collisional distributed power on background species
 
