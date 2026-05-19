@@ -170,7 +170,16 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
     DO l = 1, 7
       jp = Lj + l - 1
       IF (jp < 1 .OR. jp > npar) CYCLE
-      IF (acc(k,l) == 0.0_dp)    CYCLE
+      IF (acc(k,l) == 0.0_dp) THEN
+        ! On-axis entries (k==mi or l==mj) only appear when A/B/C/D/F are
+        ! non-zero; safe to drop.  Boundary-zeroed entries are also dropped.
+        ! Off-axis entries (k/=mi, l/=mj) are contributed to solely by E_ij:
+        ! when E_ij=0 their acc is 0, but the pattern was built with sentinel
+        ! E_ij=1 so they ARE in ia_L/ja_L.  Dropping them here shifts ptr for
+        ! every subsequent row and corrupts aa_L entirely.  Keep them (value 0).
+        IF (k == mi .OR. l == mj) CYCLE
+        IF (ip == nperp .OR. jp == 1 .OR. jp == npar) CYCLE
+      END IF
       n_entries          = n_entries + 1
       col_idx(n_entries) = (ip-1)*npar + jp
       coeff(n_entries)   = acc(k,l)

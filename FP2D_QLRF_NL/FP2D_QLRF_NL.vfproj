@@ -62,8 +62,8 @@
 			<File RelativePath="..\Fortran sources\cblin_vperp.f90"/>
 			<File RelativePath="..\Fortran sources\consts.f90"/>
 			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
-			<File RelativePath="..\Fortran sources\dislin_plots.f90"/>
-			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
+			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>

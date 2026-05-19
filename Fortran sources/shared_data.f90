@@ -41,7 +41,7 @@ double precision, dimension(10) :: nb,maonmb,vt,gammab,t
 double precision :: ne,npart
 double precision :: gammaa
 double precision, dimension(9) :: ab,zb,xb
-double precision :: vcr
+!double precision :: vcr
 double precision :: xpart,aa,za
 double precision ::  vteff,spit,tauie
 	   

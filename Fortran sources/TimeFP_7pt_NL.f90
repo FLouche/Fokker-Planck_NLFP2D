@@ -272,7 +272,19 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     WRITE(*,*) 'Time is ', time, ' s'
 
     !--- 5a. Self-collision coefficients from f^n ------------------
-    CALL main_nlterm(fstart, sc00, sc10, sc01, sc20, sc11, sc02)
+    ! When starting from zero (iold=0, isource=-1), skip SC while beam
+    ! density is still negligible.  The Rosenbluth potential psi is then
+    ! dominated by floating-point noise; regularise_axis_3 detects nearly
+    ! every near-axis row as "bad" (ratio test fires on noise/noise) and
+    ! overwrites phi with a spurious polynomial, producing garbage sc**.
+    ! dens_tmp holds the density of fstart (initialised to 0 before the
+    ! loop for istart=0, updated at the end of every step thereafter).
+    IF (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart) THEN
+      sc00 = 0.0_dp;  sc10 = 0.0_dp;  sc01 = 0.0_dp
+      sc20 = 0.0_dp;  sc11 = 0.0_dp;  sc02 = 0.0_dp
+    ELSE
+      CALL main_nlterm(fstart, sc00, sc10, sc01, sc20, sc11, sc02)
+    END IF
 
     !--- 5b. Total coefficients: linear + self-collision -----------
     all00 = all00_lin + sc00

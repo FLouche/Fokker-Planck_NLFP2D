@@ -499,10 +499,17 @@ def _read_isc_from_namelist(input_file: Path) -> int:
     return 0
 
 
-def _detect_casename(outdir: Path) -> str:
-    """Infer casename from output files by matching known FILE_META stems."""
-    for path in sorted(outdir.glob("*.txt")):
-        stem = path.stem
+def _detect_casename(outdir: Path, names=None) -> str:
+    """Infer casename from output files by matching known FILE_META stems.
+
+    If *names* is given (a list of bare filenames), search those instead of
+    scanning the whole directory — used when --files restricts the plot set.
+    """
+    if names is not None:
+        stems = sorted(Path(n).stem for n in names)
+    else:
+        stems = (p.stem for p in sorted(outdir.glob("*.txt")))
+    for stem in stems:
         for key in sorted(FILE_META, key=len, reverse=True):
             if stem.startswith(key + "-"):
                 return stem[len(key) + 1:]
@@ -604,7 +611,7 @@ def main(argv=None):
         sys.exit(f"Error: output directory not found: {outdir}")
 
     if not args.casename:
-        args.casename = _detect_casename(outdir)
+        args.casename = _detect_casename(outdir, names=args.files)
         if args.casename:
             print(f"Casename (auto-detected): {args.casename}")
 
