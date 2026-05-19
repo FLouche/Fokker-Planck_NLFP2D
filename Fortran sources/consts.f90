@@ -25,6 +25,7 @@ double precision cte0
 double precision :: z1=0.d0
 double precision arg,dennod
 double PRECISION :: degtorad
+double precision :: vcr, ecr
 
 integer i,j,ib
 
@@ -208,5 +209,16 @@ write(*,*) 'Resonant velocity: ',vres, 'm/s'
 rfcte = 0.125d0/kpar*pi*(za*eonm/aa)**2/vph**2
 
 endif
+
+vcr=9.d-2*(z1/aa)**.33333333d0*vt(1)
+ecr=aa/2.d0/(9.79d0)**2*vcr**2*1.d-9
+
+!  Vcr is the critical velocity where an equal amount of energy is transferred
+!   from heated ions to background ions and electrons 
+!     cfr Gaffey - JPP (1976) 16(2), pp. 146-169
+
+
+write(*,*) 'Critical velocity: ', vcr, ' m/s'
+
 
 end subroutine consts

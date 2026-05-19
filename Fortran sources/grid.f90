@@ -111,142 +111,118 @@ enddo
 end subroutine make_grid
 
 
-!!=======================================================================
-!! Computation of the distance |x-x'| between source point and observation
-!!  point in cylindrical coordinates with axisymmetry,
-!!  necessary for the evaluation of the Rosenbluth potential Psi,
-!!  and φ integration using uniform quadrature
-!!=======================================================================
-!
-!subroutine distance_v_uniform
-!
-!
-!use shared_grid
-!use func_index
-!
-!implicit none
-!
-!integer, parameter :: dp = kind(1.0d0)
-!  real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
-!
-!integer, parameter :: nphi = 64  ! Number of phi integration points
-!
-!
-!integer :: i, j, ip, jp, kphi
-!integer ix1,ix2
-!    real(dp) :: r, z, rp, zp, phi, dphi
-!    real(dp) :: distance
-!    
-!        ! Phi integration step
-!    dphi = 2.0_dp * pi / real(nphi, dp)
-!
-!
-!    ! Loop over observation points
-!    do i = 1, nperp
-!      r = vperp(i)
-!      do j = 1, npar
-!        z = vpar(j)
-!        
-!        ix1=index_mat(i,j)
-!       
-!        ! Sum over source points
-!        do ip = 1, nperp
-!          rp = vperp(ip)
-!          do jp = 1, npar
-!            zp = vpar(jp)
-!            
-!            ix2=index_mat(ip,jp)
-!                      
-!            ! Integration over phi
-!            sum_phi(ix1,ix2) = 0.0_dp
-!           
-!            do kphi = 1, nphi
-!              phi = (real(kphi, dp) - 0.5_dp) * dphi
-!             
-!              ! Distance between (r,z,0) and (rp,zp,phi)
-!              distance = sqrt(r**2 + rp**2 - 2.0_dp*r*rp*cos(phi) + (z - zp)**2)
-!             
-!              if (distance > 0.0_dp) then
-!                sum_phi(ix1,ix2) = sum_phi(ix1,ix2) + distance * dphi
-!              end if
-!            end do
-!            
-!          enddo
-!        enddo
-!        
-!      enddo
-!    enddo
-!    
-!
-!end subroutine distance_v_uniform
 
 !=======================================================================
 ! Computation of the distance |x-x'| between source point and observation
 !  point in cylindrical coordinates with axisymmetry,
 !  necessary for the evaluation of the Rosenbluth potential Psi,
 !  and φ integration using  Gauss-Legendre quadrature
+!
+!  Optimised implementation (replaces the original O(nperp^2*npar^2*nphi) loop).
+!
+!  Key observation: the integrand sqrt(r^2+r'^2-2rr'cos(φ)+(z-z')^2) depends
+!  on the parallel coordinates only through (z-z')^2.  Since the v_par grid is
+!  uniform (step dvpar), the parallel separation z-z' = (j-jp)*dvpar is fully
+!  determined by the integer offset dj = |j-jp| in {0,...,npar-1}.  There are
+!  therefore only nperp*(nperp+1)/2 * npar distinct phi-integrals to evaluate
+!  (using additionally the r<->r' symmetry), after which sum_phi is filled by a
+!  simple index lookup.
+!
+!  Cost comparison (nphi = 16 Gauss-Legendre points):
+!    Original:   nperp^2 * npar^2 * nphi  transcendental evaluations
+!    Optimised:  nperp*(nperp+1)/2 * npar * nphi  (factor ~npar improvement)
 !=======================================================================
 
 subroutine distance_v_gauss_legendre
 
+  use shared_grid   ! vperp, vpar, nperp, npar, dvpar, sum_phi
+  use func_index    ! index_mat
 
-use shared_grid
-use func_index
+  implicit none
 
-implicit none
+  integer,  parameter :: dp   = kind(1.0d0)
+  real(dp), parameter :: pi   = 4.0_dp * atan(1.0_dp)
+  integer,  parameter :: nphi = 16          ! Gauss-Legendre quadrature order
 
-integer, parameter :: dp = kind(1.0d0)
-  real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
+  integer  :: i, j, ip, jp, kphi, dj
+  integer  :: ix1, ix2
+  real(dp) :: r, rp, rr_base, rr_cross, dz_sq, s
 
-integer, parameter :: nphi = 16  ! Number of phi integration points
+  double precision :: gauss_phi(nphi), gauss_weight(nphi)
+  real(dp) :: cos_phi(nphi)                 ! cos(phi_k) precomputed once
 
+  ! kern(dj, i, ip): phi-integrated distance kernel.
+  !   kern(|j-jp|, i, ip) = ∫ sqrt(r(i)^2+r(ip)^2-2r(i)r(ip)cos(φ)+(dj*dvpar)^2) w dφ
+  !
+  ! Layout (dj, i, ip): dj is the first (fastest) index in Fortran column-major
+  ! storage, so kern(0:npar-1, i, ip) is contiguous.  This favours the filling
+  ! step where, for fixed (i,ip), we access elements at successive dj values.
+  real(dp), allocatable :: kern(:,:,:)      ! kern(0:npar-1, nperp, nperp)
 
-integer :: i, j, ip, jp, kphi
-integer ix1,ix2
-    real(dp) :: r, z, rp, zp, phi
-    real(dp) :: distance
-    
-double precision, dimension(nphi) :: gauss_phi, gauss_weight
-    
-call initialize_gauss_legendre(nphi,gauss_phi, gauss_weight)
+  call initialize_gauss_legendre(nphi, gauss_phi, gauss_weight)
 
+  ! Precompute cos(phi_k) at quadrature nodes — avoids repeated cos() in the hot loop
+  do kphi = 1, nphi
+    cos_phi(kphi) = cos(gauss_phi(kphi))
+  end do
 
-    ! Loop over observation points
-    do i = 1, nperp
-      r = vperp(i)
-      do j = 1, npar
-        z = vpar(j)
-        
-        ix1=index_mat(i,j)
-       
-        ! Sum over source points
-        do ip = 1, nperp
-          rp = vperp(ip)
-          do jp = 1, npar
-            zp = vpar(jp)
-            
-            ix2=index_mat(ip,jp)
-                      
-            ! Integration over phi
-            sum_phi(ix1,ix2) = 0.0_dp
-           
-            do kphi = 1, nphi
-              phi = gauss_phi(kphi)
-             
-              ! Distance between (r,z,0) and (rp,zp,phi)
-              distance = sqrt(r**2 + rp**2 - 2.0_dp*r*rp*cos(phi) + (z - zp)**2)
-             
-              if (distance > 0.0_dp) then
-                sum_phi(ix1,ix2) = sum_phi(ix1,ix2) + distance * gauss_weight(kphi)
-              end if
-            end do
-            
-          enddo
-        enddo
-        
-      enddo
-    enddo
-    
+  allocate(kern(0:npar-1, nperp, nperp))
+
+  !=======================================================================
+  ! Step 1 — evaluate the phi-integral for each distinct (i, ip, dj) triple.
+  !
+  !   Symmetry (a): r <-> r' leaves the integrand unchanged
+  !                 => kern(*,i,ip) = kern(*,ip,i); only ip<=i computed.
+  !   Symmetry (b): dz appears as dz^2
+  !                 => kern(dj,*,*) = kern(-dj,*,*); only dj>=0 needed.
+  !   Precomputations outside the phi loop:
+  !     rr_base  = r^2 + r'^2   (independent of dj and phi)
+  !     rr_cross = 2rr'          (independent of dj and phi)
+  !     dz_sq    = (dj*dvpar)^2  (independent of phi)
+  !   The guard (distance>0) is removed: the argument of sqrt is
+  !   r^2+r'^2-2rr'cos(phi)+(dz)^2 >= (r-r')^2+(dz)^2 >= 0 always.
+  !=======================================================================
+  do i = 1, nperp
+    r = vperp(i)
+    do ip = 1, i
+      rp       = vperp(ip)
+      rr_base  = r*r + rp*rp
+      rr_cross = 2.0_dp * r * rp
+
+      do dj = 0, npar-1
+        dz_sq = (dj * dvpar)**2
+
+        s = 0.0_dp
+        do kphi = 1, nphi
+          s = s + sqrt(rr_base - rr_cross*cos_phi(kphi) + dz_sq) * gauss_weight(kphi)
+        end do
+
+        kern(dj, i,  ip) = s
+        kern(dj, ip, i ) = s   ! r <-> r' symmetry
+      end do
+    end do
+  end do
+
+  !=======================================================================
+  ! Step 2 — fill sum_phi by lookup.
+  !   sum_phi(ix1, ix2) = kern(|j-jp|, i, ip)
+  !
+  !   Loop order: ix2 outermost, ix1 innermost.  For fixed ix2 the inner
+  !   loops write a complete column of sum_phi (contiguous in column-major).
+  !=======================================================================
+  do ip = 1, nperp
+    do jp = 1, npar
+      ix2 = index_mat(ip, jp)
+      do i = 1, nperp
+        do j = 1, npar
+          ix1 = index_mat(i, j)
+          sum_phi(ix1, ix2) = kern(abs(j - jp), i, ip)
+        end do
+      end do
+    end do
+  end do
+
+  deallocate(kern)
 
 end subroutine distance_v_gauss_legendre
 

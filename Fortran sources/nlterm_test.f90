@@ -48,7 +48,8 @@
 
     double precision pi,twopi
     double precision coef
-   
+
+    external cblin
 
     do ipe=1,nperp
         do ipa=1,npar
@@ -79,7 +80,7 @@
 !! d3Psi/Dvperp3
 !
 
-  call deriv_x2(d2psidpe2,vperp,nperp,npar,d3psidpe3)
+  call deriv_x3(psi,vperp,nperp,npar,d3psidpe3)
 
    
 !
@@ -165,105 +166,133 @@ call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)
     !
 
  coef = -4.d0*pi*gammaa/npart
- 
+
     do ipa=1,npar
-        
+
         do ipe=1,nperp
-            
+
             sc00(ipe,ipa) = -coef*(dphidpe(ipe,ipa)/vperp(ipe)+d2phidpe2(ipe,ipa)+d2phidpa2(ipe,ipa))
             sc10(ipe,ipa) = coef*(d2psidpe2(ipe,ipa)/vperp(ipe)+d3psidpe3(ipe,ipa)+d3psidpepa2(ipe,ipa)-dphidpe(ipe,ipa))
             sc01(ipe,ipa) = coef*(d2psidpepa(ipe,ipa)/vperp(ipe)+d3psidpe2pa(ipe,ipa)+d3psidpa3(ipe,ipa)-dphidpa(ipe,ipa))
-           !!             
+           !!
             sc20(ipe,ipa) = coef*d2psidpe2(ipe,ipa)
             sc11(ipe,ipa) = coef*2.d0*d2psidpepa(ipe,ipa)
             sc02(ipe,ipa) = coef*d2psidpa2(ipe,ipa)
-            
-    
+
+
         enddo
     enddo
-        
-    
+
+    ! -----------------------------------------------------------------------
+    ! DIAGNOSTICS: compare NL self-collision coefficients with linear cblin
+    ! -----------------------------------------------------------------------
+    !block
+    !  integer  :: imid_loc, jmid_loc, iaxis_loc
+    !  double precision :: c20r, c02r, c11r, c10r, c01r, c00r
+    !
+    !  imid_loc  = nperp/2
+    !  jmid_loc  = (npar+1)/2
+    !  iaxis_loc = 1          ! near-axis row
+    !
+    !  write(*,'(A)')       '--- main_nlterm diagnostics ---'
+    !  write(*,'(A,2ES14.5)') '  psi        min/max:', MINVAL(psi),        MAXVAL(psi)
+    !  write(*,'(A,2ES14.5)') '  d2psi/dpe2 min/max:', MINVAL(d2psidpe2),  MAXVAL(d2psidpe2)
+    !  write(*,'(A,2ES14.5)') '  sc20       min/max:', MINVAL(sc20),       MAXVAL(sc20)
+    !  write(*,'(A,2ES14.5)') '  sc02       min/max:', MINVAL(sc02),       MAXVAL(sc02)
+    !  write(*,'(A,2ES14.5)') '  sc10       min/max:', MINVAL(sc10),       MAXVAL(sc10)
+    !  write(*,'(A,2ES14.5)') '  sc01       min/max:', MINVAL(sc01),       MAXVAL(sc01)
+    !  write(*,'(A,2ES14.5)') '  sc00       min/max:', MINVAL(sc00),       MAXVAL(sc00)
+    !  write(*,'(A,2ES14.5)') '  coef, gammaa/npart:', coef, gammaa/npart
+    !
+    !  ! Midpoint comparison
+    !  call cblin(imid_loc, jmid_loc, vteff, gammaa, 1.d0, &
+    !             c20r, c02r, c11r, c10r, c01r, c00r)
+    !  write(*,'(A,I4,A,I4,A)') '  At midpoint (', imid_loc, ',', jmid_loc, '):'
+    !  write(*,'(A,2ES14.5)') '    sc20 (NL) vs c20 (lin):', sc20(imid_loc,jmid_loc), c20r
+    !  write(*,'(A,2ES14.5)') '    sc02 (NL) vs c02 (lin):', sc02(imid_loc,jmid_loc), c02r
+    !  write(*,'(A,2ES14.5)') '    sc10 (NL) vs c10 (lin):', sc10(imid_loc,jmid_loc), c10r
+    !  write(*,'(A,2ES14.5)') '    sc01 (NL) vs c01 (lin):', sc01(imid_loc,jmid_loc), c01r
+    !  write(*,'(A,2ES14.5)') '    sc00 (NL) vs c00 (lin):', sc00(imid_loc,jmid_loc), c00r
+    !
+    !  ! Near-axis comparison (i=1, j=jmid)
+    !  call cblin(iaxis_loc, jmid_loc, vteff, gammaa, 1.d0, &
+    !             c20r, c02r, c11r, c10r, c01r, c00r)
+    !  write(*,'(A,I4,A,I4,A)') '  At axis    (', iaxis_loc, ',', jmid_loc, '):'
+    !  write(*,'(A,2ES14.5)') '    sc20 (NL) vs c20 (lin):', sc20(iaxis_loc,jmid_loc), c20r
+    !  write(*,'(A,2ES14.5)') '    sc02 (NL) vs c02 (lin):', sc02(iaxis_loc,jmid_loc), c02r
+    !  write(*,'(A,2ES14.5)') '    sc10 (NL) vs c10 (lin):', sc10(iaxis_loc,jmid_loc), c10r
+    !  write(*,'(A,2ES14.5)') '    sc01 (NL) vs c01 (lin):', sc01(iaxis_loc,jmid_loc), c01r
+    !  write(*,'(A,2ES14.5)') '    sc00 (NL) vs c00 (lin):', sc00(iaxis_loc,jmid_loc), c00r
+    !  write(*,'(A,2ES14.5)') '    vperp(1), d2psi/dpe2(1,jmid):', vperp(iaxis_loc), d2psidpe2(iaxis_loc,jmid_loc)
+    !  write(*,'(A)')       '-------------------------------'
+    !end block
+
     end subroutine main_nlterm
     
    !***********************************************************************
  
 !=======================================================================
-! Program to compute Rosenbluth potential
-!     Psi(r,z) = -1/(8π) ∫ |x-x'| f(x') d^3x'
-! in cylindrical coordinates with axisymmetry (no φ dependence)
+! Compute the first Rosenbluth potential:
+!     Psi(v) = -1/(8π) ∫ |v-v'| f(v') d^3v'
+! in cylindrical velocity-space (v⊥, v∥) with axisymmetry.
 !
-!  Version 0.1 (02/03/2026)
+! Replaces the original O(N^4) quadruple loop + per-point integrate_2d
+! call with a single MKL DGEMV: psi_vec = prefactor * sum_phi * g,
+! where g(ix2) = f(ip,jp)*vperp(ip)*w_vperp(ip)*w_vpar(jp).
+! Weights are the standard 2D trapezoidal rule, identical to integrate_2d.
 !=======================================================================
 
-subroutine compute_psi(f_values,psi_values)
-  
- use shared_grid
-use func_index
-use integrate_2d_module
+subroutine compute_psi(f_values, psi_values)
+
+  use shared_grid
+  use func_index
 
   implicit none
-  
- 
-  ! Parameters
+
   integer, parameter :: dp = kind(1.0d0)
-  real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
-  real(dp), parameter :: prefactor = -1.0_dp / (8.0_dp * pi)
-  
- double precision, dimension(nperp,npar),intent(in) :: f_values
- double precision, dimension(nperp,npar),intent(out) :: psi_values
- 
- !  real(dp) :: r_weights(nperp)        ! Integration weights for vperp
+  real(dp), parameter :: prefactor = -1.0_dp / (32.0_dp * atan(1.0_dp))
 
- 
-    integer :: i, j, ip, jp
-    real(dp) :: r, z, rp, zp
-    real(dp), dimension(nperp,npar):: integrand
+  double precision, dimension(nperp,npar), intent(in)  :: f_values
+  double precision, dimension(nperp,npar), intent(out) :: psi_values
 
- integer :: ix1,ix2
- 
-! -------
- 
-! Compute integration weights for non-uniform radial grid
-    
+  double precision :: g(nbig), psi_vec(nbig)
+  double precision :: w_vperp(nperp), w_vpar(npar)
+  integer :: i, j
 
- ! Initialize result
-    psi_values = 0.0_dp
-   
-    ! Loop over observation points
-    do i = 1, nperp
-      r = vperp(i)
-      do j = 1, npar
-        z = vpar(j)
-       
-        ! Sum over source points
-        do ip = 1, nperp
-          rp = vperp(ip)
-          do jp = 1, npar
-            zp = vpar(jp)
-            
-             ix1=index_mat(i,j)
-             ix2=index_mat(ip,jp)
-           
-            if (f_values(ip,jp) == 0.0_dp) cycle
-           
-            ! Add contribution: f(rp,zp) * rp * drp * dzp * [∫ dφ |x-x'|]
-            integrand(ip,jp) = f_values(ip,jp) * vperp(ip) * sum_phi(ix1,ix2)
-            
-          end do ! jp
-        end do ! ip
-           
-        psi_values(i,j) = integrate_2d(integrand,vperp,vpar,nperp,npar)
-       
-        ! Apply prefactor
-        psi_values(i,j) = prefactor * psi_values(i,j)
-        
-       
-      end do ! j
-    end do ! i
- 
-      
- 
-end subroutine compute_psi    
+  external dgemv
+
+  ! Trapezoidal weights for v⊥ (non-uniform grid)
+  w_vperp(1) = 0.5_dp * (vperp(2) - vperp(1))
+  do i = 2, nperp-1
+    w_vperp(i) = 0.5_dp * (vperp(i+1) - vperp(i-1))
+  end do
+  w_vperp(nperp) = 0.5_dp * (vperp(nperp) - vperp(nperp-1))
+
+  ! Trapezoidal weights for v∥ (uniform grid)
+  w_vpar(1)    = 0.5_dp * dvpar
+  w_vpar(npar) = 0.5_dp * dvpar
+  do j = 2, npar-1
+    w_vpar(j) = dvpar
+  end do
+
+  ! Source vector: g(ix) = f * v⊥ * integration weights
+  do i = 1, nperp
+    do j = 1, npar
+      g(index_mat(i,j)) = f_values(i,j) * vperp(i) * w_vperp(i) * w_vpar(j)
+    end do
+  end do
+
+  ! psi_vec = prefactor * sum_phi * g  ('N': column-major access, cache-friendly)
+  call dgemv('N', nbig, nbig, prefactor, sum_phi, nbig, g, 1, 0.0_dp, psi_vec, 1)
+
+  ! Unpack to 2D
+  do i = 1, nperp
+    do j = 1, npar
+      psi_values(i,j) = psi_vec(index_mat(i,j))
+    end do
+  end do
+
+end subroutine compute_psi
 
 
 SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)

@@ -52,7 +52,7 @@ external dgemv
     taum = 0.d0 ! temporary 
     
     CALL apply_operator(colin20,colin02,colin11,colin10,colin01,colin00, &
-                        fin, Lf_col_sp)
+                        fin, Lf_col) ! only LINEAR contribution 
             
      ! We compute the df/dt total collisonal term per species in matrix form
     
@@ -80,7 +80,7 @@ external dgemv
     
     if (isc/=0) then
     
-         CALL apply_operator(colin20,colin02,colin11,colin10,colin01,colin00, &
+         CALL apply_operator(sc20,sc02,sc11,sc10,sc01,sc00, &
                         fin, Lf_col_sc)
         
     endif

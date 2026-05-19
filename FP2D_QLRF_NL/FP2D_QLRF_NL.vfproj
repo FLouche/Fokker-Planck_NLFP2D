@@ -17,8 +17,8 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Debug|x64" UseCompiler="ifxCompiler">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" HeapArrays="0" WarnInterfaces="true" Traceback="true" BoundsCheck="true" StackFrameCheck="true" RuntimeLibrary="rtMultiThreadedDebugDLL" UseMkl="mklSequential"/>
-			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" GenerateDebugInformation="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" HeapArrays="0" AdditionalIncludeDirectories="C:\dislin\ifc\real64" WarnInterfaces="true" Traceback="true" BoundsCheck="true" StackFrameCheck="true" RuntimeLibrary="rtMultiThreadedDebugDLL" UseMkl="mklSequential"/>
+			<Tool Name="VFLinkerTool" AdditionalOptions="/NODEFAULTLIB:MSVCRT" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="C:\dislin" GenerateDebugInformation="true" SubSystem="subSystemConsole" AdditionalDependencies="disifd_d.lib gdi32.lib user32.lib opengl32.lib legacy_stdio_definitions.lib"/>
 			<Tool Name="VFResourceCompilerTool"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
 			<Tool Name="VFCustomBuildTool"/>
@@ -39,8 +39,8 @@
 			<Tool Name="VFManifestTool" SuppressStartupBanner="true"/>
 		</Configuration>
 		<Configuration Name="Release|x64" UseCompiler="ifxCompiler">
-			<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" HeapArrays="0" RuntimeLibrary="rtMultiThreadedDLL" UseMkl="mklSequential"/>
-			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" SubSystem="subSystemConsole"/>
+			<Tool Name="VFFortranCompilerTool" AdditionalOptions="/fp:source" SuppressStartupBanner="true" HeapArrays="0" AdditionalIncludeDirectories="C:\dislin\ifc\real64" RuntimeLibrary="rtMultiThreadedDLL" UseMkl="mklSequential"/>
+			<Tool Name="VFLinkerTool" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" AdditionalLibraryDirectories="C:\dislin" SubSystem="subSystemConsole" AdditionalDependencies="disifd.lib gdi32.lib user32.lib opengl32.lib legacy_stdio_definitions.lib"/>
 			<Tool Name="VFResourceCompilerTool"/>
 			<Tool Name="VFMidlTool" SuppressStartupBanner="true" TargetEnvironment="midlTargetAMD64"/>
 			<Tool Name="VFCustomBuildTool"/>
@@ -62,14 +62,11 @@
 			<File RelativePath="..\Fortran sources\cblin_vperp.f90"/>
 			<File RelativePath="..\Fortran sources\consts.f90"/>
 			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
-			<File RelativePath="..\Fortran sources\eigen_bigm-5.f90"/>
-			<File RelativePath="..\Fortran sources\fd_grid.f90"/>
-			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
+			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
-			<File RelativePath="..\Fortran sources\integrate_2d.f90"/>
-			<File RelativePath="..\Fortran sources\interpolation_module2.f90"/>
 			<File RelativePath="..\Fortran sources\main-FP_Coll_2D.f90"/>
 			<File RelativePath="..\Fortran sources\ncint.f90"/>
 			<File RelativePath="..\Fortran sources\nlterm_test.f90"/>
@@ -79,8 +76,8 @@
 			<File RelativePath="..\Fortran sources\shared_data.f90"/>
 			<File RelativePath="..\Fortran sources\simpson_integration_1D.f90"/>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
-			<File RelativePath="..\Fortran sources\sparse_matrix_vect_mult.f90"/>
 			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
+			<File RelativePath="..\Fortran sources\ss_check.f90"/>
 			<File RelativePath="..\Fortran sources\steady_state.f90"/>
 			<File RelativePath="..\Fortran sources\test_density_balance.f90"/>
 			<File RelativePath="..\Fortran sources\test_density_balance_7pt.f90"/>
@@ -88,11 +85,11 @@
 			<File RelativePath="..\Fortran sources\test_power_balance_7pt.f90"/>
 			<File RelativePath="..\Fortran sources\time_density.f90"/>
 			<File RelativePath="..\Fortran sources\time_energy.f90"/>
-			<File RelativePath="..\Fortran sources\time_power.f90"/>
 			<File RelativePath="..\Fortran sources\time_power_7pt.f90"/>
-			<File RelativePath="..\Fortran sources\TimeFP3_upd.f90">
-			</File>
+			<File RelativePath="..\Fortran sources\TimeFP3_NL.f90"/>
+			<File RelativePath="..\Fortran sources\TimeFP3_upd.f90"/>
 			<File RelativePath="..\Fortran sources\TimeFP_7pt.f90"/>
+			<File RelativePath="..\Fortran sources\TimeFP_7pt_NL.f90"/>
 		</Filter>
 	</Files>
 	<Globals/>

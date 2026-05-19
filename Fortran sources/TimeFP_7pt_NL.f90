@@ -1,43 +1,44 @@
 !*******************************************************************
 !*   Resolution of the time-dependent Fokker-Planck Equation       *
 !*   with Crank-Nicolson or fully implicit scheme                  *
-!*   3-point (2nd-order) stencil in v⊥ and v∥                     *
+!*   7-point Fornberg stencil in both v⊥ and v∥                    *
+!*   Non-linear version: self-collision operator updated each step  *
 !*                                                                 *
-!*   Updated replacement for TimeFP3 / build_matrix_td:           *
-!*   - Operator L assembled directly in CSR format (no dense       *
-!*     matrix), saving O(nbig^2) memory.                           *
-!*   - Crank-Nicolson: (I - dt/2*L) f^{n+1} = (I + dt/2*L) f^n   *
-!*                                           + dt * S              *
-!*   - Fully implicit: (I - dt*L)   f^{n+1} =            f^n      *
-!*                                           + dt * S              *
-!*   - LHS is constant: PARDISO phases 11+22 done once,           *
-!*     only phase 33 repeated each step.                           *
-!*   - Uses fd_stencil_2d_3 for 3-point 2nd-order FD weights.     *
+!*   Differences from timefp_7pt (isc /= -1):                     *
+!*   - PARDISO phase 11 (symbolic reordering) done once only.      *
+!*   - At each step, main_nlterm(f^n) returns sc**, which are      *
+!*     added to all**_lin to form the total operator for that step. *
+!*   - aa_L and aa_lhs are rebuilt each step; phases 22+33 are     *
+!*     called every step via pardiso_solve_step(a_changed=.TRUE.).  *
+!*   - sum_phi (phi-distance kernel) is allocated and computed     *
+!*     once before the time loop via distance_v_gauss_legendre.    *
 !*                                                                 *
-!*   Version 1.0 - F. Louche                                       *
+!*   Version 1.1 - F. Louche                                       *
 !*******************************************************************
 
-MODULE mod_timefp3_upd
+MODULE mod_timefp_7pt_nl
 
   IMPLICIT NONE
   PRIVATE
-  PUBLIC :: timefp_upd
+  PUBLIC :: timefp_7pt_nl
 
 CONTAINS
 
-SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
-                      all11_lin, all20_lin, all02_lin, &
-                      fstart, fout, otime)
+SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
+                          all11_lin, all20_lin, all02_lin, &
+                          fstart, fout, otime)
 
-  USE mod_fd_stencil_2d_3              ! provides fd_stencil_2d_3
-  USE pardiso_solver                   ! provides pardiso_handle_t,
-                                       !   pardiso_solve_init/step/finalize
+  USE mod_fd_stencil_2d
+  USE pardiso_solver
   USE shared_grid
   USE shared_plasma
+  USE shared_FPterms
   USE shared_timer
   USE shared_beam
   USE shared_RF
   USE func_index
+  USE nlterm
+  USE mod_grid
   USE mod_ss_check
 
   IMPLICIT NONE
@@ -55,7 +56,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   !--- PARDISO handle ----------------------------------------------
   TYPE(pardiso_handle_t) :: handle_lhs
 
-  !--- CSR storage for operator L and LHS matrix M = I-theta*dt*L --
+  !--- CSR storage for total operator L and LHS M = I-theta*dt*L --
   INTEGER,  ALLOCATABLE :: ia_L(:), ja_L(:)
   REAL(dp), ALLOCATABLE :: aa_L(:)
   INTEGER,  ALLOCATABLE :: ia_lhs(:), ja_lhs(:)
@@ -64,18 +65,22 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   INTEGER :: nnz_L, nnz_max
 
   !--- Stencil workspace -------------------------------------------
-  INTEGER  :: col_idx(9)
-  REAL(dp) :: stencil_coeff(9)
+  INTEGER  :: col_idx(49)
+  REAL(dp) :: stencil_coeff(49)
   INTEGER  :: n_entries
   REAL(dp) :: rhs_ij
 
   !--- Working vectors ---------------------------------------------
   REAL(dp), ALLOCATABLE :: rhs_vec(:), x_vec(:), Lf(:)
 
-  !--- Scalars -----------------------------------------------------
+  !--- Total coefficients (linear + self-collision, updated each step) ---
+  REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
+
+  !--- Scalars and temporaries -------------------------------------
   REAL(dp) :: theta
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
+  REAL(dp) :: t_start, t_end
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
   INTEGER :: error, ib
@@ -93,54 +98,87 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   ! 0.  Setup
   !================================================================
   ndof    = nperp * npar
-  nnz_max = ndof * 9          ! upper bound: 3x3 stencil per row
+  nnz_max = ndof * 49
 
-  IF (icn == -1) THEN
-    theta = 0.5_dp             ! Crank-Nicolson
+ IF (icn == -1) THEN
+      theta = 0.5_dp          ! Crank-Nicolson (may be unstable with NL SC)
+  ELSE IF (icn == 1) THEN
+      theta = 0.75_dp         ! intermediate
   ELSE
-    theta = 1.0_dp             ! fully implicit
+      theta = 1.0_dp          ! fully implicit
   END IF
-
+  
   ALLOCATE(ia_L(ndof+1), ja_L(nnz_max), aa_L(nnz_max))
   ALLOCATE(ia_lhs(ndof+1), ja_lhs(nnz_max), aa_lhs(nnz_max))
   ALLOCATE(rhs_vec(ndof), x_vec(ndof), Lf(ndof))
 
   !================================================================
-  ! 1.  Build steady-state operator L in CSR
-  !     Two-pass assembly (count then fill), same pattern as
-  !     timefp_7pt but calling fd_stencil_2d_3 instead of
-  !     fd_stencil_2d.
+  ! 1.  phi-distance kernel (grid-dependent, expensive O(nbig^2))
+  !     new_grid=-1: compute via Gauss-Legendre and save to sum_phi.dat
+  !     new_grid= 0: load from sum_phi.dat (same grid as previous run)
+  !================================================================
+  ALLOCATE(sum_phi(nbig, nbig))
+  IF (new_grid == -1) THEN
+    WRITE(*,*) 'Computing phi-distance kernel for non-linear self-collisions...'
+    CALL cpu_time(t_start)
+    CALL distance_v_gauss_legendre
+    CALL cpu_time(t_end)
+    WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
+    OPEN(55, file='sum_phi.dat', status='replace', form='unformatted', access='stream')
+    WRITE(55) sum_phi
+    CLOSE(55)
+    WRITE(*,*) '  sum_phi saved to sum_phi.dat'
+  ELSE
+    WRITE(*,*) 'Loading phi-distance kernel from sum_phi.dat...'
+    OPEN(55, file='sum_phi.dat', status='old', form='unformatted', access='stream', iostat=error)
+    IF (error /= 0) THEN
+      WRITE(*,*) 'timefp_7pt_nl: cannot open sum_phi.dat -- run with new_grid=-1 first'; STOP
+    END IF
+    READ(55) sum_phi
+    CLOSE(55)
+    WRITE(*,*) '  sum_phi loaded.'
+  END IF
+
+  !================================================================
+  ! 2.  Build sparsity pattern of L using linear coefficients.
+  !     The pattern is fixed: sc** enters through the same stencil
+  !     positions as all**_lin, so ia_L/ja_L never change.
   !================================================================
 
-  !--- Pass 1: count non-zeros per row -> ia_L --------------------
+  !--- Pass 1: count non-zeros per row ----------------------------
+  ! Use sentinel 1.0 for E_ij when all11_lin=0 so the pattern always
+  ! includes mixed-derivative off-diagonal entries.  sc11 is added in
+  ! step 5b and may be non-zero there even when all11_lin==0; without
+  ! the sentinel, step 5c would generate more entries than ja_L holds.
   ia_L(1) = 1
   DO i = 1, nperp
     DO j = 1, npar
       row = (i-1)*npar + j
-      CALL fd_stencil_2d_3(i, j, nperp, npar, vperp, dvpar, &
-                            all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
-                            all20_lin(i,j), all11_lin(i,j), all02_lin(i,j), &
-                            col_idx, stencil_coeff, n_entries, rhs_ij)
+      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+                         all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
+                         all20_lin(i,j), &
+                         MERGE(all11_lin(i,j), 1.0_dp, all11_lin(i,j) /= 0.0_dp), &
+                         all02_lin(i,j), &
+                         col_idx, stencil_coeff, n_entries, rhs_ij)
       ia_L(row+1) = ia_L(row) + n_entries
     END DO
   END DO
 
   nnz_L = ia_L(ndof+1) - 1
   IF (nnz_L > nnz_max) THEN
-    WRITE(*,*) 'timefp_upd: nnz_max exceeded, nnz_L=', nnz_L; STOP
+    WRITE(*,*) 'timefp_7pt_nl: nnz_max exceeded, nnz_L=', nnz_L; STOP
   END IF
 
-  !--- Pass 2: fill ja_L, aa_L ------------------------------------
-  ! Note: fd_stencil_2d_3 returns entries in ascending column order
-  ! for any npar>=4 (natural loop order on 3x3 stencil), so no
-  ! sort is needed. sort_stencil is called defensively.
+  !--- Pass 2: fill ja_L and aa_L ---------------------------------
   ptr = 1
   DO i = 1, nperp
     DO j = 1, npar
-      CALL fd_stencil_2d_3(i, j, nperp, npar, vperp, dvpar, &
-                            all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
-                            all20_lin(i,j), all11_lin(i,j), all02_lin(i,j), &
-                            col_idx, stencil_coeff, n_entries, rhs_ij)
+      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+                         all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
+                         all20_lin(i,j), &
+                         MERGE(all11_lin(i,j), 1.0_dp, all11_lin(i,j) /= 0.0_dp), &
+                         all02_lin(i,j), &
+                         col_idx, stencil_coeff, n_entries, rhs_ij)
       CALL sort_stencil(col_idx, stencil_coeff, n_entries)
       DO k = 1, n_entries
         ja_L(ptr) = col_idx(k)
@@ -150,21 +188,20 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     END DO
   END DO
 
-  WRITE(*,'(A,I10,A,F6.2,A)') '  L operator (3-pt): nnz=', nnz_L, &
+  WRITE(*,'(A,I10,A,F6.2,A)') '  L operator (7-pt NL): nnz=', nnz_L, &
       '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
 
-  !================================================================
-  ! 2.  Build LHS:  M_lhs = I - theta*dt*L
-  !     Sparsity pattern identical to L (diagonal already in L
-  !     via the A*f term); just scale values and shift diagonal.
-  !================================================================
+  !--- Copy sparsity pattern to LHS arrays (values filled per step)
   ia_lhs = ia_L
   ja_lhs = ja_L
 
-  DO ptr = 1, nnz_L
-    aa_lhs(ptr) = -theta * timestep * aa_L(ptr)
-  END DO
-
+  !================================================================
+  ! 3.  PARDISO phase 11 only (symbolic reordering, once).
+  !     Pass a_constant=.FALSE. so phase 22 is deferred to each step.
+  !     The aa_lhs values here are just to give PARDISO a valid array;
+  !     the actual values are updated before every solve.
+  !================================================================
+  aa_lhs = -theta * timestep * aa_L
   DO row = 1, ndof
     DO ptr = ia_lhs(row), ia_lhs(row+1)-1
       IF (ja_lhs(ptr) == row) THEN
@@ -174,8 +211,14 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     END DO
   END DO
 
+  CALL pardiso_solve_init(handle_lhs, ndof, aa_lhs, ia_lhs, ja_lhs, &
+                          a_constant=.FALSE., mtype=11, msglvl=0, error=error)
+  IF (error /= 0) THEN
+    WRITE(*,*) 'timefp_7pt_nl: pardiso_solve_init failed, error=', error; STOP
+  END IF
+
   !================================================================
-  ! 3.  Open output files (same convention as timefp / timefp_7pt)
+  ! 4.  Open output files
   !================================================================
   IF (otime == 0.d0) THEN
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='unknown')
@@ -193,7 +236,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     END DO
     IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
     IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
-    IF (isc    /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
+    if (isc /= 0) OPEN(500, file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
@@ -210,23 +253,12 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     END DO
     IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
     IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
-    IF (isc    /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
-  END IF
-
-  !================================================================
-  ! 4.  Factorise M_lhs once (phases 11 + 22)
-  !================================================================
-  CALL pardiso_solve_init(handle_lhs, ndof, aa_lhs, ia_lhs, ja_lhs, &
-                          a_constant=.TRUE., mtype=11, msglvl=0, error=error)
-  IF (error /= 0) THEN
-    WRITE(*,*) 'timefp_upd: pardiso_solve_init failed, error=', error; STOP
+    if (isc /= 0) OPEN(500, file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
   END IF
 
   !================================================================
   ! 5.  Time loop
   !================================================================
-
-  ! Print initial density
   DO ix = 1, nbig
     CALL index_mat_inv(ix, iv, imu)
     f_init(iv,imu) = fstart(ix)
@@ -239,23 +271,106 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     time = otime + itime*timestep
     WRITE(*,*) 'Time is ', time, ' s'
 
-    !--- Build RHS = (I + (1-theta)*dt*L)*f^n + dt*S ---------------
-    ! CN (theta=0.5): rhs = f^n + dt/2 * L*f^n + dt*S
-    ! Implicit:       rhs = f^n                 + dt*S
-    CALL sparse_matvec_csr(ndof, ia_L, ja_L, aa_L, fstart, Lf)
+    !--- 5a. Self-collision coefficients from f^n ------------------
+    ! When starting from zero (iold=0, isource=-1), skip SC while beam
+    ! density is still negligible.  The Rosenbluth potential psi is then
+    ! dominated by floating-point noise; regularise_axis_3 detects nearly
+    ! every near-axis row as "bad" (ratio test fires on noise/noise) and
+    ! overwrites phi with a spurious polynomial, producing garbage sc**.
+    ! dens_tmp holds the density of fstart (initialised to 0 before the
+    ! loop for istart=0, updated at the end of every step thereafter).
+    IF (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart) THEN
+      sc00 = 0.0_dp;  sc10 = 0.0_dp;  sc01 = 0.0_dp
+      sc20 = 0.0_dp;  sc11 = 0.0_dp;  sc02 = 0.0_dp
+    ELSE
+      CALL main_nlterm(fstart, sc00, sc10, sc01, sc20, sc11, sc02)
+    END IF
 
+    !--- 5b. Total coefficients: linear + self-collision -----------
+    all00 = all00_lin + sc00
+    all10 = all10_lin + sc10
+    all01 = all01_lin + sc01
+    all11 = all11_lin + sc11
+    all20 = all20_lin + sc20
+    all02 = all02_lin + sc02
+
+    !--- 5c. Rebuild aa_L values only (ja_L pattern unchanged) -----
+    ptr = 1
+    DO i = 1, nperp
+      DO j = 1, npar
+        CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+                           all00(i,j), all10(i,j), all01(i,j), &
+                           all20(i,j), all11(i,j), all02(i,j), &
+                           col_idx, stencil_coeff, n_entries, rhs_ij)
+        CALL sort_stencil(col_idx, stencil_coeff, n_entries)
+        DO k = 1, n_entries
+          aa_L(ptr) = stencil_coeff(k)
+          ptr = ptr + 1
+        END DO
+      END DO
+    END DO
+    IF (itime == 1) THEN
+      IF (ptr-1 /= nnz_L) THEN
+        WRITE(*,'(A,I0,A,I0)') '  *** PATTERN MISMATCH: ptr-1=', ptr-1, ' nnz_L=', nnz_L
+      ELSE
+        WRITE(*,'(A,I0)')      '  Pattern OK: nnz_L=', nnz_L
+      END IF
+   !   WRITE(*,'(A,2ES14.5)')   '  aa_L min/max:', MINVAL(aa_L(1:nnz_L)), MAXVAL(aa_L(1:nnz_L))
+    END IF
+
+    !--- 5d. Rebuild aa_lhs = I - theta*dt*L ----------------------
+    DO ptr = 1, nnz_L
+      aa_lhs(ptr) = -theta * timestep * aa_L(ptr)
+    END DO
+    DO row = 1, ndof
+      DO ptr = ia_lhs(row), ia_lhs(row+1)-1
+        IF (ja_lhs(ptr) == row) THEN
+          aa_lhs(ptr) = aa_lhs(ptr) + 1.0_dp
+          EXIT
+        END IF
+      END DO
+    END DO
+    ! BC rows must remain constraints: restore them to the L stencil.
+    DO row = 1, ndof
+      CALL index_mat_inv(row, iv, imu)
+      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+        DO ptr = ia_lhs(row), ia_lhs(row+1)-1
+          aa_lhs(ptr) = aa_L(ptr)
+        END DO
+      END IF
+    END DO
+    !IF (itime == 1) THEN
+    !  WRITE(*,'(A,2ES14.5)') '  aa_lhs min/max:', MINVAL(aa_lhs(1:nnz_L)), MAXVAL(aa_lhs(1:nnz_L))
+    !END IF
+
+    !--- 5e. Build RHS: (I + (1-theta)*dt*L)*f^n + dt*S -----------
+    CALL sparse_matvec_csr(ndof, ia_L, ja_L, aa_L, fstart, Lf)
     DO row = 1, ndof
       rhs_vec(row) = fstart(row) &
                    + (1.0_dp - theta) * timestep * Lf(row) &
                    + timestep * source_v(row)
     END DO
+    ! BC rows are constraints: zero RHS so the BC is enforced exactly.
+    DO row = 1, ndof
+      CALL index_mat_inv(row, iv, imu)
+      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+        rhs_vec(row) = 0.0_dp
+      END IF
+    END DO
+    !IF (itime == 1) THEN
+    !  WRITE(*,'(A,2ES14.5)') '  ||fstart||, ||Lf||:', SQRT(SUM(fstart**2)), SQRT(SUM(Lf**2))
+    !  WRITE(*,'(A,2ES14.5)') '  ||rhs||, ||rhs-f||:', SQRT(SUM(rhs_vec**2)), SQRT(SUM((rhs_vec-fstart)**2))
+    !  WRITE(*,'(A,2ES14.5)') '  Lf min/max:', MINVAL(Lf), MAXVAL(Lf)
+    !END IF
 
-    !--- Solve M_lhs * f^{n+1} = rhs  (phase 33 only) -------------
+    !--- 5f. Numerical factorisation + solve (phases 22 + 33) ------
     CALL pardiso_solve_step(handle_lhs, aa_lhs, ia_lhs, ja_lhs, &
-                            rhs_vec, x_vec, &
-                            a_changed=.FALSE., error=error)
+                            rhs_vec, x_vec, a_changed=.TRUE., error=error)
     IF (error /= 0) THEN
-      WRITE(*,*) 'timefp_upd: pardiso_solve_step failed, error=', error; STOP
+      WRITE(*,*) 'timefp_7pt_nl: pardiso_solve_step failed, error=', error; STOP
+    END IF
+    IF (itime == 1) THEN
+      WRITE(*,'(A,2ES14.5)') '  ||x_vec||, x min/max:', SQRT(SUM(x_vec**2)), MINVAL(x_vec), MAXVAL(x_vec)
     END IF
 
     !--- Unpack solution into fout ---------------------------------
@@ -285,7 +400,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
     END DO
     IF (irf    == -1) WRITE(480,*) time, pRF/1.d6
     IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-    IF (isc    /=  0) WRITE(500,*) time, pcoll_self/1.d6
+    if (isc /= 0) WRITE(500,*) time, pcoll_self/1.d6
 
     !--- Steady-state convergence check (optional) ----------------
     if (i_ss_check == -1) then
@@ -308,15 +423,16 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   END DO time_loop
 
   !================================================================
-  ! 6.  Finalise PARDISO and close files
+  ! 6.  Finalise
   !================================================================
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
 
+  DEALLOCATE(sum_phi)
+
   IF (irf     == -1) CLOSE(480)
   IF (isource == -1) CLOSE(490)
-  IF (isc     /=  0) CLOSE(500)
-  CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
+  if (isc /= 0) CLOSE(500); CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
 
   !================================================================
   ! 7.  Renormalise (sourceless case)
@@ -345,9 +461,6 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
 
 CONTAINS
 
-  !----------------------------------------------------------------
-  ! Sparse matrix-vector product  y = A_csr * x  (CSR, 1-based)
-  !----------------------------------------------------------------
   SUBROUTINE sparse_matvec_csr(n, ia, ja, aa, x, y)
     INTEGER,  INTENT(IN)  :: n, ia(n+1), ja(:)
     REAL(dp), INTENT(IN)  :: aa(:), x(n)
@@ -361,9 +474,6 @@ CONTAINS
     END DO
   END SUBROUTINE sparse_matvec_csr
 
-  !----------------------------------------------------------------
-  ! Insertion sort of stencil entries by column index
-  !----------------------------------------------------------------
   SUBROUTINE sort_stencil(idx, val, n)
     INTEGER,  INTENT(INOUT) :: idx(n)
     REAL(dp), INTENT(INOUT) :: val(n)
@@ -381,6 +491,6 @@ CONTAINS
     END DO
   END SUBROUTINE sort_stencil
 
-END SUBROUTINE timefp_upd
+END SUBROUTINE timefp_7pt_nl
 
-END MODULE mod_timefp3_upd
+END MODULE mod_timefp_7pt_nl

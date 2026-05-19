@@ -15,7 +15,7 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 0.4 - 11 February 2026
+!   Version 1.5 - 11 May 2026
 
 !    
 !    Fabrice Louche
@@ -42,6 +42,8 @@ use mod_linear
 !use mod_timefp3!3
 use mod_timefp3_upd
 use mod_timefp_7pt
+use mod_timefp3_nl
+use mod_timefp_7pt_nl
 !
 use mod_anal
 !
@@ -52,8 +54,6 @@ use mod_ncint
 implicit none
 
 external cblin, consts, self_coll_max
-
-external dgemv
 
 
 ! Elements of the Fokker-Planck linearized collision operator
@@ -72,9 +72,6 @@ double precision, dimension (:,:), allocatable :: fout
 
 double precision time1
 
-double precision:: start_time, end_time
-
-
 ! do loops indexes
 
 integer :: ib,iv,imu,ix
@@ -87,14 +84,11 @@ integer :: ib,iv,imu,ix
 
 double precision :: pi,twopi
 
-double precision, dimension(:,:), allocatable :: ta,tb,tc,td,te,tf,sum_t
-double precision :: dvp_local
-double precision, allocatable, dimension(:) :: dndt
-character*17 filename
-
 common/mathcons/pi,twopi
 
 data pi/3.141592653589793238462643d0/
+
+double precision start_time,end_time
 
 !external derf
 
@@ -122,21 +116,66 @@ data pi/3.141592653589793238462643d0/
 !                      for vperp <= vbound: nsing points (increase the density for small vperp)
 !           +1: Quadratic spacing for higher resolution near vperp=0 (or vperp_min)
 !                 ==> FD scheme needs to be adapted ===> DO NOT USE !!!!
+!
+! Convergence for time-dependent simulation:
+!
+!1. Every n_ss_window steps, a line like [SS] step=50  dE/E= 1.23E-02  dn/n= 4.56E-03  dP/Pd= 7.89E-03 [tol= 1.00E-03]
+!should appear on stdout.
+!2. When all three criteria drop below ss_tol, the run stops early and prints [SS] CONVERGED at step NNN ....
+!3. After early exit, all output files (fout.txt, xout.dat, *_vs_time.txt) should be complete and the end-of-run plots
+!should still be produced.
+!
+!If ss_tol is too tight (run never converges) or too loose (stops too early), adjust it together with n_ss_window. A
+!wider window is more immune to short-term fluctuations.
+!
+! Initial solution for time-dependent solver:
+!
+!  - istart = 0 -> empty solution, f = 0 everywhere; only possible when isource = -1. The code should include a test at the start to guarantee that isource = -1
+!  - istart = 1 ->  Stix's solution as initial solution 
+!  - istart = 2 -> initial solution is the steady-state solution of the linear time independent code, computed without the self-collisions
+!  - istart = 3 -> initial solution is the steady-state solution of the linear time independent code, computed with a Maxwellian background for the self-collisions
 
-namelist /INPUT/ nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
+namelist /INPUT/ casename, &
+                 new_grid, &
+                 nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
                 ising,nsing,vbound,&
                nbulk,t,aa,ab,za,zb,ne,xpart,xb, &
                 isource,beam_ekin,beam_angle_deg, & 
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, isc, ifd7, casename
+                icn, ntimes, timestep, iold, istart, isc, ifd7,&
+                i_ss_check, n_ss_window, ss_tol
+                
 
 !write(*,*) 'Read namelist'
 
 read(5,INPUT)
 
+! Coherence check: restarting from a previous solution requires the same grid
+if (new_grid == -1 .and. iold == -1) then
+    write(*,*) 'ERROR: new_grid=-1 (new grid) is incompatible with iold=-1 (restart).'
+    write(*,*) 'A restart uses the solution from a previous run, which requires the same grid.'
+    write(*,*) 'Set new_grid=0 to reuse the existing grid, or iold=0 to start fresh.'
+    stop
+endif
+
+! Coherence checks for istart (only relevant for a fresh TD run)
+if (ntimes /= 0 .and. iold /= -1) then
+    if (istart == 0 .and. isource /= -1) then
+        write(*,*) 'ERROR: istart=0 (zero initial condition) requires isource=-1 (beam source).'
+        write(*,*) 'Without a source, starting from f=0 gives a trivial zero solution.'
+        stop
+    endif
+    if (istart < 0 .or. istart > 3) then
+        write(*,'(A,I0,A)') 'ERROR: istart=', istart, ' is not valid. Use 0, 1, 2 or 3.'
+        stop
+    endif
+endif
+
 twopi=2.d0*pi
+
+call cpu_time(start_time)
 
 !====================================================================
 !
@@ -161,8 +200,6 @@ allocate(colin00(nperp,npar))
 allocate(colin10,colin01,colin20,colin02,colin11,mold=colin00)
 
 !
-
-allocate(ta(nperp,npar),tb(nperp,npar),tc(nperp,npar),td(nperp,npar),te(nperp,npar),tf(nperp,npar),sum_t(nperp,npar))
 
 vperp_loop: do iv = 1,nperp
     
@@ -323,6 +360,7 @@ else steady_state
 !            
 !  TIME-DEPENDANT SOLVER
 !  ---------------------
+    
 
 !  --> Initial distribution construction 
 !      ---------------------------------
@@ -330,50 +368,121 @@ else steady_state
     allocate(fin(nbig))
     fin = 0.d0
     
-    if(iold == -1) then !we start from previousy stored solution
-    
+    if(iold == -1) then ! restart from previously stored solution
+
         open(40,file=TRIM(outfile('xout.dat')),status='old')
         read(40,*) time1
         do ix=1,nbig
             read(40,*) fin(ix)
         enddo
-        
-    else
-        
-        time1=0.d0
-    
-! Stix's Maxwellian solution for sourceless case or zero function for driven case
-    
-    !open(40,file='fstart.txt',status='unknown')
-    !
-    do iv = 1,nperp
-        do imu = 1,npar
-            
-            ix = index_mat(iv,imu)
-            
-            if (isource == 0) then
 
-                fin(ix) = fstix(iv,imu)
-                
-            endif
-            
-        enddo
-    enddo
-    
-    endif
-    
-    !close(40)
-            
-    !if (isc /= -1) then
-    if(ifd7 == -1) then
-        call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
     else
-        
-        !call timefp(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        call timefp_upd(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+
+        time1=0.d0
+
+        select case (istart)
+
+        case (0)
+            ! f = 0 everywhere — beam-driven case only (isource=-1 guaranteed above)
+            write(*,*) 'Initial condition: f = 0 (beam-driven).'
+            fin = 0.d0
+
+        case (1)
+            ! Stix Maxwellian (sourceless) or zero (beam-driven) — original behaviour
+            write(*,*) 'Initial condition: Stix Maxwellian (sourceless) or zero (beam).'
+            do iv = 1,nperp
+                do imu = 1,npar
+                    ix = index_mat(iv,imu)
+                    if (isource == 0) fin(ix) = fstix(iv,imu)
+                enddo
+            enddo
+
+        case (2)
+            ! Steady-state of linear code without self-collisions
+            write(*,*) 'Initial condition: computing SS solution (no SC)...'
+            if (isc == 1) then
+                ! all** currently includes Maxwellian SC; strip it back to Coulomb+RF only
+                block
+                    double precision, dimension(nperp,npar) :: &
+                        c00_ns,c10_ns,c01_ns,c11_ns,c20_ns,c02_ns
+                    if (irf == -1) then
+                        c20_ns=colin20+rf20; c02_ns=colin02+rf02; c11_ns=colin11+rf11
+                        c10_ns=colin10+rf10; c01_ns=colin01+rf01; c00_ns=colin00
+                    else
+                        c20_ns=colin20; c02_ns=colin02; c11_ns=colin11
+                        c10_ns=colin10; c01_ns=colin01; c00_ns=colin00
+                    end if
+                    if (ifd7 == -1) then
+                        call FP_steady_state(c20_ns,c02_ns,c11_ns,c10_ns,c01_ns,c00_ns,fout)
+                    else
+                        call linear(c20_ns,c02_ns,c11_ns,c10_ns,c01_ns,c00_ns,fout)
+                    end if
+                end block
+            else
+                ! isc=0 or isc=-1: all** already excludes SC
+                if (ifd7 == -1) then
+                    call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
+                else
+                    call linear(all20,all02,all11,all10,all01,all00,fout)
+                end if
+            end if
+            do iv = 1,nperp
+                do imu = 1,npar
+                    ix = index_mat(iv,imu)
+                    fin(ix) = fout(iv,imu)
+                enddo
+            enddo
+            write(*,*) 'Initial condition: SS (no SC) done.'
+
+        case (3)
+            ! Steady-state of linear code with Maxwellian SC background
+            write(*,*) 'Initial condition: computing SS solution (Maxwellian SC)...'
+            block
+                double precision, dimension(nperp,npar) :: &
+                    c00_sc,c10_sc,c01_sc,c11_sc,c20_sc,c02_sc
+                double precision, dimension(nperp,npar) :: &
+                    sc00t,sc10t,sc01t,sc11t,sc20t,sc02t
+                if (isc == 1) then
+                    ! all** already includes Maxwellian SC — use as-is
+                    c20_sc=all20; c02_sc=all02; c11_sc=all11
+                    c10_sc=all10; c01_sc=all01; c00_sc=all00
+                else
+                    ! Compute Maxwellian SC and add temporarily
+                    call self_coll_max(vteff,sc20t,sc02t,sc11t,sc10t,sc01t,sc00t)
+                    c20_sc=all20+sc20t; c02_sc=all02+sc02t; c11_sc=all11+sc11t
+                    c10_sc=all10+sc10t; c01_sc=all01+sc01t; c00_sc=all00+sc00t
+                end if
+                if (ifd7 == -1) then
+                    call FP_steady_state(c20_sc,c02_sc,c11_sc,c10_sc,c01_sc,c00_sc,fout)
+                else
+                    call linear(c20_sc,c02_sc,c11_sc,c10_sc,c01_sc,c00_sc,fout)
+                end if
+            end block
+            do iv = 1,nperp
+                do imu = 1,npar
+                    ix = index_mat(iv,imu)
+                    fin(ix) = fout(iv,imu)
+                enddo
+            enddo
+            write(*,*) 'Initial condition: SS (Maxwellian SC) done.'
+
+        end select
+
     endif
-    
-    !endif
+            
+    if(ifd7 == -1) then
+        if(isc == -1) then
+            call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        else
+            call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        endif
+    else
+        if(isc == -1) then
+            call timefp_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        else
+            call timefp_upd(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+        endif
+    endif
     
  !  
 endif steady_state
@@ -390,39 +499,42 @@ if(isc /= 0) deallocate(sc20,sc02,sc11,sc10,sc01,sc00)
 ! TEST: plot the solution at vpar = 0
 
 open(40,file=TRIM(outfile('fout_at_vpar0.txt')),status='unknown')
-open(41,file=TRIM(outfile('fstix_at_vpar0.txt')),status='unknown')
+!open(41,file=TRIM(outfile('fstix_at_vpar0.txt')),status='unknown')
 
 do iv = 1,nperp
     write(40,*) vperp(iv),fout(iv,jmid)
-    write(41,*) vperp(iv),fstix(iv,jmid)
+ !   write(41,*) vperp(iv),fstix(iv,jmid)
 enddo
-close(41)
+!close(41)
 close(40)
 
 open(40,file=TRIM(outfile('fout_at_vperp0.txt')),status='unknown')
-open(41,file=TRIM(outfile('fstix_at_vperp0.txt')),status='unknown')
-open(42,file=TRIM(outfile('fout_at_vperpmax.txt')),status='unknown')
-open(43,file=TRIM(outfile('fstix_at_vperpmax.txt')),status='unknown')
+!open(41,file=TRIM(outfile('fstix_at_vperp0.txt')),status='unknown')
+!open(42,file=TRIM(outfile('fout_at_vperpmax.txt')),status='unknown')
+!open(43,file=TRIM(outfile('fstix_at_vperpmax.txt')),status='unknown')
 
 do iv = 1,npar
     write(40,*) vpar(iv),fout(1,iv)
-    write(41,*) vpar(iv),fstix(1,iv)
-    write(42,*) vpar(iv),fout(nperp,iv)
-    write(43,*) vpar(iv),fstix(nperp,iv)
+ !   write(41,*) vpar(iv),fstix(1,iv)
+ !   write(42,*) vpar(iv),fout(nperp,iv)
+ !   write(43,*) vpar(iv),fstix(nperp,iv)
 enddo
-close(43)
-close(42)
-close(41)
+!close(43)
+!close(42)
+!close(41)
 close(40)
 
-open(40,file=TRIM(outfile('fout_at_vparmax.txt')),status='unknown')
-open(41,file=TRIM(outfile('fstix_at_vparmax.txt')),status='unknown')	
-do iv = 1,nperp
-    write(40,*) vperp(iv),fout(iv,1)
-    write(41,*) vperp(iv),fstix(iv,1)
-enddo
-close(41)
-close(40)
+!open(40,file=TRIM(outfile('fout_at_vparmax.txt')),status='unknown')
+!open(41,file=TRIM(outfile('fstix_at_vparmax.txt')),status='unknown')	
+!do iv = 1,nperp
+!    write(40,*) vperp(iv),fout(iv,1)
+!    write(41,*) vperp(iv),fstix(iv,1)
+!enddo
+!close(41)
+!close(40)
 
+call cpu_time(end_time)
+write(*,*) ' '
+    write(*,*) 'Simulation duration: ',end_time-start_time,'seconds'
 
 end program FP_Coll_2D
