@@ -153,7 +153,8 @@ namelist /INPUT/ casename, &
 read(5,INPUT)
 
 ! Coherence check: restarting from a previous solution requires the same grid
-if (new_grid == -1 .and. iold == -1) then
+! (only relevant for NLSC runs where the sum_phi kernel is cached on disk)
+if (new_grid == -1 .and. iold == -1 .and. isc == -1) then
     write(*,*) 'ERROR: new_grid=-1 (new grid) is incompatible with iold=-1 (restart).'
     write(*,*) 'A restart uses the solution from a previous run, which requires the same grid.'
     write(*,*) 'Set new_grid=0 to reuse the existing grid, or iold=0 to start fresh.'
