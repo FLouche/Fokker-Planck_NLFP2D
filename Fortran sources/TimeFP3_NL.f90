@@ -335,7 +335,7 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
 
-    WRITE(470,*) time, DABS(SUM(pcoll)+pcoll_self)/1.d6
+    WRITE(470,*) time, (SUM(pcoll)+pcoll_self)/1.d6
     DO ib = 1, nbulk
       WRITE(470+ib,*) time, pcoll(ib)/1.d6
     END DO

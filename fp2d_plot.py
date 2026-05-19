@@ -333,16 +333,30 @@ def plot_power_coll(outdir: Path, save_dir, show: bool, casename: str) -> None:
 
 
 def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> None:
-    """Power balance: total collisions + RF + NBI."""
+    """Power balance: total collisions + RF + NBI + net sum."""
     base = _outfile(outdir, "power_coll_tot_vs_time", casename)
     if not base.exists():
         return
     fig, ax = plt.subplots(figsize=(8, 5))
     plotted = False
 
+    # Accumulate net sum on the common time grid
+    t_ref, y_sum = None, None
+
+    def _add_to_sum(t, y):
+        nonlocal t_ref, y_sum
+        if t is None:
+            return
+        if t_ref is None:
+            t_ref = t
+            y_sum = y.copy()
+        elif len(t) == len(t_ref):
+            y_sum += y
+
     t, y = _ts_col(base)
     if t is not None:
         ax.plot(t, y, color=_PALETTE[0], linewidth=1.5, label="collisional")
+        _add_to_sum(t, y)
         plotted = True
 
     f = _outfile(outdir, "power_RF_vs_time", casename)
@@ -350,6 +364,7 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
         t, y = _ts_col(f)
         if t is not None:
             ax.plot(t, y, color=_PALETTE[1], linewidth=1.5, label="RF")
+            _add_to_sum(t, y)
             plotted = True
 
     f = _outfile(outdir, "power_NBI_vs_time", casename)
@@ -359,11 +374,17 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
             ax.plot(data[:, 0], data[:, 1], color=_PALETTE[2], linewidth=1.5, label="NBI source")
             ax.plot(data[:, 0], data[:, 2], color=_PALETTE[2], linewidth=1.5,
                     linestyle="--", label="NBI losses")
+            _add_to_sum(data[:, 0], data[:, 1])
+            _add_to_sum(data[:, 0], data[:, 2])
             plotted = True
 
     if not plotted:
         plt.close(fig)
         return
+
+    if t_ref is not None and y_sum is not None:
+        ax.plot(t_ref, y_sum, color="black", linewidth=2.0, linestyle="--", label="net")
+
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Power density (MW·m⁻³)")
     ax.set_title(_title({}, "Power balance vs time", casename))
