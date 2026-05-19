@@ -235,6 +235,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       END IF
     END DO
     IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
+    IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
     if (isc /= 0) OPEN(500, file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
@@ -251,6 +252,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       END IF
     END DO
     IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
+    IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
     if (isc /= 0) OPEN(500, file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
   END IF
 
@@ -385,6 +387,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       WRITE(470+ib,*) time, pcoll(ib)/1.d6
     END DO
     IF (irf    == -1) WRITE(480,*) time, pRF/1.d6
+    IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
     if (isc /= 0) WRITE(500,*) time, pcoll_self/1.d6
 
     !--- Steady-state convergence check (optional) ----------------
@@ -416,6 +419,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   DEALLOCATE(sum_phi)
 
   IF (irf     == -1) CLOSE(480)
+  IF (isource == -1) CLOSE(490)
   if (isc /= 0) CLOSE(500); CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
 
   !================================================================

@@ -107,7 +107,7 @@ FILE_META = {
 }
 
 # Files to skip (unusual format or not useful for plotting)
-_SKIP_STEMS = {"RF_dirac", "fstix"}
+_SKIP_STEMS = {"RF_dirac", "fstix", "power_NBI_vs_time"}
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 
@@ -367,6 +367,17 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
         if t is not None:
             ax.plot(t, y, color=_PALETTE[1], linewidth=1.5, label="RF")
             _add_to_sum(t, y)
+            plotted = True
+
+    f = _outfile(outdir, "power_NBI_vs_time", casename)
+    if f.exists():
+        data = _load(f)
+        if data is not None and data.shape[1] >= 3:
+            ax.plot(data[:, 0], data[:, 1], color=_PALETTE[2], linewidth=1.5, label="NBI source")
+            ax.plot(data[:, 0], data[:, 2], color=_PALETTE[2], linewidth=1.5,
+                    linestyle="--", label="NBI losses")
+            _add_to_sum(data[:, 0], data[:, 1])
+            _add_to_sum(data[:, 0], data[:, 2])
             plotted = True
 
     if not plotted:
