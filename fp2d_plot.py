@@ -19,6 +19,7 @@ Options (both subcommands)
 run-only options
 ----------------
   --outdir DIR    Solver working directory (default: folder of <input.dat>).
+  --out FILE      Redirect solver stdout (Fortran write(*,*)) to FILE.
 
 Examples
 --------
@@ -520,12 +521,20 @@ def _detect_casename(outdir: Path, names=None) -> str:
 # Solver runner
 # ---------------------------------------------------------------------------
 
-def run_solver(exe: Path, input_file: Path, run_dir: Path) -> int:
+def run_solver(exe: Path, input_file: Path, run_dir: Path,
+               out_file: Path = None) -> int:
     print(f"Running : {exe}")
     print(f"Input   : {input_file}")
     print(f"Workdir : {run_dir}")
+    if out_file is not None:
+        print(f"Stdout  : {out_file}")
     with open(input_file) as fin:
-        result = subprocess.run([str(exe)], stdin=fin, cwd=run_dir)
+        if out_file is not None:
+            with open(out_file, "w") as fout:
+                result = subprocess.run([str(exe)], stdin=fin, stdout=fout,
+                                        cwd=run_dir)
+        else:
+            result = subprocess.run([str(exe)], stdin=fin, cwd=run_dir)
     return result.returncode
 
 
@@ -562,6 +571,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("input_file", type=Path, help="Fortran namelist input (.dat)")
     run_p.add_argument("--outdir",   type=Path, default=None, metavar="DIR",
                        help="solver working directory (default: folder of input_file)")
+    run_p.add_argument("--out",      type=Path, default=None, metavar="FILE",
+                       help="redirect solver stdout (Fortran write(*,*)) to FILE")
     _add_common(run_p)
 
     plot_p = sub.add_parser("plot", help="plot from an existing output directory")
@@ -600,7 +611,7 @@ def main(argv=None):
             if isc == 0:
                 args.no_sc = True
                 print("No self-collisions (isc=0): self-collision power plots will be skipped.")
-        rc = run_solver(exe, input_file, run_dir)
+        rc = run_solver(exe, input_file, run_dir, out_file=args.out)
         if rc != 0:
             print(f"Warning: solver exited with code {rc}", file=sys.stderr)
         outdir = run_dir
