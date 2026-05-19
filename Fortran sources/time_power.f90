@@ -33,18 +33,20 @@ double precision pmass
 data pmass/1.6726d-27/ !proton mass in kg
 
 double precision,allocatable, dimension(:,:) :: fint
+double precision :: taum_save     ! saved taum; restored on exit
 integer iv,ip,ix,imu,ib
 
 external dgemv
 
 allocate(fint(nperp,npar))
 
-   
+
 ! ***************************************************
 ! Collisional power density
 ! ***************************************************
 
-    taum = 0.d0 ! temporary 
+    taum_save = taum
+    taum = 0.d0 ! temporary: build_ss reads taum; zero it for diagnostic calls
     
     if(isource == 0)then
         normfac = npart/dens
@@ -163,13 +165,14 @@ endif
         call ncint_2D(f1,plosses)
         call ncint_2D(f2,psource)
         
-    else 
-        
-        taum = 0.d0
+    else
+
         plosses = 0.d0
         psource = 0.d0
-        
+
     endif
+
+    taum = taum_save   ! restore original value for the caller
 
 deallocate(fint)
      

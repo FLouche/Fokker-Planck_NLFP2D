@@ -131,7 +131,7 @@ double precision start_time,end_time
 ! Initial solution for time-dependent solver:
 !
 !  - istart = 0 -> empty solution, f = 0 everywhere; only possible when isource = -1. The code should include a test at the start to guarantee that isource = -1
-!  - istart = 1 ->  Stix's solution as initial solution (the currently considered case)
+!  - istart = 1 ->  Stix's solution as initial solution 
 !  - istart = 2 -> initial solution is the steady-state solution of the linear time independent code, computed without the self-collisions
 !  - istart = 3 -> initial solution is the steady-state solution of the linear time independent code, computed with a Maxwellian background for the self-collisions
 
@@ -499,39 +499,39 @@ if(isc /= 0) deallocate(sc20,sc02,sc11,sc10,sc01,sc00)
 ! TEST: plot the solution at vpar = 0
 
 open(40,file=TRIM(outfile('fout_at_vpar0.txt')),status='unknown')
-open(41,file=TRIM(outfile('fstix_at_vpar0.txt')),status='unknown')
+!open(41,file=TRIM(outfile('fstix_at_vpar0.txt')),status='unknown')
 
 do iv = 1,nperp
     write(40,*) vperp(iv),fout(iv,jmid)
-    write(41,*) vperp(iv),fstix(iv,jmid)
+ !   write(41,*) vperp(iv),fstix(iv,jmid)
 enddo
-close(41)
+!close(41)
 close(40)
 
 open(40,file=TRIM(outfile('fout_at_vperp0.txt')),status='unknown')
-open(41,file=TRIM(outfile('fstix_at_vperp0.txt')),status='unknown')
-open(42,file=TRIM(outfile('fout_at_vperpmax.txt')),status='unknown')
-open(43,file=TRIM(outfile('fstix_at_vperpmax.txt')),status='unknown')
+!open(41,file=TRIM(outfile('fstix_at_vperp0.txt')),status='unknown')
+!open(42,file=TRIM(outfile('fout_at_vperpmax.txt')),status='unknown')
+!open(43,file=TRIM(outfile('fstix_at_vperpmax.txt')),status='unknown')
 
 do iv = 1,npar
     write(40,*) vpar(iv),fout(1,iv)
-    write(41,*) vpar(iv),fstix(1,iv)
-    write(42,*) vpar(iv),fout(nperp,iv)
-    write(43,*) vpar(iv),fstix(nperp,iv)
+ !   write(41,*) vpar(iv),fstix(1,iv)
+ !   write(42,*) vpar(iv),fout(nperp,iv)
+ !   write(43,*) vpar(iv),fstix(nperp,iv)
 enddo
-close(43)
-close(42)
-close(41)
+!close(43)
+!close(42)
+!close(41)
 close(40)
 
-open(40,file=TRIM(outfile('fout_at_vparmax.txt')),status='unknown')
-open(41,file=TRIM(outfile('fstix_at_vparmax.txt')),status='unknown')	
-do iv = 1,nperp
-    write(40,*) vperp(iv),fout(iv,1)
-    write(41,*) vperp(iv),fstix(iv,1)
-enddo
-close(41)
-close(40)
+!open(40,file=TRIM(outfile('fout_at_vparmax.txt')),status='unknown')
+!open(41,file=TRIM(outfile('fstix_at_vparmax.txt')),status='unknown')	
+!do iv = 1,nperp
+!    write(40,*) vperp(iv),fout(iv,1)
+!    write(41,*) vperp(iv),fstix(iv,1)
+!enddo
+!close(41)
+!close(40)
 
 call cpu_time(end_time)
 write(*,*) ' '

@@ -52,6 +52,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
 
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: normfac
+  REAL(dp) :: taum_save          ! saved taum; restored on exit
   REAL(dp), PARAMETER :: pmass = 1.6726d-27   ! proton mass [kg]
 
   INTEGER :: iv, ip, imu, ix, ib, row, k
@@ -59,6 +60,12 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
   !================================================================
   ! 0.  Preliminary
   !================================================================
+  ! fd_stencil_2d (via apply_operator) reads taum from shared_beam.
+  ! Save it now so we restore the correct value on exit; otherwise the
+  ! NL time-loop, which rebuilds aa_L every step via fd_stencil_2d
+  ! *after* calling this routine, would see taum=0 and lose the -f/taus
+  ! loss term from the operator matrix.
+  taum_save = taum
   taum = 0.0_dp    ! collisional operators do not include the loss term
 
   IF (isource == 0) THEN
@@ -165,12 +172,11 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
     END DO
     CALL ncint_2d(fint, psource)
 
-    taum = 0.0_dp   ! restore
-
   ELSE
     plosses = 0.0_dp
     psource = 0.0_dp
   END IF
 
+  taum = taum_save   ! restore original value for the caller
 
 END SUBROUTINE time_power_7pt
