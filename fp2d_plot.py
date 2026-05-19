@@ -286,7 +286,8 @@ def _ts_col(path: Path, col: int = 1):
     return data[:, 0], data[:, col]
 
 
-def plot_power_coll(outdir: Path, save_dir, show: bool, casename: str) -> None:
+def plot_power_coll(outdir: Path, save_dir, show: bool, casename: str,
+                    show_sc: bool = True) -> None:
     """Collisional power breakdown: electrons + bulk ions + self-collisions."""
     base = _outfile(outdir, "power_coll_e_vs_time", casename)
     if not base.exists():
@@ -311,12 +312,13 @@ def plot_power_coll(outdir: Path, save_dir, show: bool, casename: str) -> None:
             ax.plot(t, y, color=_PALETTE[ib % len(_PALETTE)], linewidth=1.5, label=f"ion {ib}")
             plotted = True
 
-    f = _outfile(outdir, "power_coll_self_vs_time", casename)
-    if f.exists():
-        t, y = _ts_col(f)
-        if t is not None:
-            ax.plot(t, y, color=_PALETTE[4], linewidth=1.5, linestyle="--", label="self")
-            plotted = True
+    if show_sc:
+        f = _outfile(outdir, "power_coll_self_vs_time", casename)
+        if f.exists():
+            t, y = _ts_col(f)
+            if t is not None:
+                ax.plot(t, y, color=_PALETTE[4], linewidth=1.5, linestyle="--", label="self")
+                plotted = True
 
     if not plotted:
         plt.close(fig)
@@ -367,17 +369,6 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
             _add_to_sum(t, y)
             plotted = True
 
-    f = _outfile(outdir, "power_NBI_vs_time", casename)
-    if f.exists():
-        data = _load(f)
-        if data is not None and data.shape[1] >= 3:
-            ax.plot(data[:, 0], data[:, 1], color=_PALETTE[2], linewidth=1.5, label="NBI source")
-            ax.plot(data[:, 0], data[:, 2], color=_PALETTE[2], linewidth=1.5,
-                    linestyle="--", label="NBI losses")
-            _add_to_sum(data[:, 0], data[:, 1])
-            _add_to_sum(data[:, 0], data[:, 2])
-            plotted = True
-
     if not plotted:
         plt.close(fig)
         return
@@ -401,7 +392,8 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
 # ---------------------------------------------------------------------------
 
 def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
-                   casename: str, restrict=None, steady_state: bool = False) -> None:
+                   casename: str, restrict=None, steady_state: bool = False,
+                   show_sc: bool = True) -> None:
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -428,6 +420,9 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         if steady_state and ptype in ("ts", "ts2"):
             continue
 
+        if not show_sc and stem.startswith("power_coll_self_vs_time"):
+            continue
+
         print(f"  [{ptype:3s}]  {path.name}")
         try:
             if ptype == "1d":
@@ -445,7 +440,7 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
 
     if restrict is None and not steady_state:
         print("  [cmp]  power_coll_vs_time")
-        plot_power_coll(outdir, save_dir, show, casename)
+        plot_power_coll(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  power_balance_vs_time")
         plot_power_balance(outdir, save_dir, show, casename)
 
@@ -479,6 +474,18 @@ def _read_ntimes_from_namelist(input_file: Path) -> int:
     except Exception:
         pass
     return -1
+
+
+def _read_isc_from_namelist(input_file: Path) -> int:
+    """Return isc from a Fortran namelist, or 0 if not found."""
+    try:
+        text = input_file.read_text(errors="replace")
+        m = re.search(r'\bisc\s*=\s*([+-]?\d+)', text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return 0
 
 
 def _detect_casename(outdir: Path) -> str:
@@ -521,6 +528,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="plot only these filenames (basenames)")
     p.add_argument("--steady-state", action="store_true", dest="steady_state",
                    help="skip time-trace plots (for ntimes=0 runs)")
+    p.add_argument("--no-sc",        action="store_true", dest="no_sc",
+                   help="suppress self-collision power plots (for isc=0 runs)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -568,6 +577,11 @@ def main(argv=None):
             if ntimes == 0:
                 args.steady_state = True
                 print("Steady-state run (ntimes=0): time traces will be skipped.")
+        if not args.no_sc:
+            isc = _read_isc_from_namelist(input_file)
+            if isc == 0:
+                args.no_sc = True
+                print("No self-collisions (isc=0): self-collision power plots will be skipped.")
         rc = run_solver(exe, input_file, run_dir)
         if rc != 0:
             print(f"Warning: solver exited with code {rc}", file=sys.stderr)
@@ -595,6 +609,7 @@ def main(argv=None):
         casename=args.casename,
         restrict=args.files,
         steady_state=args.steady_state,
+        show_sc=not args.no_sc,
     )
     print("Done.")
 
