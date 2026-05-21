@@ -13,6 +13,7 @@ Options (both subcommands)
   --show          Open interactive matplotlib windows
                   (default when --save is not given).
   --log           Logarithmic colour/y-scale for distribution functions.
+  --3d            Add 3D surface plots for 2D distribution files.
   --casename STR  Case label appended to every plot title.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
 
@@ -48,6 +49,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 – registers 3d projection
 
 # ---------------------------------------------------------------------------
 # Per-file metadata: ptype in {"1d", "2d", "ts", "ts2"}
@@ -82,6 +84,7 @@ FILE_META = {
                            "sci_z": True},
     "Ekin":               {"ptype": "2d",  "title": "Kinetic energy (keV)"},
     "Ekin_perp":          {"ptype": "2d",  "title": "Perp. kinetic energy (keV)"},
+    "Ekin_par":           {"ptype": "2d",  "title": "Par. kinetic energy (keV)"},
     "beam":               {"ptype": "2d",  "title": "Beam source  S(v⊥, v∥)",
                            "sci_z": True},
     # Simple time series -------------------------------------------------------
@@ -246,6 +249,38 @@ def plot_2d(data, meta, stem, save_dir, show, log, casename):
     _finish(fig, stem, save_dir, show)
 
 
+def plot_3d(data, meta, stem, save_dir, show, log, casename):
+    vperp_u = np.unique(data[:, 0])
+    vpar_u  = np.unique(data[:, 1])
+    nperp, npar = len(vperp_u), len(vpar_u)
+    try:
+        Z = data[:, 2].reshape(nperp, npar)
+    except ValueError:
+        print(f"    Cannot reshape {len(data[:, 2])} rows → {nperp}×{npar}; skipping 3D")
+        return
+
+    X, Y = np.meshgrid(vpar_u, vperp_u)
+
+    if log and np.any(Z > 0):
+        Z_plot = np.where(Z > 0, np.log10(Z), np.nan)
+        zlabel = "log₁₀(z)"
+    else:
+        Z_plot = Z
+        zlabel = "z"
+
+    fig = plt.figure(figsize=(9, 6))
+    ax  = fig.add_subplot(111, projection="3d")
+    surf = ax.plot_surface(X, Y, Z_plot, cmap="rainbow",
+                           linewidth=0, antialiased=False)
+    fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
+    ax.set_xlabel("v∥")
+    ax.set_ylabel("v⊥")
+    ax.set_zlabel(zlabel)
+    ax.set_title(_title(meta, stem, casename))
+    fig.tight_layout()
+    _finish(fig, stem + "_3d", save_dir, show)
+
+
 def plot_ts(data, meta, stem, save_dir, show, casename):
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(data[:, 0], data[:, 1], color=_PALETTE[0], linewidth=1.5)
@@ -405,7 +440,7 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
 
 def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                    casename: str, restrict=None, steady_state: bool = False,
-                   show_sc: bool = True) -> None:
+                   show_sc: bool = True, plot3d: bool = False) -> None:
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -441,6 +476,8 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                 plot_1d(data, meta, stem, save_dir, show, log, casename)
             elif ptype == "2d":
                 plot_2d(data, meta, stem, save_dir, show, log, casename)
+                if plot3d:
+                    plot_3d(data, meta, stem, save_dir, show, log, casename)
             elif ptype == "ts":
                 plot_ts(data, meta, stem, save_dir, show, casename)
             elif ptype == "ts2":
@@ -557,6 +594,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="skip time-trace plots (for ntimes=0 runs)")
     p.add_argument("--no-sc",        action="store_true", dest="no_sc",
                    help="suppress self-collision power plots (for isc=0 runs)")
+    p.add_argument("--3d",           action="store_true", dest="plot3d",
+                   help="add 3D surface plots for 2D distribution files")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -639,6 +678,7 @@ def main(argv=None):
         restrict=args.files,
         steady_state=args.steady_state,
         show_sc=not args.no_sc,
+        plot3d=args.plot3d,
     )
     print("Done.")
 
