@@ -50,6 +50,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 – registers 3d projection
+from scipy.interpolate import RectBivariateSpline
 
 # ---------------------------------------------------------------------------
 # Per-file metadata: ptype in {"1d", "2d", "ts", "ts2"}
@@ -259,19 +260,28 @@ def plot_3d(data, meta, stem, save_dir, show, log, casename):
         print(f"    Cannot reshape {len(data[:, 2])} rows → {nperp}×{npar}; skipping 3D")
         return
 
-    X, Y = np.meshgrid(vpar_u, vperp_u)
+    # Upsample to a finer grid for a smoother surface (cap at 300 per axis)
+    nperp_f = min(3 * nperp, 300)
+    npar_f  = min(3 * npar,  300)
+    vperp_f = np.linspace(vperp_u[0], vperp_u[-1], nperp_f)
+    vpar_f  = np.linspace(vpar_u[0],  vpar_u[-1],  npar_f)
 
     if log and np.any(Z > 0):
-        Z_plot = np.where(Z > 0, np.log10(Z), np.nan)
+        Z_pos  = np.where(Z > 0, Z, np.nanmin(Z[Z > 0]))
+        spline = RectBivariateSpline(vperp_u, vpar_u, np.log10(Z_pos))
+        Z_plot = spline(vperp_f, vpar_f)
         zlabel = "log₁₀(z)"
     else:
-        Z_plot = Z
+        spline = RectBivariateSpline(vperp_u, vpar_u, Z)
+        Z_plot = spline(vperp_f, vpar_f)
         zlabel = "z"
+
+    X, Y = np.meshgrid(vpar_f, vperp_f)
 
     fig = plt.figure(figsize=(9, 6))
     ax  = fig.add_subplot(111, projection="3d")
     surf = ax.plot_surface(X, Y, Z_plot, cmap="rainbow",
-                           linewidth=0, antialiased=False)
+                           linewidth=0, antialiased=True)
     fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
     ax.set_xlabel("v∥")
     ax.set_ylabel("v⊥")
