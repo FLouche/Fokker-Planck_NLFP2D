@@ -163,9 +163,9 @@ def _detect_type(path: Path, data: np.ndarray) -> str:
 
 def _finish(fig, stem: str, save_dir, show: bool) -> None:
     if save_dir is not None:
-        out = Path(save_dir) / f"{stem}.png"
+        out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
-        print(f"    -> {out.name}")
+        print(f"    -> {out}")
     if not show:
         plt.close(fig)
 
