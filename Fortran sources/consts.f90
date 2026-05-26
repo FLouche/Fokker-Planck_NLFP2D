@@ -12,7 +12,8 @@ use shared_beam
 
 use shared_timer
 use shared_rf
-!use mod_ncint
+
+use coulomb_log_mod
 
 implicit none
 
@@ -26,13 +27,15 @@ double precision :: z1=0.d0
 double precision arg,dennod
 double PRECISION :: degtorad
 double precision :: vcr, ecr
+double precision :: lnae,lnab
 
 integer i,j,ib
 
 common/mathcons/pi,twopi
 
 data eonm/9.57847729d7/
-data gamma0/3.5859906d0/ ! This is Lcoul*e^4/(4pi Eps0^2 mp^2) 
+!data gamma0/3.5859906d0/ ! This is Lcoul*e^4/(4pi Eps0^2 mp^2) 
+data gamma0/2.390775d-1/ ! This is e^4/(4pi Eps0^2 mp^2) 
 
 !===================================================================
 !
@@ -60,8 +63,10 @@ do ib=1,nbulk
 	if(ib == 1) then
 
 		vt(ib)=4.19d5*dsqrt(t(ib))
+        
+        call coulomb_log_ae(ne, za, t(1), lnae)
 
-		cte0=gamma0*(za/aa)**2
+		cte0=gamma0*lnae*(za/aa)**2
 
 !  ---> Gamma for the electrons
 !       -----------------------------
@@ -72,6 +77,11 @@ do ib=1,nbulk
 		        else
 
 		vt(ib)=9.79d3*dsqrt(t(ib)/ab(ib-1))
+        
+        call coulomb_log_ab(za, aa, t(2), npart, zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab)
+        
+        cte0=gamma0*lnab*(za/aa)**2 ! strictly speaking this formula is only valid for thermal ions
+        ! we use it for the steady-state solution
 
 		gammab(ib)=cte0*nb(ib)*zb(ib-1)**2
 		maonmb(ib)=aa/ab(ib-1)

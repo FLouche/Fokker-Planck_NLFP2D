@@ -54,26 +54,32 @@
 		<Filter Name="Header Files" Filter="fi;fd;h;inc"/>
 		<Filter Name="Resource Files" Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe"/>
 		<Filter Name="Source Files" Filter="f90;for;f;fpp;ftn;def;odl;idl">
-			<File RelativePath="..\Fortran sources\analysis.f90"/>
+			<File RelativePath="..\Fortran sources\analysis.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\apply_operator.f90"/>
 			<File RelativePath="..\Fortran sources\beam_source.f90"/>
 			<File RelativePath="..\Fortran sources\build_matrix_ss.f90"/>
 			<File RelativePath="..\Fortran sources\CBESSEL.F90"/>
 			<File RelativePath="..\Fortran sources\cblin_vperp.f90"/>
-			<File RelativePath="..\Fortran sources\consts.f90"/>
-			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
-			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90">
+			<File RelativePath="..\Fortran sources\consts.f90">
 			</File>
+			<File RelativePath="..\Fortran sources\coulomb_log.f90">
+			</File>
+			<File RelativePath="..\Fortran sources\derivatives_2d.f90">
+			</File>
+			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
 			<File RelativePath="..\Fortran sources\main-FP_Coll_2D.f90"/>
 			<File RelativePath="..\Fortran sources\ncint.f90"/>
-			<File RelativePath="..\Fortran sources\nlterm_test.f90"/>
+			<File RelativePath="..\Fortran sources\nlterm_test.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\pardiso_solver (2).f90"/>
 			<File RelativePath="..\Fortran sources\qlrfterm.f90"/>
 			<File RelativePath="..\Fortran sources\self_coll_max.f90"/>
-			<File RelativePath="..\Fortran sources\shared_data.f90"/>
+			<File RelativePath="..\Fortran sources\shared_data.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\simpson_integration_1D.f90"/>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
 			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
@@ -84,12 +90,14 @@
 			<File RelativePath="..\Fortran sources\test_power_balance.f90"/>
 			<File RelativePath="..\Fortran sources\test_power_balance_7pt.f90"/>
 			<File RelativePath="..\Fortran sources\time_density.f90"/>
-			<File RelativePath="..\Fortran sources\time_energy.f90"/>
+			<File RelativePath="..\Fortran sources\time_energy.f90">
+			</File>
 			<File RelativePath="..\Fortran sources\time_power_7pt.f90"/>
 			<File RelativePath="..\Fortran sources\TimeFP3_NL.f90"/>
 			<File RelativePath="..\Fortran sources\TimeFP3_upd.f90"/>
 			<File RelativePath="..\Fortran sources\TimeFP_7pt.f90"/>
-			<File RelativePath="..\Fortran sources\TimeFP_7pt_NL.f90"/>
+			<File RelativePath="..\Fortran sources\TimeFP_7pt_NL.f90">
+			</File>
 		</Filter>
 	</Files>
 	<Globals/>
