@@ -78,7 +78,7 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
 
   !--- Scalars and temporaries -------------------------------------
   REAL(dp) :: theta
-  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar
+  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: t_start, t_end
 
@@ -327,7 +327,7 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
     WRITE(*,*)  'Unnormalised density is ', dens_tmp
     WRITE(45,*) time, dens_tmp
 
-    CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar)
+    CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar, teff)
     WRITE(46,*) time, tk, tkperp
     anisotropy = merge(100.0_dp*(tkperp/tk - 2.0_dp/3.0_dp)/(2.0_dp/3.0_dp), 0.0_dp, tk > 0.0_dp)
     WRITE(47,*) time, anisotropy
