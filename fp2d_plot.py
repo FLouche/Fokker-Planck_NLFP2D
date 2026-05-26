@@ -670,7 +670,7 @@ def main(argv=None):
     if not outdir.is_dir():
         sys.exit(f"Error: output directory not found: {outdir}")
 
-    if not args.casename:
+    if not args.casename and args.files:
         args.casename = _detect_casename(outdir, names=args.files)
         if args.casename:
             print(f"Casename (auto-detected): {args.casename}")
