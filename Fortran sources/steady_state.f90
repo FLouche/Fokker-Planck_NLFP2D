@@ -25,6 +25,7 @@ use shared_beam, only: isource
 
 use func_index
 
+use time_comps_mod
 
 implicit none
 
@@ -41,7 +42,6 @@ double precision dens_tmp
 integer iv,imu,ix,ipe,ipa
 logical steady_no_beam
 
-external time_density
 
 !======================================================================
 !

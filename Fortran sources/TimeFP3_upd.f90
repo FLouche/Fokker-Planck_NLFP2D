@@ -82,7 +82,8 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  EXTERNAL :: time_density, time_energy, time_power_7pt
+  USE time_comps_mod
+  EXTERNAL :: time_power_7pt
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
