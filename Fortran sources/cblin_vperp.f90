@@ -1,13 +1,17 @@
-  !*******************************************************************
+!*******************************************************************
 !   Computation of the Fokker-Planck collision operator in
 !     (vperp,vpar) coordinates for a population of Maxwellian 
 !        background species
 !
 !     Created by Fabrice Louche on 18/11/25.
-!   Copyright 2025 LPP-ERM/KMS. All rights reserved.
+!    
+!  Version 1.1 (28/05/26, FL): the gammab factors are no longer in the 
+!                   final expressions
+!
+!   Copyright 2025-2026 LPP-ERM/KMS. All rights reserved.
 !*******************************************************************
 
-subroutine cblin(iperp,ipar,vth,gamma,maonmb,c20,c02,c11,c10,c01,c00)
+subroutine cblin(iperp,ipar,vth,maonmb,c20,c02,c11,c10,c01,c00)
 
 ! Initialisation
 ! --------------
@@ -16,7 +20,7 @@ use shared_grid
 
 implicit none
 
-double precision, intent(in) :: vth, gamma,maonmb
+double precision, intent(in) :: vth,maonmb
 double precision, intent(out) :: c20,c02,c10,c01,c00,c11
 integer, intent(in) :: iperp,ipar
 
@@ -84,27 +88,27 @@ dGonv = (arg*chandrap-chandra)/v2
 !      Theta
 !      -----
 
-Theta = gamma*chandra/v1
+Theta = chandra/v1
 
 !      Phi
 !      ---
 
-Phi = gamma/2.d0/v3*(func1-3.d0*chandra)
+Phi = 1.d0/2.d0/v3*(func1-3.d0*chandra)
 
 !      Psi
 !      ---
 
-Psi = gamma/v1/vth**2*maonmb*chandra
+Psi = 1.d0/v1/vth**2*maonmb*chandra
 
 !     dPsi/dv
 !     -------------------
 
-dPsi = gamma/vth**2*maonmb*dGonv
+dPsi = 1.d0/vth**2*maonmb*dGonv
 
 !     dTheta/dv
 !     -------------------
 
-dTheta = gamma*dGonv
+dTheta = dGonv
 
 !=======================================================================
 ! 

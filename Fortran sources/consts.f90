@@ -1,6 +1,9 @@
 !***************************************************
 !
-! Computation of several important physical quantities
+! Computation of relevant physical quantities
+!
+!  26/05/2026: updated with consistent evaluation of the 
+!              Coulomb logarithm with NRL formulas (F. Louche)
 !
 !**************************************************
 !

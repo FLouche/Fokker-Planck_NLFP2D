@@ -16,7 +16,7 @@
 !*   - The LHS matrix is constant (linear problem), so PARDISO     *
 !*     performs phases 11+22 once and only phase 33 each step.     *
 !*                                                                 *
-!*   Version 1.0 - F. Louche                                       *
+!*   Version 1.05 - F. Louche                                      *
 !*******************************************************************
 
 MODULE mod_timefp_7pt
@@ -78,7 +78,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
-  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff
+  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
@@ -252,7 +252,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       
    CALL time_density(f_init, dens_tmp)
    write(*,*) 'Initial density is ',dens_tmp
-  
+
+   call time_energy(f_init, dens_tmp, teff=teff_tmp)
+   write(*,*) 'Initial effective temperature is ',teff_tmp
+   
   time_loop: DO itime = 1, ntimes
 
     time = otime + itime*timestep
@@ -304,22 +307,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(*,*)  'Unnormalised density is ', dens_tmp
     WRITE(45,*) time, dens_tmp
     
-!     ----- mass-projection band-aid -----
-!  Restore particle conservation by uniform rescaling of f.
-!  npart is the prescribed particle count from shared_plasma.
-!
-!  Rationale: f -> f * npart / dens_tmp is mathematically equivalent
-!  to subtracting a uniform isotropic sink -(ndot/n)*f from the
-!  operator at each step.  Velocity-space SHAPE is preserved exactly;
-!  only the bulk normalisation is corrected.
-!!
-!       IF (isource == 0 .AND. dens_tmp > 0.0_dp) THEN
-!         fout  = fout  * npart / dens_tmp
-!         x_vec = x_vec * npart / dens_tmp
-!         dens_tmp = npart
-!       END IF
-!  ----- end band-aid --------
-
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar, teff)
     WRITE(46,*) time, tk, tkperp
     anisotropy = merge(100.0_dp*(tkperp/tk - 2.0_dp/3.0_dp)/(2.0_dp/3.0_dp), 0.0_dp, tk > 0.0_dp)

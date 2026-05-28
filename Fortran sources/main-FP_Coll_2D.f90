@@ -15,7 +15,9 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 1.5 - 11 May 2026
+!   Version 1.6 - 28 May 2026 (FL):
+    
+!   new module to build linear FP terms -> for varying Coulomb log vs time
 
 !    
 !    Fabrice Louche
@@ -37,9 +39,10 @@ use shared_FPterms
 
 use mod_grid
 use mod_beam
+
+use assemble_FP_lin
 !
 use mod_linear
-!use mod_timefp3!3
 use mod_timefp3_upd
 use mod_timefp_7pt
 use mod_timefp3_nl
@@ -208,7 +211,7 @@ vperp_loop: do iv = 1,nperp
     
         background_loop: do ib=1,nbulk 
             
-            call cblin(iv,imu,vt(ib),gammab(ib),maonmb(ib),c20,c02,c11,c10,c01,c00)
+            call cblin(iv,imu,vt(ib),maonmb(ib),c20,c02,c11,c10,c01,c00)
             
             colin20_sp(iv,imu,ib) = c20
             colin02_sp(iv,imu,ib) = c02
@@ -224,13 +227,6 @@ vperp_loop: do iv = 1,nperp
     
 enddo vperp_loop
 
-
-colin20 = sum(colin20_sp, DIM = 3)
-colin02 = sum(colin02_sp, DIM = 3)
-colin11 = sum(colin11_sp, DIM = 3)
-colin10 = sum(colin10_sp, DIM = 3)
-colin01 = sum(colin01_sp, DIM = 3)
-colin00 = sum(colin00_sp, DIM = 3)
 
 !!====================================================================
 !!
@@ -271,34 +267,19 @@ if (irf == -1) then
     
     call qlrfterm
     
-    
 endif
 
 
 !!====================================================================
 !!
-! We collect the factors in front of each derivative 
+! We allocate the factors in front of each derivative 
 
 allocate(all00(nperp,npar))
 allocate(all10,all01,all11,all20,all02,mold=all00)
 
-if (irf == -1) then
-    all00 = colin00
-    all10 = colin10+rf10
-    all01 = colin01+rf01
-    all20 = colin20+rf20
-    all02 = colin02+rf02
-    all11 = colin11+rf11
+call  assemble_FP_terms(all00,all10,all01,all20,all11,all02)
 
-else
-    all00 = colin00
-    all10 = colin10
-    all01 = colin01
-    all20 = colin20
-    all02 = colin02
-    all11 = colin11
-endif
-
+!
 !!====================================================================
 !
 
