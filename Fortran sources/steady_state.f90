@@ -122,6 +122,7 @@ use shared_grid
 use shared_plasma
 use shared_beam
 use shared_timer
+use time_comps_mod
 
 !use func_index
 
