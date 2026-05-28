@@ -39,6 +39,7 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   USE shared_RF
   USE func_index
   USE mod_ss_check
+  USE time_comps_mod
 
   IMPLICIT NONE
 
@@ -82,7 +83,6 @@ SUBROUTINE timefp_upd(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  USE time_comps_mod
   EXTERNAL :: time_power_7pt
 
   logical  :: ss_converged

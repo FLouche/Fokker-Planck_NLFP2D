@@ -40,6 +40,7 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
   USE nlterm
   USE mod_grid
   USE mod_ss_check
+  USE time_comps_mod
 
   IMPLICIT NONE
 
@@ -87,7 +88,6 @@ SUBROUTINE timefp_nl(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  USE time_comps_mod
   EXTERNAL :: time_power_7pt
 
   logical  :: ss_converged
