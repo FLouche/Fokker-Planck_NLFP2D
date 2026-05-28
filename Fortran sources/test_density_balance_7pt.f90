@@ -60,9 +60,12 @@ external dgemv
     
      ! We compute the df/dt collisonal term in matrix form
             
-    CALL apply_operator(colin20_sp(:,:,ib), colin02_sp(:,:,ib), &
-                        colin11_sp(:,:,ib), colin10_sp(:,:,ib), &
-                        colin01_sp(:,:,ib), colin00_sp(:,:,ib), &
+    CALL apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
+                        gammab(ib)*colin02_sp(:,:,ib), &
+                        gammab(ib)*colin11_sp(:,:,ib), &
+                        gammab(ib)*colin10_sp(:,:,ib), &
+                        gammab(ib)*colin01_sp(:,:,ib), &
+                        gammab(ib)*colin00_sp(:,:,ib), &
                         fin, Lf_col_sp)
     do iv = 1,nperp
         do imu = 1,npar

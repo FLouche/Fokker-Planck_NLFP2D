@@ -87,9 +87,12 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
   !================================================================
   DO ib = 1, nbulk
 
-    CALL apply_operator(colin20_sp(:,:,ib), colin02_sp(:,:,ib), &
-                        colin11_sp(:,:,ib), colin10_sp(:,:,ib), &
-                        colin01_sp(:,:,ib), colin00_sp(:,:,ib), &
+    CALL apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
+                        gammab(ib)*colin02_sp(:,:,ib), &
+                        gammab(ib)*colin11_sp(:,:,ib), &
+                        gammab(ib)*colin10_sp(:,:,ib), &
+                        gammab(ib)*colin01_sp(:,:,ib), &
+                        gammab(ib)*colin00_sp(:,:,ib), &
                         f, Lf)
 
     DO iv = 1, nperp
