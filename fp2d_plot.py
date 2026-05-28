@@ -109,6 +109,10 @@ FILE_META = {
     "energy_vs_time":          {"ptype": "ts2", "ylabel": "Energy (keV)",
                                 "title": "Kinetic energy vs time",
                                 "labels": ["E_total", "E_⊥"]},
+    # Coulomb logarithm (one column per bulk ion species; ptype auto-detected)
+    "coulomb_log_vs_time":     {"ylabel": "Coulomb logarithm",
+                                "title":  "Coulomb logarithm vs time",
+                                "labels": [f"ion {i}" for i in range(1, 10)]},
 }
 
 # Files to skip (unusual format or not useful for plotting)
