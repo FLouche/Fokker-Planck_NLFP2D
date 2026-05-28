@@ -92,6 +92,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
   REAL(dp) :: lnab_t, cte0_t, ta_eV
+  REAL(dp) :: lnab_arr(nbulk)
 
   EXTERNAL :: time_power_7pt
 
@@ -243,6 +244,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
     IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
     if (isc /= 0) OPEN(500, file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
+    IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')),  status='unknown')
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
@@ -260,6 +262,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (irf    == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
     IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
     if (isc /= 0) OPEN(500, file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
+    IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')),  status='old', access='append')
   END IF
 
   !================================================================
@@ -293,6 +296,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     END IF
 
     !--- 5b. Update Coulomb log and recompute linear coefficients ----
+    lnab_arr = 0.0_dp
     IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
       DO iv = 1, nperp
         DO imu = 1, npar
@@ -304,6 +308,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       DO ib = 2, nbulk
         CALL coulomb_log_ab(za, aa, ta_eV, npart, &
                             zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
+        lnab_arr(ib) = lnab_t
         cte0_t     = gamma0 * lnab_t * (za/aa)**2
         gammab(ib) = cte0_t * nb(ib) * zb(ib-1)**2
       END DO
@@ -423,6 +428,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (irf    == -1) WRITE(480,*) time, pRF/1.d6
     IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
     if (isc /= 0) WRITE(500,*) time, pcoll_self/1.d6
+    IF (nbulk > 1)  WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
 
     !--- Steady-state convergence check (optional) ----------------
     if (i_ss_check == -1) then
@@ -455,6 +461,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   IF (irf     == -1) CLOSE(480)
   IF (isource == -1) CLOSE(490)
   if (isc /= 0) CLOSE(500); CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
+  IF (nbulk > 1) CLOSE(505)
 
   !================================================================
   ! 7.  Renormalise (sourceless case)
