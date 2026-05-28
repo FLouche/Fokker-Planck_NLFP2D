@@ -68,7 +68,6 @@
 			<File RelativePath="..\Fortran sources\coulomb_log.f90"/>
 			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
-			<File RelativePath="..\Fortran sources\fd_stencil_2d_3.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
 			<File RelativePath="..\Fortran sources\main-FP_Coll_2D.f90">
