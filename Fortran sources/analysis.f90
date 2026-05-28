@@ -39,7 +39,6 @@ module mod_anal
     
     integer iv,ip
     
-    external test_density_balance, test_power_balance
     
     data pmass/1.6726d-27/ !proton mass in kg
     data kev_in_J/1.60218d-16/ !conperpert keV to Joule

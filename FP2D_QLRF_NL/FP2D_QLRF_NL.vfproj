@@ -87,9 +87,7 @@
 			<File RelativePath="..\Fortran sources\ss_check.f90"/>
 			<File RelativePath="..\Fortran sources\steady_state.f90">
 			</File>
-			<File RelativePath="..\Fortran sources\test_density_balance.f90"/>
 			<File RelativePath="..\Fortran sources\test_density_balance_7pt.f90"/>
-			<File RelativePath="..\Fortran sources\test_power_balance.f90"/>
 			<File RelativePath="..\Fortran sources\test_power_balance_7pt.f90"/>
 			<File RelativePath="..\Fortran sources\time_comps_mod.f90">
 			</File>
