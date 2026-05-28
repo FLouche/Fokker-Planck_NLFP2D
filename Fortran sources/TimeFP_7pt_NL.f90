@@ -41,6 +41,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   USE mod_grid
   USE mod_ss_check
   USE time_comps_mod
+  USE assemble_FP_lin
+  USE coulomb_log_mod
 
   IMPLICIT NONE
 
@@ -87,6 +89,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   INTEGER :: error, ib
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
+
+  REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
+  REAL(dp) :: lnab_t, cte0_t, ta_eV
 
   EXTERNAL :: time_power_7pt
 
@@ -287,13 +292,29 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       CALL main_nlterm(fstart, sc00, sc10, sc01, sc20, sc11, sc02)
     END IF
 
-    !--- 5b. Total coefficients: linear + self-collision -----------
-    all00 = all00_lin + sc00
-    all10 = all10_lin + sc10
-    all01 = all01_lin + sc01
-    all11 = all11_lin + sc11
-    all20 = all20_lin + sc20
-    all02 = all02_lin + sc02
+    !--- 5b. Update Coulomb log and recompute linear coefficients ----
+    IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
+      DO iv = 1, nperp
+        DO imu = 1, npar
+          f_init(iv,imu) = fstart(index_mat(iv,imu))
+        END DO
+      END DO
+      CALL time_energy(f_init, dens_tmp, teff=teff)
+      ta_eV = teff * 1.0d3
+      DO ib = 2, nbulk
+        CALL coulomb_log_ab(za, aa, ta_eV, npart, &
+                            zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
+        cte0_t     = gamma0 * lnab_t * (za/aa)**2
+        gammab(ib) = cte0_t * nb(ib) * zb(ib-1)**2
+      END DO
+      CALL assemble_FP_terms(all00, all10, all01, all20, all11, all02)
+    ELSE
+      all00 = all00_lin;  all10 = all10_lin;  all01 = all01_lin
+      all11 = all11_lin;  all20 = all20_lin;  all02 = all02_lin
+    END IF
+    !--- 5b'. Add self-collision coefficients -----------------------
+    all00 = all00 + sc00;  all10 = all10 + sc10;  all01 = all01 + sc01
+    all11 = all11 + sc11;  all20 = all20 + sc20;  all02 = all02 + sc02
 
     !--- 5c. Rebuild aa_L values only (ja_L pattern unchanged) -----
     ptr = 1

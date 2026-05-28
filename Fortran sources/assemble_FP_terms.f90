@@ -23,30 +23,20 @@ module assemble_FP_lin
     integer ib
     
     ! =========================================================
-    ! Linear collision terms
-    
-    do ib=1,nbulk
-        
-        colin20_sp(:,:,ib) = gammab(ib)*colin20_sp(:,:,ib)
-        colin02_sp(:,:,ib) = gammab(ib)*colin02_sp(:,:,ib)
-        colin11_sp(:,:,ib) = gammab(ib)*colin11_sp(:,:,ib)
-        colin10_sp(:,:,ib) = gammab(ib)*colin10_sp(:,:,ib)
-        colin01_sp(:,:,ib) = gammab(ib)*colin01_sp(:,:,ib)
-        colin00_sp(:,:,ib) = gammab(ib)*colin00_sp(:,:,ib)
-        
+    ! Linear collision terms: accumulate gammab*colin**_sp without
+    ! modifying colin**_sp so this routine can be called repeatedly.
+
+    colin20 = 0.d0; colin02 = 0.d0; colin11 = 0.d0
+    colin10 = 0.d0; colin01 = 0.d0; colin00 = 0.d0
+
+    do ib = 1, nbulk
+        colin20 = colin20 + gammab(ib)*colin20_sp(:,:,ib)
+        colin02 = colin02 + gammab(ib)*colin02_sp(:,:,ib)
+        colin11 = colin11 + gammab(ib)*colin11_sp(:,:,ib)
+        colin10 = colin10 + gammab(ib)*colin10_sp(:,:,ib)
+        colin01 = colin01 + gammab(ib)*colin01_sp(:,:,ib)
+        colin00 = colin00 + gammab(ib)*colin00_sp(:,:,ib)
     enddo
-    
-    colin20 = sum(colin20_sp, DIM = 3)
-
-    colin02 = sum(colin02_sp, DIM = 3)
-
-    colin11 = sum(colin11_sp, DIM = 3)
-
-    colin10 = sum(colin10_sp, DIM = 3)
-
-    colin01 = sum(colin01_sp, DIM = 3)
-
-    colin00 = sum(colin00_sp, DIM = 3)
     
     ! =========================================================
     ! RF heating term is added 
