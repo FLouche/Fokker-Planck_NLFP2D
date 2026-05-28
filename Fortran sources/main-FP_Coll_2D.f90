@@ -43,9 +43,7 @@ use mod_beam
 use assemble_FP_lin
 !
 use mod_linear
-use mod_timefp3_upd
 use mod_timefp_7pt
-use mod_timefp3_nl
 use mod_timefp_7pt_nl
 !
 use mod_anal
@@ -147,7 +145,7 @@ namelist /INPUT/ casename, &
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, istart, isc, ifd7,&
+                icn, ntimes, timestep, iold, istart, isc, &
                 i_ss_check, n_ss_window, ss_tol
                 
 
@@ -277,7 +275,7 @@ endif
 allocate(all00(nperp,npar))
 allocate(all10,all01,all11,all20,all02,mold=all00)
 
-call  assemble_FP_terms(all00,all10,all01,all20,all11,all02)
+call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
 
 !
 !!====================================================================
@@ -328,11 +326,7 @@ steady_state: if(ntimes == 0) then
 	write(*,*) '***********************************************'
 	write(*,*) ' '
 
-    if (ifd7 == -1) then
-        call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
-    else
-        call linear(all20,all02,all11,all10,all01,all00,fout)
-    endif
+    call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
     
     
 !
@@ -394,19 +388,11 @@ else steady_state
                         c20_ns=colin20; c02_ns=colin02; c11_ns=colin11
                         c10_ns=colin10; c01_ns=colin01; c00_ns=colin00
                     end if
-                    if (ifd7 == -1) then
-                        call FP_steady_state(c20_ns,c02_ns,c11_ns,c10_ns,c01_ns,c00_ns,fout)
-                    else
-                        call linear(c20_ns,c02_ns,c11_ns,c10_ns,c01_ns,c00_ns,fout)
-                    end if
+                    call FP_steady_state(c20_ns,c02_ns,c11_ns,c10_ns,c01_ns,c00_ns,fout)
                 end block
             else
                 ! isc=0 or isc=-1: all** already excludes SC
-                if (ifd7 == -1) then
-                    call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
-                else
-                    call linear(all20,all02,all11,all10,all01,all00,fout)
-                end if
+                call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
             end if
             do iv = 1,nperp
                 do imu = 1,npar
@@ -434,11 +420,7 @@ else steady_state
                     c20_sc=all20+sc20t; c02_sc=all02+sc02t; c11_sc=all11+sc11t
                     c10_sc=all10+sc10t; c01_sc=all01+sc01t; c00_sc=all00+sc00t
                 end if
-                if (ifd7 == -1) then
-                    call FP_steady_state(c20_sc,c02_sc,c11_sc,c10_sc,c01_sc,c00_sc,fout)
-                else
-                    call linear(c20_sc,c02_sc,c11_sc,c10_sc,c01_sc,c00_sc,fout)
-                end if
+                call FP_steady_state(c20_sc,c02_sc,c11_sc,c10_sc,c01_sc,c00_sc,fout)
             end block
             do iv = 1,nperp
                 do imu = 1,npar
@@ -452,18 +434,10 @@ else steady_state
 
     endif
             
-    if(ifd7 == -1) then
-        if(isc == -1) then
-            call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        else
-            call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        endif
+    if(isc == -1) then
+        call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
     else
-        if(isc == -1) then
-            call timefp_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        else
-            call timefp_upd(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        endif
+        call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
     endif
     
  !  

@@ -94,8 +94,6 @@
 			<File RelativePath="..\Fortran sources\time_comps_mod.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\time_power_7pt.f90"/>
-			<File RelativePath="..\Fortran sources\TimeFP3_NL.f90"/>
-			<File RelativePath="..\Fortran sources\TimeFP3_upd.f90"/>
 			<File RelativePath="..\Fortran sources\TimeFP_7pt.f90"/>
 			<File RelativePath="..\Fortran sources\TimeFP_7pt_NL.f90"/>
 		</Filter>

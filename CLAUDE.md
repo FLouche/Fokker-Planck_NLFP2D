@@ -60,15 +60,15 @@ Boundary conditions are encoded in `fd_stencil_2d`:
 - `i=1` (v⊥=0): Neumann, df/dv⊥=0 (axis symmetry)
 - `i=nperp`, `j=1`, `j=npar`: Dirichlet, f=0
 
-### Two Solver Paths (ifd7 switch)
-The namelist flag `ifd7` selects between:
+### Solver Path
+All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`). The solver selected by `isc`:
 
-| `ifd7` | Stencil | Steady-state | Time-dependent |
-|--------|---------|--------------|----------------|
-| `-1` | 7-point Fornberg | `solve_fp_pardiso` ← `fd_stencil_2d` | `timefp_7pt` ← `fd_stencil_2d` |
-| `≠-1` | 5-point (legacy) | `linear` ← `build_matrix_ss` | `timefp` ← `build_matrix_td` |
+| `isc` | Time-dependent solver |
+|-------|-----------------------|
+| `-1`  | `timefp_7pt_nl` (nonlinear self-collisions) |
+| `≠-1` | `timefp_7pt` (linear or Maxwellian-SC) |
 
-The 7-point path (`ifd7=-1`) is the current default and preferred path. The 5-point legacy path in `TimeFP3.f90` / `build_matrix_ss.f90` is kept for comparison.
+The steady-state solver is always `FP_steady_state` ← `fd_stencil_2d` (in `mod_linear`).
 
 ### Sparse Matrix and PARDISO
 All sparse matrices are stored in 1-based CSR format. The `pardiso_solver` module (`pardiso_solver (2).f90`) wraps Intel MKL PARDISO with four entry points that exploit phased factorisation:
@@ -97,7 +97,6 @@ A particle-conservation rescaling (`fout = fout * npart / dens_tmp`) is applied 
 | Parameter | Values | Effect |
 |-----------|--------|--------|
 | `ntimes` | 0 / >0 | Steady-state / time-dependent |
-| `ifd7` | -1 / else | 7-pt Fornberg / 5-pt legacy |
 | `icn` | -1 / else | Crank-Nicolson / fully implicit |
 | `isc` | 0 / 1 / -1 | No self-coll / Maxwellian approx / neglected in TD |
 | `irf` | -1 / else | Include QL-RF term / no RF |

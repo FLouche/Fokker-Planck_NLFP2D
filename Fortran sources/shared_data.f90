@@ -25,7 +25,6 @@ double precision, allocatable, dimension(:,:) :: sum_phi
 
 integer :: ising,nsing
 integer :: jmid,imid
-integer :: ifd7
 
 end module shared_grid
 

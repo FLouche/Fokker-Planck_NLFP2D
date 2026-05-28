@@ -16,6 +16,5 @@
    irf=-1,eplus=(4.50d3,1.0d2),emin=(4.d3,1.0d0),kperp=(37.d0,0.d0),
    kpar=8.d0,frek=53.d6,delta_RF=2.5d6,b0=3.45d0,nharm=1,
    icn = -1,ntimes = 500, timestep = 20.d-3, iold = 0, isc = 0,
-   ifd7 = -1
 
   /

@@ -34,7 +34,7 @@
 !
 !  Parameters (from shared_timer, set via namelist)
 !  -------------------------------------------------
-!    i_ss_check   : 0 = disabled; -1 = enabled (consistent with irf, ifd7 convention)
+!    i_ss_check   : 0 = disabled; -1 = enabled (consistent with irf convention)
 !    n_ss_window  : window width in time steps (default 50)
 !    ss_tol       : relative tolerance (default 1e-3)
 !***********************************************************************

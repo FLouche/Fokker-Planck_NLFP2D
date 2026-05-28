@@ -162,13 +162,8 @@ do iv = 1,nperp
         enddo
 enddo
 
-if(ifd7 == -1) then
-    call test_density_balance_7pt(xout)
-    call test_power_balance_7pt(xout)
-else
-    call test_density_balance(xout)
-    call test_power_balance(xout)
-endif
+call test_density_balance_7pt(xout)
+call test_power_balance_7pt(xout)
 
 
 
