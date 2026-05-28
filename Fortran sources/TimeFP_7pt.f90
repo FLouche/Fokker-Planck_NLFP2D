@@ -42,6 +42,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   USE func_index
   USE mod_ss_check
   USE time_comps_mod
+  USE assemble_FP_lin
+  USE coulomb_log_mod
 
   IMPLICIT NONE
 
@@ -92,6 +94,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
 
   real(dp), dimension(nperp,npar) :: f_init
+  REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
+  REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
+  REAL(dp) :: lnab_t, cte0_t, ta_eV
+  REAL(dp) :: lnab_arr(nbulk)
 
   !================================================================
   ! 0.  Setup
@@ -212,6 +218,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
     IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
     IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
+    IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='unknown')
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
@@ -229,13 +236,14 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
     IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
     IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
+    IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='old', access='append')
   END IF
 
   !================================================================
   ! 4.  Factorise M_lhs once (phases 11 + 22)
   !================================================================
   CALL pardiso_solve_init(handle_lhs, ndof, aa_lhs, ia_lhs, ja_lhs, &
-                          a_constant=.TRUE., mtype=11, msglvl=0, error=error)
+                          a_constant=.FALSE., mtype=11, msglvl=0, error=error)
   IF (error /= 0) THEN
     WRITE(*,*) 'timefp_7pt: pardiso_solve_init failed, error=', error; STOP
   END IF
@@ -260,6 +268,66 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     time = otime + itime*timestep
     WRITE(*,*) 'Time is ', time, ' s'
+
+    !--- Update Coulomb log and rebuild linear operator each step ----
+    lnab_arr = 0.0_dp
+    IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
+      DO iv = 1, nperp
+        DO imu = 1, npar
+          f_init(iv,imu) = fstart(index_mat(iv,imu))
+        END DO
+      END DO
+      CALL time_energy(f_init, dens_tmp, teff=teff)
+      ta_eV = teff * 1.0d3
+      DO ib = 2, nbulk
+        CALL coulomb_log_ab(za, aa, ta_eV, npart, &
+                            zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
+        lnab_arr(ib) = lnab_t
+        cte0_t     = gamma0 * lnab_t * (za/aa)**2
+        gammab(ib) = cte0_t * nb(ib) * zb(ib-1)**2
+      END DO
+      CALL assemble_FP_terms(all00, all10, all01, all20, all11, all02)
+    ELSE
+      all00 = all00_lin;  all10 = all10_lin;  all01 = all01_lin
+      all11 = all11_lin;  all20 = all20_lin;  all02 = all02_lin
+    END IF
+
+    !--- Rebuild aa_L values (ja_L pattern unchanged) ---------------
+    ptr = 1
+    DO i = 1, nperp
+      DO j = 1, npar
+        CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+                           all00(i,j), all10(i,j), all01(i,j), &
+                           all20(i,j), all11(i,j), all02(i,j), &
+                           col_idx, stencil_coeff, n_entries, rhs_ij)
+        CALL sort_stencil(col_idx, stencil_coeff, n_entries)
+        DO k = 1, n_entries
+          aa_L(ptr) = stencil_coeff(k)
+          ptr = ptr + 1
+        END DO
+      END DO
+    END DO
+
+    !--- Rebuild aa_lhs = I - theta*dt*L (with BC restoration) -----
+    DO ptr = 1, nnz_L
+      aa_lhs(ptr) = -theta * timestep * aa_L(ptr)
+    END DO
+    DO row = 1, ndof
+      DO ptr = ia_lhs(row), ia_lhs(row+1)-1
+        IF (ja_lhs(ptr) == row) THEN
+          aa_lhs(ptr) = aa_lhs(ptr) + 1.0_dp
+          EXIT
+        END IF
+      END DO
+    END DO
+    DO row = 1, ndof
+      CALL index_mat_inv(row, iv, imu)
+      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+        DO ptr = ia_lhs(row), ia_lhs(row+1)-1
+          aa_lhs(ptr) = aa_L(ptr)
+        END DO
+      END IF
+    END DO
 
     !--- Build RHS = (I + (1-theta)*dt*L) * f^n + dt * S ----------
     !
@@ -289,7 +357,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     !--- Solve M_lhs * f^{n+1} = rhs  (phase 33 only) -------------
     CALL pardiso_solve_step(handle_lhs, aa_lhs, ia_lhs, ja_lhs, &
                             rhs_vec, x_vec, &
-                            a_changed=.FALSE., error=error)
+                            a_changed=.TRUE., error=error)
     IF (error /= 0) THEN
       WRITE(*,*) 'timefp_7pt: pardiso_solve_step failed, error=', error; STOP
     END IF
@@ -321,6 +389,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
     IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
     IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
+    IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
 
     !--- Steady-state convergence check (optional) ----------------
     if (i_ss_check == -1) then
@@ -351,6 +420,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   IF (irf     == -1) CLOSE(480)
   IF (isource == -1) CLOSE(490)
   IF (isc     /=  0) CLOSE(500)
+  IF (nbulk   >   1) CLOSE(505)
   CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
 
   !================================================================
