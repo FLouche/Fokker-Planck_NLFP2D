@@ -44,6 +44,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   USE time_comps_mod
   USE assemble_FP_lin
   USE coulomb_log_mod
+  USE shared_FPterms
 
   IMPLICIT NONE
 
@@ -88,7 +89,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  EXTERNAL :: time_power_7pt
+  EXTERNAL :: time_power_7pt, self_coll_max
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
@@ -96,7 +97,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   real(dp), dimension(nperp,npar) :: f_init
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
-  REAL(dp) :: lnab_t, cte0_t, ta_eV
+  REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV
   REAL(dp) :: lnab_arr(nbulk)
 
   !================================================================
@@ -219,6 +220,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
     IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='unknown')
+    IF (isc   ==  1) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='unknown')
+                     OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),            status='unknown')
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
@@ -237,6 +240,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
     IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='old', access='append')
+    IF (isc   ==  1) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='old', access='append')
+                     OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),            status='old', access='append')
   END IF
 
   !================================================================
@@ -263,7 +268,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
    call time_energy(f_init, dens_tmp, teff=teff_tmp)
    write(*,*) 'Initial effective temperature is ',teff_tmp
-   
+
+  ! Fixed Stix background temperature for isc=1 self-collision Coulomb log
+  teff_sc_eV = aa * (vteff / 9.79d3)**2
+
   time_loop: DO itime = 1, ntimes
 
     time = otime + itime*timestep
@@ -271,6 +279,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     !--- Update Coulomb log and rebuild linear operator each step ----
     lnab_arr = 0.0_dp
+    lnaa_t   = 0.0_dp
     IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
       DO iv = 1, nperp
         DO imu = 1, npar
@@ -287,6 +296,14 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         gammab(ib) = cte0_t * nb(ib) * zb(ib-1)**2
       END DO
       CALL assemble_FP_terms(all00, all10, all01, all20, all11, all02)
+      ! Self-collision (isc=1): rebuild sc** with updated Coulomb log and add to all**
+      IF (isc == 1) THEN
+        CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
+        gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
+        CALL self_coll_max(vteff, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+        all00 = all00 + sc00;  all10 = all10 + sc10;  all01 = all01 + sc01
+        all11 = all11 + sc11;  all20 = all20 + sc20;  all02 = all02 + sc02
+      END IF
     ELSE
       all00 = all00_lin;  all10 = all10_lin;  all01 = all01_lin
       all11 = all11_lin;  all20 = all20_lin;  all02 = all02_lin
@@ -379,6 +396,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(46,*) time, tk, tkperp
     anisotropy = merge(100.0_dp*(tkperp/tk - 2.0_dp/3.0_dp)/(2.0_dp/3.0_dp), 0.0_dp, tk > 0.0_dp)
     WRITE(47,*) time, anisotropy
+    WRITE(507,*) time, teff
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
 
@@ -390,6 +408,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
     IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
     IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
+    IF (isc   ==  1) WRITE(506,*) time, lnaa_t
 
     !--- Steady-state convergence check (optional) ----------------
     if (i_ss_check == -1) then
@@ -421,6 +440,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   IF (isource == -1) CLOSE(490)
   IF (isc     /=  0) CLOSE(500)
   IF (nbulk   >   1) CLOSE(505)
+  IF (isc     ==  1) CLOSE(506)
+  CLOSE(507)
   CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
 
   !================================================================

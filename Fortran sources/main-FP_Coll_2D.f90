@@ -15,9 +15,11 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 1.6 - 28 May 2026 (FL):
+!   Version 1.65 - 29 May 2026 (FL):
     
 !   new module to build linear FP terms -> for varying Coulomb log vs time
+!       the treatment of varying Coulomb log is only accounted for 
+!         in for the optionms isc=0 and isc=1 (no SC or MAxwellian SC)
 
 !    
 !    Fabrice Louche
@@ -41,6 +43,7 @@ use mod_grid
 use mod_beam
 
 use assemble_FP_lin
+use coulomb_log_mod
 !
 use mod_linear
 use mod_timefp_7pt
@@ -72,6 +75,8 @@ double precision, dimension (:,:), allocatable :: fout
 
 
 double precision time1
+double precision :: teff_sc, lnaa_sc
+double precision, parameter :: gamma0_sc = 2.390775d-1
 
 ! do loops indexes
 
@@ -108,9 +113,9 @@ double precision start_time,end_time
 !  beam_ekin: beam kinetic energy in keV
 !
 !  isc: treatment of self-collisions:
-!           -1: Stix's Maxwellian background
+!           -1: Consistent self-collisions (non-linear operator)
 !            0: no self-collisions
-!           +1: pitch-angle averaged solution used as collisional background
+!           +1: Stix's Maxwellian solution without RF used as collisional background (constant temperature)
 !  ising: homogeneity of the grid in vperp:
 !            0: homogeneous grid
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
@@ -292,15 +297,19 @@ call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
         allocate(sc00(nperp,npar))
         allocate(sc20,sc02,sc11,sc10,sc01,mold=sc00)
         if (isc == 1) then
-           call self_coll_max(vteff,sc20,sc02,sc11,sc10,sc01,sc00)
-                      
+           ! Compute self-collision Coulomb log using Stix effective temperature
+           teff_sc = aa * (vteff / 9.79d3)**2     ! convert vteff [m/s] to T [eV]
+           call coulomb_log_ab(za, aa, teff_sc, npart, za, aa, teff_sc, npart, lnaa_sc)
+           gammaa = gamma0_sc * lnaa_sc * (za/aa)**2 * npart * za**2
+           call self_coll_max(vteff, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+
              all20 = all20+sc20
              all02 = all02+sc02
              all10 = all10+sc10
              all01 = all01+sc01
              all11 = all11+sc11
              all00 = all00+sc00
-             write(*,*) 'Self-collisions accounted (Maxwellian approximation)' 
+             write(*,*) 'Self-collisions accounted (Maxwellian approximation)'
         !else
         !    allocate(sum_phi(nbig,nbig))
         !    write(*,*) 'Starting distance evaluation'
@@ -410,13 +419,19 @@ else steady_state
                     c00_sc,c10_sc,c01_sc,c11_sc,c20_sc,c02_sc
                 double precision, dimension(nperp,npar) :: &
                     sc00t,sc10t,sc01t,sc11t,sc20t,sc02t
+                double precision :: teff_sc_t, lnaa_sc_t, gammaa_sc_t
                 if (isc == 1) then
                     ! all** already includes Maxwellian SC — use as-is
                     c20_sc=all20; c02_sc=all02; c11_sc=all11
                     c10_sc=all10; c01_sc=all01; c00_sc=all00
                 else
                     ! Compute Maxwellian SC and add temporarily
-                    call self_coll_max(vteff,sc20t,sc02t,sc11t,sc10t,sc01t,sc00t)
+                    teff_sc_t = aa * (vteff / 9.79d3)**2
+                    call coulomb_log_ab(za, aa, teff_sc_t, npart, &
+                                        za, aa, teff_sc_t, npart, lnaa_sc_t)
+                    gammaa_sc_t = gamma0_sc * lnaa_sc_t * (za/aa)**2 * npart * za**2
+                    call self_coll_max(vteff, gammaa_sc_t, &
+                                       sc20t, sc02t, sc11t, sc10t, sc01t, sc00t)
                     c20_sc=all20+sc20t; c02_sc=all02+sc02t; c11_sc=all11+sc11t
                     c10_sc=all10+sc10t; c01_sc=all01+sc01t; c00_sc=all00+sc00t
                 end if

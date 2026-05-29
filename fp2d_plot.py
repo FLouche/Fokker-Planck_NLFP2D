@@ -109,14 +109,14 @@ FILE_META = {
     "energy_vs_time":          {"ptype": "ts2", "ylabel": "Energy (keV)",
                                 "title": "Kinetic energy vs time",
                                 "labels": ["E_total", "E_⊥"]},
-    # Coulomb logarithm (one column per bulk ion species; ptype auto-detected)
-    "coulomb_log_vs_time":     {"ylabel": "Coulomb logarithm",
-                                "title":  "Coulomb logarithm vs time",
-                                "labels": [f"ion {i}" for i in range(1, 10)]},
+    # Effective temperature
+    "Teff_vs_time":            {"ptype": "ts",  "ylabel": "T_eff (keV)",
+                                "title":  "Effective temperature vs time"},
 }
 
 # Files to skip (unusual format or not useful for plotting)
-_SKIP_STEMS = {"RF_dirac", "fstix", "power_NBI_vs_time"}
+_SKIP_STEMS = {"RF_dirac", "fstix", "power_NBI_vs_time",
+               "coulomb_log_vs_time", "coulomb_log_self_vs_time"}
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 
@@ -448,6 +448,46 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_coulomb_log(outdir: Path, save_dir, show: bool, casename: str,
+                     show_sc: bool = True) -> None:
+    """Coulomb logarithm vs time: background ions + self-collision on one axes."""
+    base    = _outfile(outdir, "coulomb_log_vs_time", casename)
+    sc_file = _outfile(outdir, "coulomb_log_self_vs_time", casename)
+    if not base.exists() and not sc_file.exists():
+        return
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plotted = False
+
+    if base.exists():
+        data = _load(base)
+        if data is not None and data.shape[1] >= 2:
+            for i in range(1, data.shape[1]):
+                ax.plot(data[:, 0], data[:, i],
+                        color=_PALETTE[(i - 1) % len(_PALETTE)],
+                        linewidth=1.5, label=f"ion {i}")
+                plotted = True
+
+    if show_sc and sc_file.exists():
+        t, y = _ts_col(sc_file)
+        if t is not None:
+            ax.plot(t, y, color=_PALETTE[4], linewidth=1.5,
+                    linestyle="--", label="self")
+            plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        return
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Coulomb logarithm")
+    ax.set_title(_title({}, "Coulomb logarithm vs time", casename))
+    ax.set_xlim(left=0)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    stem_out = f"coulomb_log_all_vs_time-{casename}" if casename else "coulomb_log_all_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
@@ -506,6 +546,8 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         plot_power_coll(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  power_balance_vs_time")
         plot_power_balance(outdir, save_dir, show, casename)
+        print("  [cmp]  coulomb_log_all_vs_time")
+        plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
 
     if show:
         plt.show()  # single blocking call — all windows open simultaneously
