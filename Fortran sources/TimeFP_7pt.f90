@@ -97,7 +97,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   real(dp), dimension(nperp,npar) :: f_init
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
-  REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV
+  REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV, vteff_t
   REAL(dp) :: lnab_arr(nbulk)
 
   !================================================================
@@ -220,7 +220,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
     IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='unknown')
-    IF (isc   ==  1) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='unknown')
+    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='unknown')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),            status='unknown')
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
@@ -240,7 +240,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
     IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='old', access='append')
-    IF (isc   ==  1) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='old', access='append')
+    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='old', access='append')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),            status='old', access='append')
   END IF
 
@@ -296,11 +296,17 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         gammab(ib) = cte0_t * nb(ib) * zb(ib-1)**2
       END DO
       CALL assemble_FP_terms(all00, all10, all01, all20, all11, all02)
-      ! Self-collision (isc=1): rebuild sc** with updated Coulomb log and add to all**
-      IF (isc == 1) THEN
-        CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
+      ! Self-collision: rebuild sc** with updated Coulomb log and add to all**
+      IF (isc == 1 .OR. isc == 2) THEN
+        IF (isc == 1) THEN
+          vteff_t = vteff                                    ! fixed Stix thermal velocity
+          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
+        ELSE  ! isc == 2: background at evolving beam temperature
+          vteff_t = 9.79d3 * SQRT(ta_eV / aa)              ! thermal velocity at current teff
+          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
+        END IF
         gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
-        CALL self_coll_max(vteff, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+        CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
         all00 = all00 + sc00;  all10 = all10 + sc10;  all01 = all01 + sc01
         all11 = all11 + sc11;  all20 = all20 + sc20;  all02 = all02 + sc02
       END IF
@@ -408,7 +414,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
     IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
     IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
-    IF (isc   ==  1) WRITE(506,*) time, lnaa_t
+    IF (isc==1 .OR. isc==2) WRITE(506,*) time, lnaa_t
 
     !--- Steady-state convergence check (optional) ----------------
     if (i_ss_check == -1) then
@@ -440,7 +446,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   IF (isource == -1) CLOSE(490)
   IF (isc     /=  0) CLOSE(500)
   IF (nbulk   >   1) CLOSE(505)
-  IF (isc     ==  1) CLOSE(506)
+  IF (isc==1 .OR. isc==2) CLOSE(506)
   CLOSE(507)
   CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
 

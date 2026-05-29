@@ -1,7 +1,7 @@
 program FP_Coll_2D
 
 ! ====================================================
-! First attempt at a Non-linear Fokker-Planck code
+!  Non-linear Fokker-Planck code
 !    - 2D in vperp/vpar
 !    - steady-state solution OR 
 !    - time-dependant solver (Cranck-Nicholson method)
@@ -15,11 +15,12 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 1.65 - 29 May 2026 (FL):
-    
+!   Version 1.7 - 29 May 2026 (FL):
+
 !   new module to build linear FP terms -> for varying Coulomb log vs time
-!       the treatment of varying Coulomb log is only accounted for 
-!         in for the optionms isc=0 and isc=1 (no SC or MAxwellian SC)
+!       the treatment of varying Coulomb log is accounted for
+!         in for the options isc=0, isc=1, and isc=2
+!   isc=2: Maxwellian SC background at varying temperature (starts at Tstix)
 
 !    
 !    Fabrice Louche
@@ -115,7 +116,8 @@ double precision start_time,end_time
 !  isc: treatment of self-collisions:
 !           -1: Consistent self-collisions (non-linear operator)
 !            0: no self-collisions
-!           +1: Stix's Maxwellian solution without RF used as collisional background (constant temperature)
+!           +1: Maxwellian background at fixed Tstix (Stix solution without RF)
+!           +2: Maxwellian background at varying temperature (starts at Tstix, updated each step)
 !  ising: homogeneity of the grid in vperp:
 !            0: homogeneous grid
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
@@ -164,6 +166,13 @@ if (new_grid == -1 .and. iold == -1 .and. isc == -1) then
     write(*,*) 'ERROR: new_grid=-1 (new grid) is incompatible with iold=-1 (restart).'
     write(*,*) 'A restart uses the solution from a previous run, which requires the same grid.'
     write(*,*) 'Set new_grid=0 to reuse the existing grid, or iold=0 to start fresh.'
+    stop
+endif
+
+! isc=-1 and isc=2 require a time-dependent run
+if ((isc == -1 .or. isc == 2) .and. ntimes == 0) then
+    write(*,'(A,I0,A)') 'ERROR: isc=', isc, ' requires a time-dependent run (ntimes > 0).'
+    write(*,*) 'Steady-state solver cannot be used with a time-varying self-collision operator.'
     stop
 endif
 
@@ -296,8 +305,8 @@ call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
     if(isc /= 0) then
         allocate(sc00(nperp,npar))
         allocate(sc20,sc02,sc11,sc10,sc01,mold=sc00)
-        if (isc == 1) then
-           ! Compute self-collision Coulomb log using Stix effective temperature
+        if (isc == 1 .OR. isc == 2) then
+           ! Initial SC term: Maxwellian background at Tstix (same starting point for isc=1 and isc=2)
            teff_sc = aa * (vteff / 9.79d3)**2     ! convert vteff [m/s] to T [eV]
            call coulomb_log_ab(za, aa, teff_sc, npart, za, aa, teff_sc, npart, lnaa_sc)
            gammaa = gamma0_sc * lnaa_sc * (za/aa)**2 * npart * za**2
@@ -309,7 +318,8 @@ call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
              all01 = all01+sc01
              all11 = all11+sc11
              all00 = all00+sc00
-             write(*,*) 'Self-collisions accounted (Maxwellian approximation)'
+             if (isc == 1) write(*,*) 'Self-collisions: Maxwellian background at fixed Tstix'
+             if (isc == 2) write(*,*) 'Self-collisions: Maxwellian background at varying temperature (initial: Tstix)'
         !else
         !    allocate(sum_phi(nbig,nbig))
         !    write(*,*) 'Starting distance evaluation'
@@ -385,7 +395,7 @@ else steady_state
         case (2)
             ! Steady-state of linear code without self-collisions
             write(*,*) 'Initial condition: computing SS solution (no SC)...'
-            if (isc == 1) then
+            if (isc == 1 .OR. isc == 2) then
                 ! all** currently includes Maxwellian SC; strip it back to Coulomb+RF only
                 block
                     double precision, dimension(nperp,npar) :: &
@@ -420,7 +430,7 @@ else steady_state
                 double precision, dimension(nperp,npar) :: &
                     sc00t,sc10t,sc01t,sc11t,sc20t,sc02t
                 double precision :: teff_sc_t, lnaa_sc_t, gammaa_sc_t
-                if (isc == 1) then
+                if (isc == 1 .OR. isc == 2) then
                     ! all** already includes Maxwellian SC — use as-is
                     c20_sc=all20; c02_sc=all02; c11_sc=all11
                     c10_sc=all10; c01_sc=all01; c00_sc=all00
