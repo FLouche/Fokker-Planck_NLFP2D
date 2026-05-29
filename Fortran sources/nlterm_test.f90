@@ -17,7 +17,7 @@
             
     contains
     
-    subroutine main_nlterm(xout,sc00,sc10,sc01,sc20,sc11,sc02)
+    subroutine main_nlterm(xout,teff,sc00,sc10,sc01,sc20,sc11,sc02)
     
     use shared_grid
     use mod_grid
@@ -30,8 +30,10 @@
     
     use derivatives_2d
     
+    use coulomb_log_mod
     
     double precision, intent(in), dimension (nbig):: xout
+    double precision, intent(in) :: teff
     double precision, dimension (nperp,npar):: fout,psi,dpsidpe,d2psidpe2,d2psidpepa
     double precision, dimension (nperp,npar):: dpsidpa,d2psidpa2,phi,dphidpe,dphidpa,d2phidpe2,d2phidpa2
     double precision, dimension (nperp,npar):: d3psidpe3, d3psidpepa2,d3psidpe2pa,d3psidpa3
@@ -45,9 +47,11 @@
     !double precision, allocatable, dimension(:,:) :: dfpe,dfpa,d_dpepe_1,d_dpapa_2,d_dpepa_1,d_dpepa_2
         
     common/mathcons/pi,twopi
+    
+    double precision pi,twopi,gamma0,cte0
+    double precision coef,ta_ev,lnaa
 
-    double precision pi,twopi
-    double precision coef
+    data gamma0/2.390775d-1/ ! This is e^4/(4pi Eps0^2 mp^2) 
 
     external cblin
 
@@ -164,6 +168,16 @@ call deriv_y2(phi, nperp, npar, dvpar, d2phidpa2)
     !! evaluated
     !
     !
+
+! The gammaa factor depends on the time varying Coulomb logarithm and should evaluated here
+
+ta_eV = teff * 1.0d3
+
+call coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa)
+
+cte0=gamma0*lnaa*(za/aa)**2
+ 
+ gammaa = cte0*npart*za**2
 
  coef = -4.d0*pi*gammaa/npart
 

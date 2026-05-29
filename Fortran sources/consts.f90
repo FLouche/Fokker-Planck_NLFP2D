@@ -90,7 +90,7 @@ do ib=1,nbulk
 		maonmb(ib)=aa/ab(ib-1)
 		z1=z1+xb(ib-1)*zb(ib-1)**2*maonmb(ib)
         
-        gammaa = cte0*npart*za**2
+!        gammaa = cte0*npart*za**2
 
 	endif
 		  

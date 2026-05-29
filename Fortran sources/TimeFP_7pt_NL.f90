@@ -81,7 +81,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   !--- Scalars and temporaries -------------------------------------
   REAL(dp) :: theta
-  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff
+  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff,teff_tmp
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: t_start, t_end
 
@@ -274,6 +274,11 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END DO
   CALL time_density(f_init, dens_tmp)
   WRITE(*,*) 'Initial density is ', dens_tmp
+  
+  call time_energy(f_init, dens_tmp, teff=teff_tmp)
+   write(*,*) 'Initial effective temperature is ',teff_tmp
+   
+   teff = teff_tmp
 
   time_loop: DO itime = 1, ntimes
 
@@ -292,7 +297,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       sc00 = 0.0_dp;  sc10 = 0.0_dp;  sc01 = 0.0_dp
       sc20 = 0.0_dp;  sc11 = 0.0_dp;  sc02 = 0.0_dp
     ELSE
-      CALL main_nlterm(fstart, sc00, sc10, sc01, sc20, sc11, sc02)
+      CALL main_nlterm(fstart, teff,sc00, sc10, sc01, sc20, sc11, sc02)
     END IF
 
     !--- 5b. Update Coulomb log and recompute linear coefficients ----
