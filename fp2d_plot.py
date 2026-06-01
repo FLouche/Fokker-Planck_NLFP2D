@@ -134,7 +134,11 @@ FILE_META = {
 # Files to skip (unusual format or not useful for plotting)
 _SKIP_STEMS = {"RF_dirac", "fstix",
                "density_vs_time",
+               "power_RF_vs_time",
+               "power_coll_e_vs_time", "power_coll_ion", "power_coll_self_vs_time",
                "power_NBI_vs_time", "power_coll_tot_vs_time",
+               "momentum_coll_e_vs_time", "momentum_coll_ion",
+               "momentum_RF_vs_time", "momentum_coll_self_vs_time",
                "momentum_NBI_vs_time", "momentum_coll_tot_vs_time",
                "coulomb_log_vs_time", "coulomb_log_self_vs_time"}
 
@@ -662,6 +666,58 @@ def plot_momentum_coll(outdir: Path, save_dir, show: bool, casename: str,
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_momentum_breakdown(outdir: Path, save_dir, show: bool, casename: str,
+                            show_sc: bool = True) -> None:
+    """Grid (2 rows × N cols): each operator's ⊥ (top) and ∥ (bottom) momentum transfer."""
+    # Collect available (label, path) pairs
+    contributions = []
+    f = _outfile(outdir, "momentum_coll_e_vs_time", casename)
+    if f.exists():
+        contributions.append(("e⁻", f))
+    for ib in range(1, 10):
+        f = _outfile(outdir, f"momentum_coll_ion {ib}_vs_time", casename)
+        if not f.exists():
+            f = _outfile(outdir, f"momentum_coll_ion{ib}_vs_time", casename)
+        if not f.exists():
+            break
+        contributions.append((f"ion {ib}", f))
+    f = _outfile(outdir, "momentum_RF_vs_time", casename)
+    if f.exists():
+        contributions.append(("RF", f))
+    if show_sc:
+        f = _outfile(outdir, "momentum_coll_self_vs_time", casename)
+        if f.exists():
+            contributions.append(("self", f))
+
+    if not contributions:
+        return
+
+    n = len(contributions)
+    fig, axes = plt.subplots(2, n, figsize=(4 * n, 6), sharex=True)
+    if n == 1:
+        axes = axes.reshape(2, 1)
+
+    for col, (label, path) in enumerate(contributions):
+        t, yp, yl = _ts_col2(path)
+        color = _PALETTE[col % len(_PALETTE)]
+        if t is not None:
+            axes[0, col].plot(t, yp, color=color, linewidth=1.5)
+            axes[1, col].plot(t, yl, color=color, linewidth=1.5)
+        axes[0, col].set_title(label)
+        axes[1, col].set_xlabel("Time (s)")
+        for ax in (axes[0, col], axes[1, col]):
+            ax.grid(True, alpha=0.3)
+            ax.set_xlim(left=0)
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+
+    axes[0, 0].set_ylabel("⊥ (N·m⁻³)")
+    axes[1, 0].set_ylabel("∥ (N·m⁻³)")
+    fig.suptitle(_title({}, "Momentum transfer by operator", casename))
+    fig.tight_layout()
+    stem_out = f"momentum_breakdown_vs_time-{casename}" if casename else "momentum_breakdown_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
 def plot_momentum_balance(outdir: Path, save_dir, show: bool, casename: str) -> None:
     """Momentum balance: total collisions + RF + NBI + net sum (⊥ and ∥)."""
     base = _outfile(outdir, "momentum_coll_tot_vs_time", casename)
@@ -793,6 +849,8 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         plot_power_combined(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  coulomb_log_all_vs_time")
         plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
+        print("  [cmp]  momentum_breakdown_vs_time")
+        plot_momentum_breakdown(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  momentum_balance_vs_time")
         plot_momentum_balance(outdir, save_dir, show, casename)
 

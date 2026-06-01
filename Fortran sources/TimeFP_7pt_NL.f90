@@ -271,7 +271,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='old', access='append')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='old', access='append')
     IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')), status='old', access='append')
-    IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
+    IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown', position='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
