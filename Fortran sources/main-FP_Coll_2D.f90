@@ -15,12 +15,18 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+!   Version 2 - 29/05/2026 (FL)
+!
+!  Self-collision term (non-linear) consistently considers the variations
+!   of the Coulomb logarithm
+!
 !   Version 1.7 - 29 May 2026 (FL):
 
 !   new module to build linear FP terms -> for varying Coulomb log vs time
 !       the treatment of varying Coulomb log is accounted for
 !         in for the options isc=0, isc=1, and isc=2
 !   isc=2: Maxwellian SC background at varying temperature (starts at Tstix)
+
 
 !    
 !    Fabrice Louche
@@ -153,7 +159,8 @@ namelist /INPUT/ casename, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, &
-                i_ss_check, n_ss_window, ss_tol
+                i_ss_check, n_ss_window, ss_tol, &
+                iplot_pow, iplot_mom
                 
 
 !write(*,*) 'Read namelist'

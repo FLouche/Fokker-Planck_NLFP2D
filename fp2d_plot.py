@@ -106,16 +106,33 @@ FILE_META = {
                                 "ylabel": "Power density (MW·m⁻³)",
                                 "title": "Self-collision power density"},
     # Two-curve time series ----------------------------------------------------
-    "energy_vs_time":          {"ptype": "ts2", "ylabel": "Energy (keV)",
-                                "title": "Kinetic energy vs time",
-                                "labels": ["E_total", "E_⊥"]},
+    "energy_vs_time":               {"ptype": "ts2", "ylabel": "Energy (keV)",
+                                     "title": "Kinetic energy vs time",
+                                     "labels": ["E_total", "E_⊥"]},
     # Effective temperature
-    "Teff_vs_time":            {"ptype": "ts",  "ylabel": "T_eff (keV)",
-                                "title":  "Effective temperature vs time"},
+    "Teff_vs_time":                 {"ptype": "ts",  "ylabel": "T_eff (keV)",
+                                     "title":  "Effective temperature vs time"},
+    # Momentum transfer rate (⊥ and ∥ per file) --------------------------------
+    "momentum_coll_tot_vs_time":    {"ptype": "ts2",
+                                     "ylabel": "Momentum transfer rate (N·m⁻³)",
+                                     "title": "Total collisional momentum transfer",
+                                     "labels": ["⊥", "∥"]},
+    "momentum_coll_e_vs_time":      {"ptype": "ts2",
+                                     "ylabel": "Momentum transfer rate (N·m⁻³)",
+                                     "title": "Electron collisional momentum transfer",
+                                     "labels": ["⊥", "∥"]},
+    "momentum_RF_vs_time":          {"ptype": "ts2",
+                                     "ylabel": "Momentum transfer rate (N·m⁻³)",
+                                     "title": "RF momentum transfer",
+                                     "labels": ["⊥", "∥"]},
+    "momentum_coll_self_vs_time":   {"ptype": "ts2",
+                                     "ylabel": "Momentum transfer rate (N·m⁻³)",
+                                     "title": "Self-collision momentum transfer",
+                                     "labels": ["⊥", "∥"]},
 }
 
 # Files to skip (unusual format or not useful for plotting)
-_SKIP_STEMS = {"RF_dirac", "fstix", "power_NBI_vs_time",
+_SKIP_STEMS = {"RF_dirac", "fstix", "power_NBI_vs_time", "momentum_NBI_vs_time",
                "coulomb_log_vs_time", "coulomb_log_self_vs_time"}
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
@@ -336,6 +353,14 @@ def _ts_col(path: Path, col: int = 1):
     return data[:, 0], data[:, col]
 
 
+def _ts_col2(path: Path):
+    """Load a 3-column time-series; return (t, col1, col2) or (None, None, None)."""
+    data = _load(path)
+    if data is None or data.shape[1] < 3:
+        return None, None, None
+    return data[:, 0], data[:, 1], data[:, 2]
+
+
 def plot_power_coll(outdir: Path, save_dir, show: bool, casename: str,
                     show_sc: bool = True) -> None:
     """Collisional power breakdown: electrons + bulk ions + self-collisions."""
@@ -488,6 +513,131 @@ def plot_coulomb_log(outdir: Path, save_dir, show: bool, casename: str,
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_momentum_coll(outdir: Path, save_dir, show: bool, casename: str,
+                       show_sc: bool = True) -> None:
+    """Collisional momentum breakdown: electrons + bulk ions + self-collisions (⊥ and ∥)."""
+    base = _outfile(outdir, "momentum_coll_e_vs_time", casename)
+    if not base.exists():
+        return
+    fig, (ax_perp, ax_par) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    plotted = False
+
+    t, yp, yl = _ts_col2(base)
+    if t is not None:
+        ax_perp.plot(t, yp, color=_PALETTE[0], linewidth=1.5, label="e⁻")
+        ax_par.plot(t, yl, color=_PALETTE[0], linewidth=1.5, label="e⁻")
+        plotted = True
+
+    for ib in range(1, 10):
+        f = _outfile(outdir, f"momentum_coll_ion {ib}_vs_time", casename)
+        if not f.exists():
+            f = _outfile(outdir, f"momentum_coll_ion{ib}_vs_time", casename)
+        if not f.exists():
+            break
+        t, yp, yl = _ts_col2(f)
+        if t is not None:
+            ax_perp.plot(t, yp, color=_PALETTE[ib % len(_PALETTE)], linewidth=1.5, label=f"ion {ib}")
+            ax_par.plot(t, yl, color=_PALETTE[ib % len(_PALETTE)], linewidth=1.5, label=f"ion {ib}")
+            plotted = True
+
+    if show_sc:
+        f = _outfile(outdir, "momentum_coll_self_vs_time", casename)
+        if f.exists():
+            t, yp, yl = _ts_col2(f)
+            if t is not None:
+                ax_perp.plot(t, yp, color=_PALETTE[4], linewidth=1.5, linestyle="--", label="self")
+                ax_par.plot(t, yl, color=_PALETTE[4], linewidth=1.5, linestyle="--", label="self")
+                plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        return
+    ax_perp.set_ylabel("⊥ (N·m⁻³)")
+    ax_par.set_ylabel("∥ (N·m⁻³)")
+    ax_par.set_xlabel("Time (s)")
+    ax_perp.set_title(_title({}, "Collisional momentum transfer vs time", casename))
+    for ax in (ax_perp, ax_par):
+        ax.set_xlim(left=0)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    stem_out = f"momentum_coll_vs_time-{casename}" if casename else "momentum_coll_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
+def plot_momentum_balance(outdir: Path, save_dir, show: bool, casename: str) -> None:
+    """Momentum balance: total collisions + RF + NBI + net sum (⊥ and ∥)."""
+    base = _outfile(outdir, "momentum_coll_tot_vs_time", casename)
+    if not base.exists():
+        return
+    fig, (ax_perp, ax_par) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    plotted = False
+
+    t_ref, yp_sum, yl_sum = None, None, None
+
+    def _add_to_sum(t, yp, yl):
+        nonlocal t_ref, yp_sum, yl_sum
+        if t is None:
+            return
+        if t_ref is None:
+            t_ref = t
+            yp_sum = yp.copy()
+            yl_sum = yl.copy()
+        elif len(t) == len(t_ref):
+            yp_sum += yp
+            yl_sum += yl
+
+    t, yp, yl = _ts_col2(base)
+    if t is not None:
+        ax_perp.plot(t, yp, color=_PALETTE[0], linewidth=1.5, label="collisional")
+        ax_par.plot(t, yl, color=_PALETTE[0], linewidth=1.5, label="collisional")
+        _add_to_sum(t, yp, yl)
+        plotted = True
+
+    f = _outfile(outdir, "momentum_RF_vs_time", casename)
+    if f.exists():
+        t, yp, yl = _ts_col2(f)
+        if t is not None:
+            ax_perp.plot(t, yp, color=_PALETTE[1], linewidth=1.5, label="RF")
+            ax_par.plot(t, yl, color=_PALETTE[1], linewidth=1.5, label="RF")
+            _add_to_sum(t, yp, yl)
+            plotted = True
+
+    f = _outfile(outdir, "momentum_NBI_vs_time", casename)
+    if f.exists():
+        data = _load(f)
+        if data is not None and data.shape[1] >= 5:
+            # columns: t, msrc_perp, msrc_par, mloss_perp, mloss_par
+            ax_perp.plot(data[:, 0], data[:, 1], color=_PALETTE[2], linewidth=1.5, label="NBI source")
+            ax_perp.plot(data[:, 0], data[:, 3], color=_PALETTE[2], linewidth=1.5,
+                         linestyle="--", label="NBI losses")
+            ax_par.plot(data[:, 0], data[:, 2], color=_PALETTE[2], linewidth=1.5, label="NBI source")
+            ax_par.plot(data[:, 0], data[:, 4], color=_PALETTE[2], linewidth=1.5,
+                        linestyle="--", label="NBI losses")
+            _add_to_sum(data[:, 0], data[:, 1] + data[:, 3], data[:, 2] + data[:, 4])
+            plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        return
+
+    if t_ref is not None:
+        ax_perp.plot(t_ref, yp_sum, color="black", linewidth=2.0, linestyle="--", label="net")
+        ax_par.plot(t_ref, yl_sum, color="black", linewidth=2.0, linestyle="--", label="net")
+
+    ax_perp.set_ylabel("⊥ (N·m⁻³)")
+    ax_par.set_ylabel("∥ (N·m⁻³)")
+    ax_par.set_xlabel("Time (s)")
+    ax_perp.set_title(_title({}, "Momentum balance vs time", casename))
+    for ax in (ax_perp, ax_par):
+        ax.set_xlim(left=0)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    stem_out = f"momentum_balance_vs_time-{casename}" if casename else "momentum_balance_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
@@ -548,6 +698,10 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         plot_power_balance(outdir, save_dir, show, casename)
         print("  [cmp]  coulomb_log_all_vs_time")
         plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
+        print("  [cmp]  momentum_coll_vs_time")
+        plot_momentum_coll(outdir, save_dir, show, casename, show_sc=show_sc)
+        print("  [cmp]  momentum_balance_vs_time")
+        plot_momentum_balance(outdir, save_dir, show, casename)
 
     if show:
         plt.show()  # single blocking call — all windows open simultaneously

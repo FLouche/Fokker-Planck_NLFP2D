@@ -84,6 +84,8 @@ integer :: i_ss_check  = 0       ! 0: disabled; -1: auto-stop when SS reached
 integer :: n_ss_window = 50      ! rolling window width (steps) for SS detection
 double precision :: ss_tol = 1.0d-3  ! relative tolerance for SS convergence
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
+integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
+integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
 double precision :: timestep
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''

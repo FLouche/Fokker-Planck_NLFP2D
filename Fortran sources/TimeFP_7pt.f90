@@ -89,7 +89,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  EXTERNAL :: time_power_7pt, self_coll_max
+  EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
@@ -99,6 +99,9 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
   REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV, vteff_t
   REAL(dp) :: lnab_arr(nbulk)
+  REAL(dp) :: mcoll_perp(nbulk), mcoll_par(nbulk)
+  REAL(dp) :: mRF_perp, mRF_par, msrc_perp, msrc_par
+  REAL(dp) :: mloss_perp, mloss_par, mSC_perp, mSC_par
 
   !================================================================
   ! 0.  Setup
@@ -203,45 +206,79 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   ! 3.  Open output files (same convention as TimeFP3)
   !================================================================
   IF (otime == 0.d0) THEN
-    OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='unknown')
-    OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='unknown')
-    OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')),    status='unknown')
-    OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
-    DO ib = 1, nbulk
-      IF (ib == 1) THEN
-        OPEN(471,file=TRIM(outfile('power_coll_e_vs_time.txt')), status='unknown')
-      ELSE
-        WRITE(ibString,'(i2)') ib-1
-        dynfname = 'power_coll_ion'//ibString//'_vs_time.txt'
-        OPEN(470+ib, file=TRIM(outfile(dynfname)), status='unknown')
-      END IF
-    END DO
-    IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
-    IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
-    IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
-    IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='unknown')
-    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='unknown')
-                     OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),            status='unknown')
+    OPEN(45, file=TRIM(outfile('density_vs_time.txt')),     status='unknown')
+    OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='unknown')
+    OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='unknown')
+    IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),     status='unknown')
+    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
+                     OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='unknown')
+    IF (iplot_pow == -1) THEN
+      OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
+      DO ib = 1, nbulk
+        IF (ib == 1) THEN
+          OPEN(471,file=TRIM(outfile('power_coll_e_vs_time.txt')), status='unknown')
+        ELSE
+          WRITE(ibString,'(i2)') ib-1
+          dynfname = 'power_coll_ion'//ibString//'_vs_time.txt'
+          OPEN(470+ib, file=TRIM(outfile(dynfname)), status='unknown')
+        END IF
+      END DO
+      IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
+      IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
+      IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
+    END IF
+    IF (iplot_mom == -1) THEN
+      OPEN(570,file=TRIM(outfile('momentum_coll_tot_vs_time.txt')), status='unknown')
+      DO ib = 1, nbulk
+        IF (ib == 1) THEN
+          OPEN(571,file=TRIM(outfile('momentum_coll_e_vs_time.txt')), status='unknown')
+        ELSE
+          WRITE(ibString,'(i2)') ib-1
+          dynfname = 'momentum_coll_ion'//ibString//'_vs_time.txt'
+          OPEN(570+ib, file=TRIM(outfile(dynfname)), status='unknown')
+        END IF
+      END DO
+      IF (irf   == -1) OPEN(580,file=TRIM(outfile('momentum_RF_vs_time.txt')),        status='unknown')
+      IF (isource==-1) OPEN(590,file=TRIM(outfile('momentum_NBI_vs_time.txt')),       status='unknown')
+      IF (isc   /=  0) OPEN(600,file=TRIM(outfile('momentum_coll_self_vs_time.txt')), status='unknown')
+    END IF
   ELSE
-    OPEN(45, file=TRIM(outfile('density_vs_time.txt')),        status='old', access='append')
-    OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),         status='old', access='append')
-    OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')),    status='old', access='append')
-    OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
-    DO ib = 1, nbulk
-      IF (ib == 1) THEN
-        OPEN(471,file=TRIM(outfile('power_coll_e_vs_time.txt')), status='old', access='append')
-      ELSE
-        WRITE(ibString,'(i2)') ib-1
-        dynfname = 'power_coll_ion'//ibString//'_vs_time.txt'
-        OPEN(470+ib, file=TRIM(outfile(dynfname)), status='old', access='append')
-      END IF
-    END DO
-    IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
-    IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
-    IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
-    IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),    status='old', access='append')
-    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')),status='old', access='append')
-                     OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),            status='old', access='append')
+    OPEN(45, file=TRIM(outfile('density_vs_time.txt')),     status='old', access='append')
+    OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='old', access='append')
+    OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='old', access='append')
+    IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),     status='old', access='append')
+    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
+                     OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='old', access='append')
+    IF (iplot_pow == -1) THEN
+      OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
+      DO ib = 1, nbulk
+        IF (ib == 1) THEN
+          OPEN(471,file=TRIM(outfile('power_coll_e_vs_time.txt')), status='old', access='append')
+        ELSE
+          WRITE(ibString,'(i2)') ib-1
+          dynfname = 'power_coll_ion'//ibString//'_vs_time.txt'
+          OPEN(470+ib, file=TRIM(outfile(dynfname)), status='old', access='append')
+        END IF
+      END DO
+      IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
+      IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
+      IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
+    END IF
+    IF (iplot_mom == -1) THEN
+      OPEN(570,file=TRIM(outfile('momentum_coll_tot_vs_time.txt')), status='old', access='append')
+      DO ib = 1, nbulk
+        IF (ib == 1) THEN
+          OPEN(571,file=TRIM(outfile('momentum_coll_e_vs_time.txt')), status='old', access='append')
+        ELSE
+          WRITE(ibString,'(i2)') ib-1
+          dynfname = 'momentum_coll_ion'//ibString//'_vs_time.txt'
+          OPEN(570+ib, file=TRIM(outfile(dynfname)), status='old', access='append')
+        END IF
+      END DO
+      IF (irf   == -1) OPEN(580,file=TRIM(outfile('momentum_RF_vs_time.txt')),        status='old', access='append')
+      IF (isource==-1) OPEN(590,file=TRIM(outfile('momentum_NBI_vs_time.txt')),       status='old', access='append')
+      IF (isc   /=  0) OPEN(600,file=TRIM(outfile('momentum_coll_self_vs_time.txt')), status='old', access='append')
+    END IF
   END IF
 
   !================================================================
@@ -406,15 +443,32 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
 
-    WRITE(470,*) time, (SUM(pcoll)+pcoll_self)/1.d6
-    DO ib = 1, nbulk
-      WRITE(470+ib,*) time, pcoll(ib)/1.d6
-    END DO
-    IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
-    IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-    IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
+    IF (iplot_pow == -1) THEN
+      WRITE(470,*) time, (SUM(pcoll)+pcoll_self)/1.d6
+      DO ib = 1, nbulk
+        WRITE(470+ib,*) time, pcoll(ib)/1.d6
+      END DO
+      IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
+      IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
+      IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
+    END IF
     IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
     IF (isc==1 .OR. isc==2) WRITE(506,*) time, lnaa_t
+    IF (iplot_mom == -1) THEN
+      CALL time_momentum_7pt(x_vec, dens_tmp, &
+                             mcoll_perp, mcoll_par, &
+                             mRF_perp,   mRF_par,   &
+                             msrc_perp,  msrc_par,  &
+                             mloss_perp, mloss_par, &
+                             mSC_perp,   mSC_par)
+      WRITE(570,*) time, SUM(mcoll_perp)+mSC_perp, SUM(mcoll_par)+mSC_par
+      DO ib = 1, nbulk
+        WRITE(570+ib,*) time, mcoll_perp(ib), mcoll_par(ib)
+      END DO
+      IF (irf   == -1) WRITE(580,*) time, mRF_perp, mRF_par
+      IF (isource==-1) WRITE(590,*) time, msrc_perp, msrc_par, mloss_perp, mloss_par
+      IF (isc   /=  0) WRITE(600,*) time, mSC_perp, mSC_par
+    END IF
 
     !--- Steady-state convergence check (optional) ----------------
     if (i_ss_check == -1) then
@@ -442,13 +496,28 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
 
-  IF (irf     == -1) CLOSE(480)
-  IF (isource == -1) CLOSE(490)
-  IF (isc     /=  0) CLOSE(500)
+  IF (iplot_pow == -1) THEN
+    IF (irf     == -1) CLOSE(480)
+    IF (isource == -1) CLOSE(490)
+    IF (isc     /=  0) CLOSE(500)
+    CLOSE(470)
+    DO ib = 1, nbulk
+      CLOSE(470+ib)
+    END DO
+  END IF
   IF (nbulk   >   1) CLOSE(505)
   IF (isc==1 .OR. isc==2) CLOSE(506)
   CLOSE(507)
-  CLOSE(470); CLOSE(47); CLOSE(46); CLOSE(45)
+  CLOSE(47); CLOSE(46); CLOSE(45)
+  IF (iplot_mom == -1) THEN
+    IF (irf     == -1) CLOSE(580)
+    IF (isource == -1) CLOSE(590)
+    IF (isc     /=  0) CLOSE(600)
+    CLOSE(570)
+    DO ib = 1, nbulk
+      CLOSE(570+ib)
+    END DO
+  END IF
 
   !================================================================
   ! 7.  Renormalise (sourceless case)
