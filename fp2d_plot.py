@@ -669,25 +669,45 @@ def plot_momentum_coll(outdir: Path, save_dir, show: bool, casename: str,
 def plot_momentum_breakdown(outdir: Path, save_dir, show: bool, casename: str,
                             show_sc: bool = True) -> None:
     """Grid (2 rows × N cols): each operator's ⊥ (top) and ∥ (bottom) momentum transfer."""
-    # Collect available (label, path) pairs
+    # Collect (label, t, yp, yl) tuples in physical order
     contributions = []
+
     f = _outfile(outdir, "momentum_coll_e_vs_time", casename)
     if f.exists():
-        contributions.append(("e⁻", f))
+        t, yp, yl = _ts_col2(f)
+        if t is not None:
+            contributions.append(("e⁻", t, yp, yl))
+
     for ib in range(1, 10):
         f = _outfile(outdir, f"momentum_coll_ion {ib}_vs_time", casename)
         if not f.exists():
             f = _outfile(outdir, f"momentum_coll_ion{ib}_vs_time", casename)
         if not f.exists():
             break
-        contributions.append((f"ion {ib}", f))
+        t, yp, yl = _ts_col2(f)
+        if t is not None:
+            contributions.append((f"ion {ib}", t, yp, yl))
+
     f = _outfile(outdir, "momentum_RF_vs_time", casename)
     if f.exists():
-        contributions.append(("RF", f))
+        t, yp, yl = _ts_col2(f)
+        if t is not None:
+            contributions.append(("RF", t, yp, yl))
+
+    # NBI: 4-data-column file (msrc_perp, msrc_par, mloss_perp, mloss_par)
+    f = _outfile(outdir, "momentum_NBI_vs_time", casename)
+    if f.exists():
+        data = _load(f)
+        if data is not None and data.shape[1] >= 5:
+            contributions.append(("NBI src",  data[:, 0], data[:, 1], data[:, 2]))
+            contributions.append(("NBI loss", data[:, 0], data[:, 3], data[:, 4]))
+
     if show_sc:
         f = _outfile(outdir, "momentum_coll_self_vs_time", casename)
         if f.exists():
-            contributions.append(("self", f))
+            t, yp, yl = _ts_col2(f)
+            if t is not None:
+                contributions.append(("self", t, yp, yl))
 
     if not contributions:
         return
@@ -697,12 +717,10 @@ def plot_momentum_breakdown(outdir: Path, save_dir, show: bool, casename: str,
     if n == 1:
         axes = axes.reshape(2, 1)
 
-    for col, (label, path) in enumerate(contributions):
-        t, yp, yl = _ts_col2(path)
+    for col, (label, t, yp, yl) in enumerate(contributions):
         color = _PALETTE[col % len(_PALETTE)]
-        if t is not None:
-            axes[0, col].plot(t, yp, color=color, linewidth=1.5)
-            axes[1, col].plot(t, yl, color=color, linewidth=1.5)
+        axes[0, col].plot(t, yp, color=color, linewidth=1.5)
+        axes[1, col].plot(t, yl, color=color, linewidth=1.5)
         axes[0, col].set_title(label)
         axes[1, col].set_xlabel("Time (s)")
         for ax in (axes[0, col], axes[1, col]):
