@@ -197,49 +197,6 @@ cte0=gamma0*lnaa*(za/aa)**2
         enddo
     enddo
 
-    ! -----------------------------------------------------------------------
-    ! DIAGNOSTICS: compare NL self-collision coefficients with linear cblin
-    ! -----------------------------------------------------------------------
-    !block
-    !  integer  :: imid_loc, jmid_loc, iaxis_loc
-    !  double precision :: c20r, c02r, c11r, c10r, c01r, c00r
-    !
-    !  imid_loc  = nperp/2
-    !  jmid_loc  = (npar+1)/2
-    !  iaxis_loc = 1          ! near-axis row
-    !
-    !  write(*,'(A)')       '--- main_nlterm diagnostics ---'
-    !  write(*,'(A,2ES14.5)') '  psi        min/max:', MINVAL(psi),        MAXVAL(psi)
-    !  write(*,'(A,2ES14.5)') '  d2psi/dpe2 min/max:', MINVAL(d2psidpe2),  MAXVAL(d2psidpe2)
-    !  write(*,'(A,2ES14.5)') '  sc20       min/max:', MINVAL(sc20),       MAXVAL(sc20)
-    !  write(*,'(A,2ES14.5)') '  sc02       min/max:', MINVAL(sc02),       MAXVAL(sc02)
-    !  write(*,'(A,2ES14.5)') '  sc10       min/max:', MINVAL(sc10),       MAXVAL(sc10)
-    !  write(*,'(A,2ES14.5)') '  sc01       min/max:', MINVAL(sc01),       MAXVAL(sc01)
-    !  write(*,'(A,2ES14.5)') '  sc00       min/max:', MINVAL(sc00),       MAXVAL(sc00)
-    !  write(*,'(A,2ES14.5)') '  coef, gammaa/npart:', coef, gammaa/npart
-    !
-    !  ! Midpoint comparison
-    !  call cblin(imid_loc, jmid_loc, vteff, gammaa, 1.d0, &
-    !             c20r, c02r, c11r, c10r, c01r, c00r)
-    !  write(*,'(A,I4,A,I4,A)') '  At midpoint (', imid_loc, ',', jmid_loc, '):'
-    !  write(*,'(A,2ES14.5)') '    sc20 (NL) vs c20 (lin):', sc20(imid_loc,jmid_loc), c20r
-    !  write(*,'(A,2ES14.5)') '    sc02 (NL) vs c02 (lin):', sc02(imid_loc,jmid_loc), c02r
-    !  write(*,'(A,2ES14.5)') '    sc10 (NL) vs c10 (lin):', sc10(imid_loc,jmid_loc), c10r
-    !  write(*,'(A,2ES14.5)') '    sc01 (NL) vs c01 (lin):', sc01(imid_loc,jmid_loc), c01r
-    !  write(*,'(A,2ES14.5)') '    sc00 (NL) vs c00 (lin):', sc00(imid_loc,jmid_loc), c00r
-    !
-    !  ! Near-axis comparison (i=1, j=jmid)
-    !  call cblin(iaxis_loc, jmid_loc, vteff, gammaa, 1.d0, &
-    !             c20r, c02r, c11r, c10r, c01r, c00r)
-    !  write(*,'(A,I4,A,I4,A)') '  At axis    (', iaxis_loc, ',', jmid_loc, '):'
-    !  write(*,'(A,2ES14.5)') '    sc20 (NL) vs c20 (lin):', sc20(iaxis_loc,jmid_loc), c20r
-    !  write(*,'(A,2ES14.5)') '    sc02 (NL) vs c02 (lin):', sc02(iaxis_loc,jmid_loc), c02r
-    !  write(*,'(A,2ES14.5)') '    sc10 (NL) vs c10 (lin):', sc10(iaxis_loc,jmid_loc), c10r
-    !  write(*,'(A,2ES14.5)') '    sc01 (NL) vs c01 (lin):', sc01(iaxis_loc,jmid_loc), c01r
-    !  write(*,'(A,2ES14.5)') '    sc00 (NL) vs c00 (lin):', sc00(iaxis_loc,jmid_loc), c00r
-    !  write(*,'(A,2ES14.5)') '    vperp(1), d2psi/dpe2(1,jmid):', vperp(iaxis_loc), d2psidpe2(iaxis_loc,jmid_loc)
-    !  write(*,'(A)')       '-------------------------------'
-    !end block
 
     end subroutine main_nlterm
     
@@ -395,9 +352,9 @@ SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
     IF (dev > thr_bad) n_bad = MAX(n_bad, i)
   END DO
 
-  WRITE(*,'(A,I4,A,ES10.3)') &
-    '  regularise_axis: n_bad=', n_bad, &
-    '  vp_bad_max=', vperp(MAX(n_bad, 1))
+  !WRITE(*,'(A,I4,A,ES10.3)') &
+  !  '  regularise_axis: n_bad=', n_bad, &
+  !  '  vp_bad_max=', vperp(MAX(n_bad, 1))
 
   IF (n_bad < 1) RETURN
 
@@ -430,214 +387,214 @@ SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
 END SUBROUTINE regularise_axis_3
 
     
-subroutine test_maxwell
-
-use shared_grid
-use shared_plasma
-use mod_ncint
-use mod_grid
-    use derivatives_2d
-
-
-implicit none
-
-integer ipe,ipa
-
-double precision sq2,v1,v2,arg,arg2,coef1,func1,derfarg,chandra,chandrap,dgonv
-double precision, dimension(nperp,npar) :: phi,dphidpe, d2phidpe2
-
-
-common/mathcons/pi,twopi
-
-double precision pi,twopi
-
-    ! ==============================
-    ! TEST : maxwellian background
-    ! ==============================
-    
-! We compare Dperperp with the analytical expression for a
-    !  Maxwellian background
-! Dperpperpis the factor in front of d2fdvperp2
-
-     open(41,file='D2PhiDpe2_max_0.txt',status='unknown')
-     open(42,file='Phi_max_0.txt',status='unknown')
-     open(43,file='DPhiDpe_max_0.txt',status='unknown')
-
-         ! Write header
-    write(41, '(A)')  "# Vperp D2Phi/Dvperp2(vperp,0)"
-    write(42, '(A)')  "# Vperp Phi(vperp,0)"
-    write(43, '(A)')  "# Vperp DPhi/Dvperp(vperp,0)"
-
-
-do ipa=1,npar
-        do ipe=1,nperp
-    
-!call cblin(ipe,ipa,vteff,gammaa,1.d0,c20,c02,c11,c10,c01,c00)
-
-
-
-
-    ! We compare Psi with the analytical expression for a
-    !  Maxwellian background
-!         
-            sq2 = dsqrt(2.d0)
+!subroutine test_maxwell
+!
+!use shared_grid
+!use shared_plasma
+!use mod_ncint
+!use mod_grid
+!    use derivatives_2d
 !
 !
-v1=dSQRT(vperp(ipe)**2+vpar(ipa)**2)
-v2=vperp(ipe)**2+vpar(ipa)**2
-    
-! Main mathematical functions
-
-arg=v1/sq2/vteff
-
-!write(*,*) 'Test 0',vperp(ipe),vpar(ipa),arg
-
-arg2=v2/2.d0/vteff**2
-
-coef1=2.d0/dsqrt(pi)
-
-derfarg = coef1*dexp(-arg2) ! Erf'[u]
-
+!implicit none
+!
+!integer ipe,ipa
+!
+!double precision sq2,v1,v2,arg,arg2,coef1,func1,derfarg,chandra,chandrap,dgonv
+!double precision, dimension(nperp,npar) :: phi,dphidpe, d2phidpe2
+!
+!
+!common/mathcons/pi,twopi
+!
+!double precision pi,twopi
+!
+!    ! ==============================
+!    ! TEST : maxwellian background
+!    ! ==============================
+!    
+!! We compare Dperperp with the analytical expression for a
+!    !  Maxwellian background
+!! Dperpperpis the factor in front of d2fdvperp2
+!
+!     open(41,file='D2PhiDpe2_max_0.txt',status='unknown')
+!     open(42,file='Phi_max_0.txt',status='unknown')
+!     open(43,file='DPhiDpe_max_0.txt',status='unknown')
+!
+!         ! Write header
+!    write(41, '(A)')  "# Vperp D2Phi/Dvperp2(vperp,0)"
+!    write(42, '(A)')  "# Vperp Phi(vperp,0)"
+!    write(43, '(A)')  "# Vperp DPhi/Dvperp(vperp,0)"
+!
+!
+!do ipa=1,npar
+!        do ipe=1,nperp
+!    
+!!call cblin(ipe,ipa,vteff,gammaa,1.d0,c20,c02,c11,c10,c01,c00)
+!
+!
+!
+!
+!    ! We compare Psi with the analytical expression for a
+!    !  Maxwellian background
+!!         
+!            sq2 = dsqrt(2.d0)
+!!
+!!
+!v1=dSQRT(vperp(ipe)**2+vpar(ipa)**2)
+!v2=vperp(ipe)**2+vpar(ipa)**2
+!    
+!! Main mathematical functions
+!
+!arg=v1/sq2/vteff
+!
+!!write(*,*) 'Test 0',vperp(ipe),vpar(ipa),arg
+!
+!arg2=v2/2.d0/vteff**2
+!
+!coef1=2.d0/dsqrt(pi)
+!
+!derfarg = coef1*dexp(-arg2) ! Erf'[u]
+!
+!!if (arg < 1d-4) then
+!!    func1 = coef1*arg
+!!   chandra = (2*arg/3.d0-2*arg2/5.d0)/DSQRT(pi)
+!!else
+!
+!    func1 = derf(arg) ! Erf[u]
+!
+!chandra = (func1-arg*derfarg)/(2*arg**2)
+!
+!!endif
+!
+!! First derivative of G wrt. its argument
+!
+!chandrap = derfarg-2*chandra/arg
+!
+!! First derivative of G/v wrt. v
+!
+!dGonv = (arg*chandrap-chandra)/v2
+!
+!
+!
+!!dpsidve_max(ipe,ipa)=-npart/16.d0/pi*vperp(ipe)/v1*(derfarg/arg+func1*(2.d0-1d0/arg2))
+!!dpsidva_max(ipe,ipa)=-npart/16.d0/pi*vpar(ipa)/v1*(derfarg/arg+func1*(2.d0-1d0/arg2))
+!
+!!psi_max(ipe,ipa)=-npart/8.d0/pi*v1*(derfarg/2.d0/arg+func1*(1.d0+1d0/2.d0/arg2))
+!!d3p(ipe,ipa) = -npart/4.d0/pi*vperp(ipe)/v1*dGonv
+!!d3p(ipe,ipa) = -npart/4.d0/pi*vperp(ipe)/v1*(arg*derfarg-3.d0*chandra)/v2
 !if (arg < 1d-4) then
-!    func1 = coef1*arg
-!   chandra = (2*arg/3.d0-2*arg2/5.d0)/DSQRT(pi)
+!    phi(ipe,ipa) =  -npart/4.d0/pi*coef1/sq2/vteff*(1.d0-arg2/3.d0)
 !else
-
-    func1 = derf(arg) ! Erf[u]
-
-chandra = (func1-arg*derfarg)/(2*arg**2)
-
-!endif
-
-! First derivative of G wrt. its argument
-
-chandrap = derfarg-2*chandra/arg
-
-! First derivative of G/v wrt. v
-
-dGonv = (arg*chandrap-chandra)/v2
-
-
-
-!dpsidve_max(ipe,ipa)=-npart/16.d0/pi*vperp(ipe)/v1*(derfarg/arg+func1*(2.d0-1d0/arg2))
-!dpsidva_max(ipe,ipa)=-npart/16.d0/pi*vpar(ipa)/v1*(derfarg/arg+func1*(2.d0-1d0/arg2))
-
-!psi_max(ipe,ipa)=-npart/8.d0/pi*v1*(derfarg/2.d0/arg+func1*(1.d0+1d0/2.d0/arg2))
-!d3p(ipe,ipa) = -npart/4.d0/pi*vperp(ipe)/v1*dGonv
-!d3p(ipe,ipa) = -npart/4.d0/pi*vperp(ipe)/v1*(arg*derfarg-3.d0*chandra)/v2
-if (arg < 1d-4) then
-    phi(ipe,ipa) =  -npart/4.d0/pi*coef1/sq2/vteff*(1.d0-arg2/3.d0)
-else
- phi(ipe,ipa) =  -npart/4.d0/pi*func1/v1   
-endif
-
-!dphidpe(ipe,ipa) =  npart/4.d0/pi/vteff**2*chandra*vperp(ipe)/v1
-
-!
-        enddo
-enddo
-
-call deriv_x2(phi,vperp,nperp,npar,d2phidpe2)
-call deriv_x1(phi,vperp,nperp,npar,dphidpe)
-
-do ipe=1,nperp
-    
-!if(ipa == (npar+1)/2) 
-    write(41,*) vperp(ipe),d2phidpe2(ipe,(npar+1)/2)!then!(2*npar+1)/3)
-      write(42,*) vperp(ipe),phi(ipe,(npar+1)/2)  
-      write(43,*) vperp(ipe),dphidpe(ipe,(npar+1)/2)
+! phi(ipe,ipa) =  -npart/4.d0/pi*func1/v1   
 !endif
 !
-enddo
-!enddo
-    
-close(43)
-close(42)
-    close(41)
-
-!    enddo
-!enddo
-
-!open(61,file='d2PsiDpe2_max_z=0_3.txt',status='unknown')
-
-  !   call deriv_x1(dpsidve_max,vperp,nperp,npar,d2p)
-     
-!do ipe=1,nperp
-!      !  psi_max_0(ipe) = c20*(-npart/4.d0/pi/gammaa)
-!  !  c20_lim = 2/dsqrt(2.d0*pi)/vteff*(1.d0/3.d0-arg2/5.d0)
-!    psi_max_0(ipe) = d2p(ipe,(npar+1)/2)
-!    write(61,*) vperp(ipe),psi_max_0(ipe)!,c20_lim*(-npart/4.d0/pi)!,ipa
+!!dphidpe(ipe,ipa) =  npart/4.d0/pi/vteff**2*chandra*vperp(ipe)/v1
+!
+!!
 !        enddo
+!enddo
 !
-!close(61)
-
-    
-    ! ==============================
-    ! END TEST : maxwellian background
-    ! ==============================
-    
-end subroutine test_maxwell
+!call deriv_x2(phi,vperp,nperp,npar,d2phidpe2)
+!call deriv_x1(phi,vperp,nperp,npar,dphidpe)
+!
+!do ipe=1,nperp
+!    
+!!if(ipa == (npar+1)/2) 
+!    write(41,*) vperp(ipe),d2phidpe2(ipe,(npar+1)/2)!then!(2*npar+1)/3)
+!      write(42,*) vperp(ipe),phi(ipe,(npar+1)/2)  
+!      write(43,*) vperp(ipe),dphidpe(ipe,(npar+1)/2)
+!!endif
+!!
+!enddo
+!!enddo
+!    
+!close(43)
+!close(42)
+!    close(41)
+!
+!!    enddo
+!!enddo
+!
+!!open(61,file='d2PsiDpe2_max_z=0_3.txt',status='unknown')
+!
+!  !   call deriv_x1(dpsidve_max,vperp,nperp,npar,d2p)
+!     
+!!do ipe=1,nperp
+!!      !  psi_max_0(ipe) = c20*(-npart/4.d0/pi/gammaa)
+!!  !  c20_lim = 2/dsqrt(2.d0*pi)/vteff*(1.d0/3.d0-arg2/5.d0)
+!!    psi_max_0(ipe) = d2p(ipe,(npar+1)/2)
+!!    write(61,*) vperp(ipe),psi_max_0(ipe)!,c20_lim*(-npart/4.d0/pi)!,ipa
+!!        enddo
+!!
+!!close(61)
+!
+!    
+!    ! ==============================
+!    ! END TEST : maxwellian background
+!    ! ==============================
+!    
+!end subroutine test_maxwell
 
 !=====================================================================
   ! Output results to file
   !=====================================================================
-  subroutine output_results(psi_values)!,psi_0
-  
-  use shared_grid
-
-    implicit none
-    integer :: i, j, ios
-    character(len=*), parameter :: filename = "D2PhiDvperp2_integral_6_6.txt"
- !   character(len=*), parameter :: filename0 = "d2psidpe2_results_z=0_1.txt"
-!    character(len=*), parameter :: filename_c = "d2psi_results_z=0-comp.txt"
-    
-double precision, dimension(nperp,npar), intent(in) :: psi_values
-!double precision, dimension(nperp), intent(in) :: psi_0
-
-    
-   
-    open(unit=10, file=filename, status='replace', action='write', iostat=ios)
-    if (ios /= 0) then
-      print *, "Error opening file for writing"
-      return
-    end if
-    !open(unit=11, file=filename0, status='replace', action='write', iostat=ios)
-    !if (ios /= 0) then
-    !  print *, "Error opening file for writing"
-    !  return
-    !end if
-    !    open(unit=12, file=filename_c, status='replace', action='write', iostat=ios)
-    !if (ios /= 0) then
-    !  print *, "Error opening file for writing"
-    !  return
-    !end if
-
-
-   write(*,*) 'Slice at vpar = ',vpar((npar+1)/2)
-   
-    ! Write header
-    write(10, '(A)') "# Vperp Phi(vperp,0)"
-    write(10, *)
-   
-    ! Write data
-    do i = 1, nperp
-      do j = 1, npar
-     !   write(10, '(4ES15.6)') vperp(i), vpar(j), psi_values(i,j)
-        if (j==(npar+1)/2) then!(npar+1)/2
-            write(10, '(4ES15.6)') vperp(i), psi_values(i,j)
-       !     write(12, '(4ES15.6)') vperp(i), dabs(psi_values(i,j)-psi_0(i))/psi_0(i)*100.d0
-        endif
-        
-      end do
-!      write(10, *)  ! Blank line between radial slices for gnuplot
-    end do
-    
-!    close(12)
-    close(11)
-!    close(10)
-!    print *, "Results written to ", filename
-   
-  end subroutine output_results
+!  subroutine output_results(psi_values)!,psi_0
+!  
+!  use shared_grid
+!
+!    implicit none
+!    integer :: i, j, ios
+!    character(len=*), parameter :: filename = "D2PhiDvperp2_integral_6_6.txt"
+! !   character(len=*), parameter :: filename0 = "d2psidpe2_results_z=0_1.txt"
+!!    character(len=*), parameter :: filename_c = "d2psi_results_z=0-comp.txt"
+!    
+!double precision, dimension(nperp,npar), intent(in) :: psi_values
+!!double precision, dimension(nperp), intent(in) :: psi_0
+!
+!    
+!   
+!    open(unit=10, file=filename, status='replace', action='write', iostat=ios)
+!    if (ios /= 0) then
+!      print *, "Error opening file for writing"
+!      return
+!    end if
+!    !open(unit=11, file=filename0, status='replace', action='write', iostat=ios)
+!    !if (ios /= 0) then
+!    !  print *, "Error opening file for writing"
+!    !  return
+!    !end if
+!    !    open(unit=12, file=filename_c, status='replace', action='write', iostat=ios)
+!    !if (ios /= 0) then
+!    !  print *, "Error opening file for writing"
+!    !  return
+!    !end if
+!
+!
+!   write(*,*) 'Slice at vpar = ',vpar((npar+1)/2)
+!   
+!    ! Write header
+!    write(10, '(A)') "# Vperp Phi(vperp,0)"
+!    write(10, *)
+!   
+!    ! Write data
+!    do i = 1, nperp
+!      do j = 1, npar
+!     !   write(10, '(4ES15.6)') vperp(i), vpar(j), psi_values(i,j)
+!        if (j==(npar+1)/2) then!(npar+1)/2
+!            write(10, '(4ES15.6)') vperp(i), psi_values(i,j)
+!       !     write(12, '(4ES15.6)') vperp(i), dabs(psi_values(i,j)-psi_0(i))/psi_0(i)*100.d0
+!        endif
+!        
+!      end do
+!!      write(10, *)  ! Blank line between radial slices for gnuplot
+!    end do
+!    
+!!    close(12)
+!    close(11)
+!!    close(10)
+!!    print *, "Results written to ", filename
+!   
+!  end subroutine output_results
 
     end module nlterm
     
