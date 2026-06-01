@@ -170,6 +170,18 @@ def _load(path: Path):
     return data
 
 
+def _load_ncol(path: Path, ncols: int):
+    """Load a Fortran list-directed file whose records may wrap across lines."""
+    try:
+        tokens = path.read_text().split()
+        arr = np.array(tokens, dtype=float)
+    except Exception:
+        return None
+    if arr.size == 0 or arr.size % ncols != 0:
+        return None
+    return arr.reshape(-1, ncols)
+
+
 def _detect_type(path: Path, data: np.ndarray) -> str:
     """Infer plot type from filename and column count."""
     stem  = path.stem
@@ -697,8 +709,8 @@ def plot_momentum_breakdown(outdir: Path, save_dir, show: bool, casename: str,
     # NBI: 4-data-column file (msrc_perp, msrc_par, mloss_perp, mloss_par)
     f = _outfile(outdir, "momentum_NBI_vs_time", casename)
     if f.exists():
-        data = _load(f)
-        if data is not None and data.shape[1] >= 5:
+        data = _load_ncol(f, 5)
+        if data is not None:
             contributions.append(("NBI src",  data[:, 0], data[:, 1], data[:, 2]))
             contributions.append(("NBI loss", data[:, 0], data[:, 3], data[:, 4]))
 
@@ -776,8 +788,8 @@ def plot_momentum_balance(outdir: Path, save_dir, show: bool, casename: str) -> 
 
     f = _outfile(outdir, "momentum_NBI_vs_time", casename)
     if f.exists():
-        data = _load(f)
-        if data is not None and data.shape[1] >= 5:
+        data = _load_ncol(f, 5)
+        if data is not None:
             # columns: t, msrc_perp, msrc_par, mloss_perp, mloss_par
             ax_perp.plot(data[:, 0], data[:, 1], color=_PALETTE[2], linewidth=1.5, label="NBI source")
             ax_perp.plot(data[:, 0], data[:, 3], color=_PALETTE[2], linewidth=1.5,

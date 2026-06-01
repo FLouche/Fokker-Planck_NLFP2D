@@ -466,7 +466,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         WRITE(570+ib,*) time, mcoll_perp(ib), mcoll_par(ib)
       END DO
       IF (irf   == -1) WRITE(580,*) time, mRF_perp, mRF_par
-      IF (isource==-1) WRITE(590,*) time, msrc_perp, msrc_par, mloss_perp, mloss_par
+      IF (isource==-1) WRITE(590,'(5ES15.7)') time, msrc_perp, msrc_par, mloss_perp, mloss_par
       IF (isc   /=  0) WRITE(600,*) time, mSC_perp, mSC_par
     END IF
 
