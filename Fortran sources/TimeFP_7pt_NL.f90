@@ -91,7 +91,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=256) :: dynfname
 
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
-  REAL(dp) :: lnab_t, cte0_t, ta_eV
+  REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t
   REAL(dp) :: lnab_arr(nbulk)
   REAL(dp) :: mcoll_perp(nbulk), mcoll_par(nbulk)
   REAL(dp) :: mRF_perp, mRF_par, msrc_perp, msrc_par
@@ -235,6 +235,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='unknown')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='unknown')
     IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')), status='unknown')
+    IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
       DO ib = 1, nbulk
@@ -270,6 +271,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='old', access='append')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='old', access='append')
     IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')), status='old', access='append')
+    IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
@@ -316,6 +318,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
    write(*,*) 'Initial effective temperature is ',teff_tmp
    
    teff = teff_tmp
+   lnaa_t = 0.0_dp
 
   time_loop: DO itime = 1, ntimes
 
@@ -347,6 +350,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       END DO
       CALL time_energy(f_init, dens_tmp, teff=teff)
       ta_eV = teff * 1.0d3
+      IF (isc /= 0) CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
       DO ib = 2, nbulk
         CALL coulomb_log_ab(za, aa, ta_eV, npart, &
                             zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
@@ -473,6 +477,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       IF (isc /= 0)     WRITE(500,*) time, pcoll_self/1.d6
     END IF
     IF (nbulk > 1)  WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
+    IF (isc /= 0)   WRITE(506,*) time, lnaa_t
 
     IF (iplot_mom == -1) THEN
       CALL time_momentum_7pt(x_vec, dens_tmp, mcoll_perp, mcoll_par, &
@@ -523,6 +528,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     DO ib = 1, nbulk; CLOSE(470+ib); END DO
   END IF
   IF (nbulk > 1) CLOSE(505)
+  IF (isc /= 0)  CLOSE(506)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)

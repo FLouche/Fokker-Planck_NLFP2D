@@ -132,7 +132,10 @@ FILE_META = {
 }
 
 # Files to skip (unusual format or not useful for plotting)
-_SKIP_STEMS = {"RF_dirac", "fstix", "power_NBI_vs_time", "momentum_NBI_vs_time",
+_SKIP_STEMS = {"RF_dirac", "fstix",
+               "density_vs_time",
+               "power_NBI_vs_time", "power_coll_tot_vs_time",
+               "momentum_NBI_vs_time", "momentum_coll_tot_vs_time",
                "coulomb_log_vs_time", "coulomb_log_self_vs_time"}
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
@@ -473,6 +476,100 @@ def plot_power_balance(outdir: Path, save_dir, show: bool, casename: str) -> Non
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_power_combined(outdir: Path, save_dir, show: bool, casename: str,
+                        show_sc: bool = True) -> None:
+    """Two-panel: collisional power breakdown (top) and power balance (bottom)."""
+    base_coll = _outfile(outdir, "power_coll_e_vs_time", casename)
+    base_tot  = _outfile(outdir, "power_coll_tot_vs_time", casename)
+    if not base_coll.exists() and not base_tot.exists():
+        return
+    fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+
+    # --- Top: collisional breakdown ---
+    plotted_top = False
+    if base_coll.exists():
+        t, y = _ts_col(base_coll)
+        if t is not None:
+            ax_top.plot(t, y, color=_PALETTE[0], linewidth=1.5, label="e⁻")
+            plotted_top = True
+
+    for ib in range(1, 10):
+        f = _outfile(outdir, f"power_coll_ion {ib}_vs_time", casename)
+        if not f.exists():
+            f = _outfile(outdir, f"power_coll_ion{ib}_vs_time", casename)
+        if not f.exists():
+            break
+        t, y = _ts_col(f)
+        if t is not None:
+            ax_top.plot(t, y, color=_PALETTE[ib % len(_PALETTE)], linewidth=1.5, label=f"ion {ib}")
+            plotted_top = True
+
+    if show_sc:
+        f = _outfile(outdir, "power_coll_self_vs_time", casename)
+        if f.exists():
+            t, y = _ts_col(f)
+            if t is not None:
+                ax_top.plot(t, y, color=_PALETTE[4], linewidth=1.5, linestyle="--", label="self")
+                plotted_top = True
+
+    ax_top.set_ylabel("Power density (MW·m⁻³)")
+    ax_top.set_title(_title({}, "Power vs time", casename))
+    if plotted_top:
+        ax_top.legend()
+    ax_top.grid(True, alpha=0.3)
+    ax_top.set_xlim(left=0)
+
+    # --- Bottom: power balance ---
+    plotted_bot = False
+    t_ref, y_sum = None, None
+
+    def _add(t, y):
+        nonlocal t_ref, y_sum
+        if t is None:
+            return
+        if t_ref is None:
+            t_ref = t; y_sum = y.copy()
+        elif len(t) == len(t_ref):
+            y_sum += y
+
+    if base_tot.exists():
+        t, y = _ts_col(base_tot)
+        if t is not None:
+            ax_bot.plot(t, y, color=_PALETTE[0], linewidth=1.5, label="collisional")
+            _add(t, y); plotted_bot = True
+
+    f = _outfile(outdir, "power_RF_vs_time", casename)
+    if f.exists():
+        t, y = _ts_col(f)
+        if t is not None:
+            ax_bot.plot(t, y, color=_PALETTE[1], linewidth=1.5, label="RF")
+            _add(t, y); plotted_bot = True
+
+    f = _outfile(outdir, "power_NBI_vs_time", casename)
+    if f.exists():
+        data = _load(f)
+        if data is not None and data.shape[1] >= 3:
+            ax_bot.plot(data[:, 0], data[:, 1], color=_PALETTE[2], linewidth=1.5, label="NBI source")
+            ax_bot.plot(data[:, 0], data[:, 2], color=_PALETTE[2], linewidth=1.5,
+                        linestyle="--", label="NBI losses")
+            _add(data[:, 0], data[:, 1]); _add(data[:, 0], data[:, 2])
+            plotted_bot = True
+
+    if t_ref is not None:
+        ax_bot.plot(t_ref, y_sum, color="black", linewidth=2.0, linestyle="--", label="net")
+
+    ax_bot.set_xlabel("Time (s)")
+    ax_bot.set_ylabel("Power density (MW·m⁻³)")
+    if plotted_bot:
+        ax_bot.legend()
+    ax_bot.grid(True, alpha=0.3)
+    ax_bot.set_xlim(left=0)
+
+    fig.tight_layout()
+    stem_out = f"power_vs_time-{casename}" if casename else "power_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
 def plot_coulomb_log(outdir: Path, save_dir, show: bool, casename: str,
                      show_sc: bool = True) -> None:
     """Coulomb logarithm vs time: background ions + self-collision on one axes."""
@@ -692,14 +789,10 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
             print(f"    Error: {exc}")
 
     if restrict is None and not steady_state:
-        print("  [cmp]  power_coll_vs_time")
-        plot_power_coll(outdir, save_dir, show, casename, show_sc=show_sc)
-        print("  [cmp]  power_balance_vs_time")
-        plot_power_balance(outdir, save_dir, show, casename)
+        print("  [cmp]  power_vs_time")
+        plot_power_combined(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  coulomb_log_all_vs_time")
         plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
-        print("  [cmp]  momentum_coll_vs_time")
-        plot_momentum_coll(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  momentum_balance_vs_time")
         plot_momentum_balance(outdir, save_dir, show, casename)
 
