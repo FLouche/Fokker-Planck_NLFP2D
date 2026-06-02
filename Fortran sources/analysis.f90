@@ -35,7 +35,7 @@ module mod_anal
     
     double precision pmass, kev_in_J
     double PRECISION mod0,mod2,mod2_perp,mod2_par
-    double precision teff,Tperp,Tpar
+    double precision teff,Tperp,Tpar,anisotropy
     
     integer iv,ip
     
@@ -133,10 +133,14 @@ close(40)
     
     !Teff = 2.d0/3.d0* 0.5*pmass*aa*(mod2_perp+mod2_par)/kev_in_J
     Teff =(2.d0*Tperp+Tpar)/3.d0
-    
+
     write(*,*) 'Effective temperature is ',Teff, 'keV'
-    
-    
+
+    anisotropy = merge(100.d0*(Tperp/(Tperp+Tpar) - 2.d0/3.d0)/(2.d0/3.d0), &
+                       0.d0, (Tperp+Tpar) > 0.d0)
+    write(*,*) 'Anisotropy factor is ', anisotropy, '%'
+
+
     open(40,file=TRIM(outfile('Ekin_par.txt')), status='unknown')
 
 
