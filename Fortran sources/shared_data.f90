@@ -78,7 +78,16 @@ implicit none
 !
 save
 !
-integer :: ntimes,iold,icn,isc
+! ntimes(k) and timestep(k): up to 3 sequential phases.
+! Phase k runs ntimes(k) steps of timestep(k) seconds.
+! ntimes(2) and ntimes(3) default to 0 (phase skipped).
+! ntimes(1)=0 → steady-state run (phases 2 and 3 ignored).
+integer, dimension(3) :: ntimes   = [0, 0, 0]
+double precision, dimension(3) :: timestep = [0.0d0, 0.0d0, 0.0d0]
+! Per-phase scalars used internally by the time solvers (set by main before each solver call).
+integer :: ntimes_cur   = 0
+double precision :: timestep_cur = 0.0d0
+integer :: iold,icn,isc
 integer :: new_grid = -1    ! -1: new grid (compute+save sum_phi); 0: same grid (load sum_phi)
 integer :: i_ss_check  = 0       ! 0: disabled; -1: auto-stop when SS reached
 integer :: n_ss_window = 50      ! rolling window width (steps) for SS detection
@@ -86,7 +95,6 @@ double precision :: ss_tol = 1.0d-3  ! relative tolerance for SS convergence
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
-double precision :: timestep
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''
 !

@@ -177,7 +177,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   ja_lhs = ja_L
 
   DO ptr = 1, nnz_L
-    aa_lhs(ptr) = -theta * timestep * aa_L(ptr)
+    aa_lhs(ptr) = -theta * timestep_cur * aa_L(ptr)
   END DO
 
   ! Add identity: find diagonal entries (col == row) and add 1
@@ -309,9 +309,9 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   ! Fixed Stix background temperature for isc=1 self-collision Coulomb log
   teff_sc_eV = aa * (vteff / 9.79d3)**2
 
-  time_loop: DO itime = 1, ntimes
+  time_loop: DO itime = 1, ntimes_cur
 
-    time = otime + itime*timestep
+    time = otime + itime*timestep_cur
     WRITE(*,*) 'Time is ', time, ' s'
 
     !--- Update Coulomb log and rebuild linear operator each step ----
@@ -370,7 +370,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     !--- Rebuild aa_lhs = I - theta*dt*L (with BC restoration) -----
     DO ptr = 1, nnz_L
-      aa_lhs(ptr) = -theta * timestep * aa_L(ptr)
+      aa_lhs(ptr) = -theta * timestep_cur * aa_L(ptr)
     END DO
     DO row = 1, ndof
       DO ptr = ia_lhs(row), ia_lhs(row+1)-1
@@ -401,8 +401,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     DO row = 1, ndof
       rhs_vec(row) = fstart(row) &
-                   + (1.0_dp - theta) * timestep * Lf(row) &
-                   + timestep * source_v(row)
+                   + (1.0_dp - theta) * timestep_cur * Lf(row) &
+                   + timestep_cur * source_v(row)
     END DO
 
     ! BC rows are constraints: RHS must be zero so the solver enforces

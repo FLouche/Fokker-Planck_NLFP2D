@@ -211,7 +211,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !     The aa_lhs values here are just to give PARDISO a valid array;
   !     the actual values are updated before every solve.
   !================================================================
-  aa_lhs = -theta * timestep * aa_L
+  aa_lhs = -theta * timestep_cur * aa_L
   DO row = 1, ndof
     DO ptr = ia_lhs(row), ia_lhs(row+1)-1
       IF (ja_lhs(ptr) == row) THEN
@@ -322,9 +322,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
    teff = teff_tmp
    lnaa_t = 0.0_dp
 
-  time_loop: DO itime = 1, ntimes
+  time_loop: DO itime = 1, ntimes_cur
 
-    time = otime + itime*timestep
+    time = otime + itime*timestep_cur
     WRITE(*,*) 'Time is ', time, ' s'
 
     !--- 5a. Self-collision coefficients from f^n ------------------
@@ -395,7 +395,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
     !--- 5d. Rebuild aa_lhs = I - theta*dt*L ----------------------
     DO ptr = 1, nnz_L
-      aa_lhs(ptr) = -theta * timestep * aa_L(ptr)
+      aa_lhs(ptr) = -theta * timestep_cur * aa_L(ptr)
     END DO
     DO row = 1, ndof
       DO ptr = ia_lhs(row), ia_lhs(row+1)-1
@@ -422,8 +422,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     CALL sparse_matvec_csr(ndof, ia_L, ja_L, aa_L, fstart, Lf)
     DO row = 1, ndof
       rhs_vec(row) = fstart(row) &
-                   + (1.0_dp - theta) * timestep * Lf(row) &
-                   + timestep * source_v(row)
+                   + (1.0_dp - theta) * timestep_cur * Lf(row) &
+                   + timestep_cur * source_v(row)
     END DO
     ! BC rows are constraints: zero RHS so the BC is enforced exactly.
     DO row = 1, ndof
