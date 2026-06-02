@@ -92,9 +92,14 @@ enddo
 ! Source term
 ! -----------
 
-! Normalising factor
-
-fac = twopi*beam_vperp
+! Normalising factor: exact numerical integral of svel * 2*pi*vperp over the
+! perp grid, matching the quadrature used by ncint_2D.  The analytical
+! approximation 2*pi*v_perp_beam diverges to zero when beam_angle=0 and
+! causes a division-by-zero; this form is valid for any injection angle.
+fac = 0.0d0
+do i = 1, nperp-1
+    fac = fac + svel(i) * twopi * vperp(i) * (vperp(i+1) - vperp(i))
+end do
 
 do i=1, nperp
 	do j=1,npar
