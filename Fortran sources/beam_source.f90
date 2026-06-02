@@ -92,9 +92,11 @@ enddo
 ! Source term
 ! -----------
 
-! Normalising factor
-
-fac = twopi*beam_vperp
+! Normalising factor: exact integral of delta_d(vperp - vperp_beam, dvperp)
+! times 2*pi*vperp from 0 to infinity.  Recovers 2*pi*vperp_beam when
+! vperp_beam >> dvperp; finite and correct for vperp_beam = 0 (parallel beam).
+fac = dsqrt(pi) * beam_dvperp * dexp(-(beam_vperp/beam_dvperp)**2) &
+    + pi * beam_vperp * erfc(-beam_vperp/beam_dvperp)
 
 do i=1, nperp
 	do j=1,npar
