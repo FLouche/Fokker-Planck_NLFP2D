@@ -33,7 +33,7 @@ double PRECISION, intent(in) :: fin(nbig)
 double precision, dimension(nbulk) :: pcoll
 
 integer:: ib,ix,iv,imu
-double precision :: plosses,psource,pRF,pSC
+double precision :: plosses,psource,pRF,pSC,pSC_perp,pSC_par
 
 double PRECISION, allocatable, dimension(:,:) :: rf00
 
@@ -48,7 +48,7 @@ external dgemv
 taum = 0.d0 ! temporary 
 
 
-call time_power_7pt(fin, npart, pcoll, pRF, psource, plosses, pSC)
+call time_power_7pt(fin, npart, pcoll, pRF, psource, plosses, pSC, pSC_perp, pSC_par)
 
     
     write(*,*) ''
