@@ -35,7 +35,7 @@ module mod_anal
     
     double precision pmass, kev_in_J
     double PRECISION mod0,mod2,mod2_perp,mod2_par
-    double precision teff,Tperp,Tpar,anisotropy
+    double precision teff,Tperp,Tpar,anisotropy,anisotropy_perp
     
     integer iv,ip
     
@@ -135,10 +135,15 @@ close(40)
 
     write(*,*) 'Effective temperature is ',Teff, 'keV'
 
-    ! Anisotropy: E_perp/E_total where E_total = Tperp + 0.5*Tpar.
+    ! Standard anisotropy: 0% for isotropic, >0 for perp-dominated.
     anisotropy = merge(100.d0*(Tperp/(Tperp + 0.5d0*Tpar) - 2.d0/3.d0)/(2.d0/3.d0), &
                        0.d0, (Tperp + 0.5d0*Tpar) > 0.d0)
-    write(*,*) 'Anisotropy factor is ', anisotropy, '%'
+    write(*,*) 'Anisotropy factor is           ', anisotropy, '%'
+
+    ! Perpendicular anisotropy: 0% (all parallel) -> 50% (Maxwellian) -> 100% (all perp).
+    ! = 100 * E_perp / (E_perp + 2*E_par) = 100 * Tperp / (Tperp + Tpar).
+    anisotropy_perp = merge(100.d0*Tperp/(Tperp + Tpar), 0.d0, (Tperp + Tpar) > 0.d0)
+    write(*,*) 'Perpendicular anisotropy is    ', anisotropy_perp, '%  (50% = Maxwellian)'
 
 
     open(40,file=TRIM(outfile('Ekin_par.txt')), status='unknown')

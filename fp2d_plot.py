@@ -91,7 +91,7 @@ FILE_META = {
     # Simple time series -------------------------------------------------------
     "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
                                 "title": "Particle density vs time"},
-    "anisotropy_vs_time":      {"ptype": "ts",  "ylabel": "Anisotropy (%)",
+    "anisotropy_vs_time":      {"ptype": "ts",  "ylabel": "Perp. anisotropy (%, 50=Maxwell)",
                                 "title": "Anisotropy factor vs time"},
     "power_coll_tot_vs_time":  {"ptype": "ts",
                                 "ylabel": "Power density (MW·m⁻³)",
