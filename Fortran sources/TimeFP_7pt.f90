@@ -83,6 +83,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
+  REAL(dp) :: pcoll_self_perp, pcoll_self_par
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
   INTEGER :: error, ib
@@ -161,8 +162,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END DO
   END DO
 
-  WRITE(*,'(A,I10,A,F6.2,A)') '  L operator: nnz=', nnz_L, &
-      '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
+  !WRITE(*,'(A,I10,A,F6.2,A)') '  L operator: nnz=', nnz_L, &
+   !   '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
 
   !================================================================
   ! 2.  Build LHS matrix:  M_lhs = I - theta*dt*L
@@ -312,7 +313,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   time_loop: DO itime = 1, ntimes_cur
 
     time = otime + itime*timestep_cur
-    WRITE(*,*) 'Time is ', time, ' s'
+   ! WRITE(*,*) 'Time is ', time, ' s'
 
     !--- Update Coulomb log and rebuild linear operator each step ----
     lnab_arr = 0.0_dp
@@ -432,7 +433,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     !--- Diagnostics (identical to TimeFP3) -----------------------
     CALL time_density(fout, dens_tmp)
-    WRITE(*,*)  'Unnormalised density is ', dens_tmp
+  !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
     WRITE(45,*) time, dens_tmp
     
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar, teff)
@@ -441,7 +442,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(47,*) time, anisotropy
     WRITE(507,*) time, teff
 
-    CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
+    CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
+                        pcoll_self, pcoll_self_perp, pcoll_self_par)
 
     IF (iplot_pow == -1) THEN
       WRITE(470,*) time, (SUM(pcoll)+pcoll_self)/1.d6
@@ -450,7 +452,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
       IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-      IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6
+      IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6, &
+                                         pcoll_self_perp/1.d6, pcoll_self_par/1.d6
     END IF
     IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
     IF (isc==1 .OR. isc==2) WRITE(506,*) time, lnaa_t

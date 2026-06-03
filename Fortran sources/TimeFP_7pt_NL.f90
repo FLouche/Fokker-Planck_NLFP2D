@@ -83,6 +83,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: theta
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff,teff_tmp
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
+  REAL(dp) :: pcoll_self_perp, pcoll_self_par
   REAL(dp) :: t_start, t_end
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
@@ -465,7 +466,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     WRITE(507,*) time, teff
 
 
-    CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, pcoll_self)
+    CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
+                        pcoll_self, pcoll_self_perp, pcoll_self_par)
 
     IF (iplot_pow == -1) THEN
       WRITE(470,*) time, (SUM(pcoll)+pcoll_self)/1.d6
@@ -474,7 +476,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf    == -1) WRITE(480,*) time, pRF/1.d6
       IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-      IF (isc /= 0)     WRITE(500,*) time, pcoll_self/1.d6
+      IF (isc /= 0)     WRITE(500,*) time, pcoll_self/1.d6, &
+                                         pcoll_self_perp/1.d6, pcoll_self_par/1.d6
     END IF
     IF (nbulk > 1)  WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
     IF (isc /= 0)   WRITE(506,*) time, lnaa_t

@@ -102,9 +102,10 @@ FILE_META = {
     "power_RF_vs_time":        {"ptype": "ts",
                                 "ylabel": "Power density (MW·m⁻³)",
                                 "title": "RF power density"},
-    "power_coll_self_vs_time": {"ptype": "ts",
+    "power_coll_self_vs_time": {"ptype": "ts2",
                                 "ylabel": "Power density (MW·m⁻³)",
-                                "title": "Self-collision power density"},
+                                "title": "Self-collision power density",
+                                "labels": ["total", "⊥", "∥"]},
     # Two-curve time series ----------------------------------------------------
     "energy_vs_time":               {"ptype": "ts2", "ylabel": "Energy (keV)",
                                      "title": "Kinetic energy vs time",

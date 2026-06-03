@@ -16,7 +16,8 @@
 !*******************************************************
     
 
-SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
+SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
+                           pcoll_self, pcoll_self_perp, pcoll_self_par)
 
   USE shared_grid
   USE mod_ncint
@@ -37,6 +38,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
   !--- Arguments ---------------------------------------------------
   REAL(dp), INTENT(IN)  :: f(nbig), dens
   REAL(dp), INTENT(OUT) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
+  REAL(dp), INTENT(OUT) :: pcoll_self_perp, pcoll_self_par
 
   !--- Local arrays ------------------------------------------------
   REAL(dp) :: ekin(nperp,npar)          ! kinetic energy at each node
@@ -122,8 +124,28 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, pcoll_self)
 
     CALL ncint_2d(fint, pcoll_self)
 
+    ! Perpendicular component: weight by ½ m v⊥²
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        ix = index_mat(iv, ip)
+        fint(iv,ip) = 0.5_dp*pmass*aa * vperp(iv)**2 * normfac * Lf(ix) * jacob(iv,ip)
+      END DO
+    END DO
+    CALL ncint_2d(fint, pcoll_self_perp)
+
+    ! Parallel component: weight by ½ m v∥²
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        ix = index_mat(iv, ip)
+        fint(iv,ip) = 0.5_dp*pmass*aa * vpar(ip)**2  * normfac * Lf(ix) * jacob(iv,ip)
+      END DO
+    END DO
+    CALL ncint_2d(fint, pcoll_self_par)
+
   ELSE
-    pcoll_self = 0.0_dp
+    pcoll_self      = 0.0_dp
+    pcoll_self_perp = 0.0_dp
+    pcoll_self_par  = 0.0_dp
   END IF
 
   !================================================================
