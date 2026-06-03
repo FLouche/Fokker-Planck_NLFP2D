@@ -862,7 +862,8 @@ def plot_momentum_balance(outdir: Path, save_dir, show: bool, casename: str) -> 
 
 def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                    casename: str, restrict=None, steady_state: bool = False,
-                   show_sc: bool = True, plot3d: bool = False) -> None:
+                   show_sc: bool = True, show_pow: bool = True,
+                   show_mom: bool = True, plot3d: bool = False) -> None:
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -910,17 +911,19 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
             print(f"    Error: {exc}")
 
     if restrict is None and not steady_state:
-        print("  [cmp]  power_vs_time")
-        plot_power_combined(outdir, save_dir, show, casename, show_sc=show_sc)
-        if show_sc:
-            print("  [cmp]  power_sc_split_vs_time")
-            plot_sc_power_split(outdir, save_dir, show, casename)
+        if show_pow:
+            print("  [cmp]  power_vs_time")
+            plot_power_combined(outdir, save_dir, show, casename, show_sc=show_sc)
+            if show_sc:
+                print("  [cmp]  power_sc_split_vs_time")
+                plot_sc_power_split(outdir, save_dir, show, casename)
         print("  [cmp]  coulomb_log_all_vs_time")
         plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
-        print("  [cmp]  momentum_breakdown_vs_time")
-        plot_momentum_breakdown(outdir, save_dir, show, casename, show_sc=show_sc)
-        print("  [cmp]  momentum_balance_vs_time")
-        plot_momentum_balance(outdir, save_dir, show, casename)
+        if show_mom:
+            print("  [cmp]  momentum_breakdown_vs_time")
+            plot_momentum_breakdown(outdir, save_dir, show, casename, show_sc=show_sc)
+            print("  [cmp]  momentum_balance_vs_time")
+            plot_momentum_balance(outdir, save_dir, show, casename)
 
     if show:
         plt.show()  # single blocking call — all windows open simultaneously
@@ -959,6 +962,30 @@ def _read_isc_from_namelist(input_file: Path) -> int:
     try:
         text = input_file.read_text(errors="replace")
         m = re.search(r'\bisc\s*=\s*([+-]?\d+)', text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return 0
+
+
+def _read_iplot_pow_from_namelist(input_file: Path) -> int:
+    """Return iplot_pow from a Fortran namelist; default -1 (enabled)."""
+    try:
+        text = input_file.read_text(errors="replace")
+        m = re.search(r'\biplot_pow\s*=\s*([+-]?\d+)', text, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return -1
+
+
+def _read_iplot_mom_from_namelist(input_file: Path) -> int:
+    """Return iplot_mom from a Fortran namelist; default 0 (disabled)."""
+    try:
+        text = input_file.read_text(errors="replace")
+        m = re.search(r'\biplot_mom\s*=\s*([+-]?\d+)', text, re.IGNORECASE)
         if m:
             return int(m.group(1))
     except Exception:
@@ -1023,6 +1050,10 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="skip time-trace plots (for ntimes=0 runs)")
     p.add_argument("--no-sc",        action="store_true", dest="no_sc",
                    help="suppress self-collision power plots (for isc=0 runs)")
+    p.add_argument("--no-pow",       action="store_true", dest="no_pow",
+                   help="suppress power vs time plots (for iplot_pow=0 runs)")
+    p.add_argument("--no-mom",       action="store_true", dest="no_mom",
+                   help="suppress momentum vs time plots (for iplot_mom=0 runs)")
     p.add_argument("--3d",           action="store_true", dest="plot3d",
                    help="add 3D surface plots for 2D distribution files")
 
@@ -1079,6 +1110,14 @@ def main(argv=None):
             if isc == 0:
                 args.no_sc = True
                 print("No self-collisions (isc=0): self-collision power plots will be skipped.")
+        if not args.no_pow:
+            if _read_iplot_pow_from_namelist(input_file) == 0:
+                args.no_pow = True
+                print("iplot_pow=0: power vs time plots will be skipped.")
+        if not args.no_mom:
+            if _read_iplot_mom_from_namelist(input_file) == 0:
+                args.no_mom = True
+                print("iplot_mom=0: momentum vs time plots will be skipped.")
         rc = run_solver(exe, input_file, run_dir, out_file=args.out)
         if rc != 0:
             print(f"Warning: solver exited with code {rc}", file=sys.stderr)
@@ -1107,6 +1146,8 @@ def main(argv=None):
         restrict=args.files,
         steady_state=args.steady_state,
         show_sc=not args.no_sc,
+        show_pow=not args.no_pow,
+        show_mom=not args.no_mom,
         plot3d=args.plot3d,
     )
     print("Done.")
