@@ -198,8 +198,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     END DO
   END DO
 
-  WRITE(*,'(A,I10,A,F6.2,A)') '  L operator (7-pt NL): nnz=', nnz_L, &
-      '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
+  !WRITE(*,'(A,I10,A,F6.2,A)') '  L operator (7-pt NL): nnz=', nnz_L, &
+   !   '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
 
   !--- Copy sparsity pattern to LHS arrays (values filled per step)
   ia_lhs = ia_L
@@ -325,7 +325,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   time_loop: DO itime = 1, ntimes_cur
 
     time = otime + itime*timestep_cur
-    WRITE(*,*) 'Time is ', time, ' s'
+   ! WRITE(*,*) 'Time is ', time, ' s'
 
     !--- 5a. Self-collision coefficients from f^n ------------------
     ! When starting from zero (iold=0, isource=-1), skip SC while beam
@@ -444,9 +444,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (error /= 0) THEN
       WRITE(*,*) 'timefp_7pt_nl: pardiso_solve_step failed, error=', error; STOP
     END IF
-    IF (itime == 1) THEN
-      WRITE(*,'(A,2ES14.5)') '  ||x_vec||, x min/max:', SQRT(SUM(x_vec**2)), MINVAL(x_vec), MAXVAL(x_vec)
-    END IF
 
     !--- Unpack solution into fout ---------------------------------
     DO iv = 1, nperp
@@ -458,7 +455,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
     !--- Diagnostics -----------------------------------------------
     CALL time_density(fout, dens_tmp)
-    WRITE(*,*)  'Unnormalised density is ', dens_tmp
+  !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
     WRITE(45,*) time, dens_tmp
 
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar,teff)
