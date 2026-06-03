@@ -638,8 +638,8 @@ def plot_sc_power_split(outdir: Path, save_dir, show: bool, casename: str) -> No
     f = _outfile(outdir, "power_coll_self_vs_time", casename)
     if not f.exists():
         return
-    data = _load(f)
-    if data is None or data.shape[1] < 4:
+    data = _load_ncol(f, 4)   # list-directed WRITE wraps lines; tokenise first
+    if data is None:
         return
     t = data[:, 0]
     fig, ax = plt.subplots(figsize=(8, 5))
