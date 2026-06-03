@@ -627,6 +627,38 @@ def plot_coulomb_log(outdir: Path, save_dir, show: bool, casename: str,
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_sc_power_split(outdir: Path, save_dir, show: bool, casename: str) -> None:
+    """Self-collision power split: perpendicular and parallel components vs time.
+
+    Reads power_coll_self_vs_time (4-column format: time, total, perp, par).
+    Plots P_SC_⊥ and P_SC_∥; also draws the total as a thin reference so
+    readers can verify P_SC_⊥ + P_SC_∥ ≈ 0 (energy conservation).
+    Silently skips if the file is absent or has fewer than 4 columns (old format).
+    """
+    f = _outfile(outdir, "power_coll_self_vs_time", casename)
+    if not f.exists():
+        return
+    data = _load(f)
+    if data is None or data.shape[1] < 4:
+        return
+    t = data[:, 0]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(t, data[:, 2], color=_PALETTE[0], linewidth=1.5, label="P_SC ⊥")
+    ax.plot(t, data[:, 3], color=_PALETTE[1], linewidth=1.5, label="P_SC ∥")
+    ax.plot(t, data[:, 1], color="grey",       linewidth=0.8,
+            linestyle="--", label="total (≈0)")
+    ax.axhline(0, color="black", linewidth=0.5, linestyle=":")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Power density (MW·m⁻³)")
+    ax.set_title(_title({}, "Self-collision power split (⊥ / ∥)", casename))
+    ax.set_xlim(left=0)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    stem_out = f"power_sc_split_vs_time-{casename}" if casename else "power_sc_split_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
 def plot_momentum_coll(outdir: Path, save_dir, show: bool, casename: str,
                        show_sc: bool = True) -> None:
     """Collisional momentum breakdown: electrons + bulk ions + self-collisions (⊥ and ∥)."""
@@ -878,6 +910,9 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
     if restrict is None and not steady_state:
         print("  [cmp]  power_vs_time")
         plot_power_combined(outdir, save_dir, show, casename, show_sc=show_sc)
+        if show_sc:
+            print("  [cmp]  power_sc_split_vs_time")
+            plot_sc_power_split(outdir, save_dir, show, casename)
         print("  [cmp]  coulomb_log_all_vs_time")
         plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
         print("  [cmp]  momentum_breakdown_vs_time")
