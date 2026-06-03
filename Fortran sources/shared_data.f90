@@ -95,6 +95,7 @@ double precision :: ss_tol = 1.0d-3  ! relative tolerance for SS convergence
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
+integer :: idiag     = 0         ! 0: power balance only; -1: all balances (density+momentum+power)
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''
 !

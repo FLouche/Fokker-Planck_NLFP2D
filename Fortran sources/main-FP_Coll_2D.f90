@@ -160,7 +160,7 @@ namelist /INPUT/ casename, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, &
                 i_ss_check, n_ss_window, ss_tol, &
-                iplot_pow, iplot_mom
+                iplot_pow, iplot_mom, idiag
                 
 
 !write(*,*) 'Read namelist'

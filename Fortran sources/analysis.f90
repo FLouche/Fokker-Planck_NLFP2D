@@ -165,9 +165,11 @@ do iv = 1,nperp
         enddo
 enddo
 
-call test_density_balance_7pt(xout)
-call test_momentum_balance_7pt(xout)
 call test_power_balance_7pt(xout)
+if (idiag == -1) then
+    call test_density_balance_7pt(xout)
+    call test_momentum_balance_7pt(xout)
+end if
 
 
 
