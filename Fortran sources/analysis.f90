@@ -124,20 +124,20 @@ close(40)
 
     call ncint_2d(fint,mod2_par)
     
+    ! Tpar = m<v_par^2> (plasma convention: no factor ½).
+    ! True parallel kinetic energy E_par = ½m<v_par^2> = 0.5*Tpar.
     Tpar = pmass*aa*mod2_par/kev_in_J
-    
-    write(*,*) 'Parallel Kinetic Energy is ', Tpar, 'keV'
-    
-    ! Effective temperature (13/05/2026)
-    ! 〈mv^2/2〉 = 3/2NkTeff
-    
-    !Teff = 2.d0/3.d0* 0.5*pmass*aa*(mod2_perp+mod2_par)/kev_in_J
+
+    write(*,*) 'Parallel Kinetic Energy is ', 0.5d0*Tpar, 'keV'
+
+    ! Teff = (2/3)*E_total = (2*Tperp + Tpar)/3 is correct given the above.
     Teff =(2.d0*Tperp+Tpar)/3.d0
 
     write(*,*) 'Effective temperature is ',Teff, 'keV'
 
-    anisotropy = merge(100.d0*(Tperp/(Tperp+Tpar) - 2.d0/3.d0)/(2.d0/3.d0), &
-                       0.d0, (Tperp+Tpar) > 0.d0)
+    ! Anisotropy: E_perp/E_total where E_total = Tperp + 0.5*Tpar.
+    anisotropy = merge(100.d0*(Tperp/(Tperp + 0.5d0*Tpar) - 2.d0/3.d0)/(2.d0/3.d0), &
+                       0.d0, (Tperp + 0.5d0*Tpar) > 0.d0)
     write(*,*) 'Anisotropy factor is ', anisotropy, '%'
 
 
