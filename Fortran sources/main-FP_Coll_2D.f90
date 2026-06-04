@@ -15,7 +15,11 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-!   Version 2 - 29/05/2026 (FL)
+!     Version 2.1  - 03/06/2026 (FL)
+!
+!    Various corrections + new definition of the anisotropy factor
+!
+!     Version 2 - 29/05/2026 (FL)
 !
 !  Self-collision term (non-linear) consistently considers the variations
 !   of the Coulomb logarithm
