@@ -1,0 +1,997 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{microtype}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!10},
+  frame=single,
+  framerule=0.4pt,
+  breaklines=true,
+  columns=fullflexible,
+}
+
+% Short-hands
+\newcommand{\vp}{v_\perp}
+\newcommand{\vpa}{v_\parallel}
+\newcommand{\fvdf}{f(\vp,\vpa)}
+\newcommand{\dt}{\Delta t}
+\newcommand{\Lcal}{\mathcal{L}}
+\newcommand{\namvar}[1]{\texttt{\textbf{#1}}}
+
+% ============================================================
+\title{\textbf{FP2D\_QLRF\_NL}\\[0.4em]
+       \large User Manual\\[0.4em]
+       \normalsize 2D Fokker--Planck solver for ion velocity distribution
+       functions in cylindrical velocity space}
+\author{F.~Louche\\LPP-ERM/KMS}
+\date{Version 2.1 -- June 2026}
+% ============================================================
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introduction}
+% ============================================================
+
+\texttt{FP2D\_QLRF\_NL} solves the two-dimensional Fokker--Planck (FP) equation
+for the velocity distribution function (VDF) $f(\vp,\vpa,t)$ of a minority ion
+species in a magnetised plasma.  The two velocity coordinates are the speed
+perpendicular to the magnetic field $\vp \ge 0$ and the speed parallel to the
+field $\vpa \in (-\infty,+\infty)$.  Azimuthal symmetry about the magnetic
+field direction is assumed throughout.
+
+The code accounts for three physical operators:
+\begin{enumerate}
+  \item \textbf{Coulomb collisions} with one or more Maxwellian background
+        species (electrons and bulk ions).
+  \item \textbf{Quasi-linear radio-frequency (RF) heating} via the
+        quasi-linear diffusion operator, evaluated using complex Bessel
+        functions.
+  \item \textbf{Self-collisions} (collisions of minority ions with
+        themselves), with four levels of approximation selectable at runtime.
+\end{enumerate}
+An optional NBI \textbf{beam source} term and an associated particle
+\textbf{loss term} are also included.
+
+The code can compute either a \emph{steady-state} solution (direct solve) or
+a \emph{time-dependent} evolution (implicit time integration).  Spatial
+discretization uses a 7-point Fornberg finite-difference stencil.  The
+resulting sparse linear systems are solved with Intel MKL PARDISO.
+
+
+% ============================================================
+\section{Physical Model}
+% ============================================================
+
+\subsection{The Fokker--Planck Equation}
+
+The VDF $f = \fvdf$ evolves according to
+\begin{equation}
+\label{eq:FP}
+  \frac{\partial f}{\partial t} =
+    A\,f
+  + B\,\frac{\partial f}{\partial \vp}
+  + C\,\frac{\partial f}{\partial \vpa}
+  + D\,\frac{\partial^2 f}{\partial \vp^2}
+  + E\,\frac{\partial^2 f}{\partial \vp\,\partial \vpa}
+  + F\,\frac{\partial^2 f}{\partial \vpa^2}
+  + S(\vp,\vpa),
+\end{equation}
+where the six coefficient arrays $A$--$F$ (called \texttt{all00}, \texttt{all10},
+\texttt{all01}, \texttt{all20}, \texttt{all11}, \texttt{all02} in the code) are
+assembled as the sum of three independently computed contributions:
+\begin{equation}
+  X = X_{\mathrm{coll}} + X_{\mathrm{RF}} + X_{\mathrm{SC}},
+  \qquad X \in \{A,B,C,D,E,F\},
+\end{equation}
+for Coulomb collisions, RF heating, and self-collisions, respectively.
+The source term $S$ collects the NBI beam injection and the particle loss.
+
+In steady-state mode ($\partial f/\partial t = 0$) the right-hand side of
+\eqref{eq:FP} is set to zero and the resulting linear system is solved
+directly.
+
+\subsection{Coulomb Collision Operator}
+
+The Coulomb collision operator is the linearized Fokker--Planck operator
+describing the interaction of the minority ion species~$a$ (charge $Z_a$,
+mass $m_a$, thermal velocity $v_a$) with a Maxwellian background species~$b$
+(charge $Z_b$, mass $m_b$, thermal velocity $v_{Tb}$, density $n_b$).
+The coefficient arrays $(\texttt{colin00}, \ldots, \texttt{colin02})$ for
+each background species are computed by the subroutine \texttt{cblin} and
+summed over all \texttt{nbulk} background species.
+
+The collision frequency scale factor is
+\begin{equation}
+  \Gamma_b = \frac{n_b\,Z_a^2\,Z_b^2\,e^4\,\ln\Lambda_{ab}}
+                  {4\pi\,\varepsilon_0^2\,m_a^2},
+\end{equation}
+where $\ln\Lambda_{ab}$ is the Coulomb logarithm evaluated at each time step
+(see Section~\ref{sec:coulomb_log}).
+
+\subsubsection{Coulomb Logarithm}\label{sec:coulomb_log}
+
+Two distinct formulas are used:
+
+\paragraph{Ion--electron:}
+\begin{equation}
+  \ln\Lambda_{ae} = 24 - \ln\!\left(\frac{n_e^{1/2}}{T_e}\right),
+\end{equation}
+with $T_e$ in eV and $n_e$ in m$^{-3}$.
+
+\paragraph{Ion--ion:}
+\begin{equation}
+  \ln\Lambda_{ab} = 23 - \ln\!\left[
+    Z_a^2 Z_b^2\,\frac{m_a+m_b}{m_a\,T_b + m_b\,T_a}\,
+    \left(\frac{n_a\,Z_a^2}{T_a}+\frac{n_b\,Z_b^2}{T_b}\right)^{1/2}
+  \right].
+\end{equation}
+In time-dependent runs the Coulomb logarithm is recomputed at each time step
+using the current effective temperature of the minority ion species.
+
+\subsection{Quasi-Linear RF Operator}
+
+When radio-frequency heating is active (\texttt{irf} $= -1$), the
+quasi-linear diffusion operator is added to the coefficient arrays.  The RF
+operator describes the resonant power exchange between the minority ions and
+an electromagnetic wave characterised by:
+\begin{itemize}
+  \item Wave frequency $\omega = 2\pi f$ (\texttt{frek} in Hz).
+  \item Parallel wave vector $k_\parallel$ (\texttt{kpar} in rad/m).
+  \item Perpendicular wave vector $k_\perp$ (complex, \texttt{kperp}
+        in rad/m).
+  \item Left- and right-hand polarisation components $E_+$, $E_-$
+        (\texttt{eplus}, \texttt{emin}).
+  \item Static magnetic field $B_0$ (\texttt{b0} in T).
+  \item Harmonic number $n$ (\texttt{nharm}).
+\end{itemize}
+
+The quasi-linear diffusion coefficients are computed in the subroutine
+\texttt{qlrfterm} using complex Bessel functions $J_n(k_\perp \vp / \omega_c)$
+and their derivatives, evaluated at each grid point.  The resonance condition
+is $\omega - n\,\omega_c - k_\parallel\,\vpa = 0$, broadened by a Gaussian
+of width \texttt{delta\_RF} in $\vpa$.
+
+\subsection{Self-Collision Operator}
+
+Four options are available for the treatment of self-collisions, selected by
+the flag \texttt{isc}:
+
+\paragraph{\texttt{isc = 0} -- No self-collisions.}
+The self-collision coefficients are zero.  The FP equation is linear.
+
+\paragraph{\texttt{isc = 1} -- Maxwellian background at fixed temperature.}
+The self-collision operator is computed using the Rosenbluth potentials for a
+Maxwellian distribution at the Stix effective temperature $T_\mathrm{eff}$
+(computed once at the start of the simulation and kept constant).  This adds
+a fixed linear operator to the coefficient arrays.
+
+\paragraph{\texttt{isc = 2} -- Maxwellian background at varying temperature.}
+Same as \texttt{isc = 1}, but the background temperature and Coulomb
+logarithm are updated at each time step to track the evolving effective
+temperature $T_\mathrm{eff}(t)$.  Requires a time-dependent run.
+
+\paragraph{\texttt{isc = -1} -- Fully nonlinear self-collisions.}
+The complete nonlinear Landau/Fokker--Planck self-collision operator
+\begin{equation}
+  \left(\frac{\partial f}{\partial t}\right)_{\mathrm{SC}}
+  = \Gamma_{aa}\,\frac{\partial}{\partial v_i}
+    \left[ H_{ij}[f]\,\frac{\partial f}{\partial v_j}
+         - G_i[f]\,f \right],
+\end{equation}
+is used, where $H_{ij}$ and $G_i$ are the Rosenbluth potentials built from
+the \emph{current} distribution $f(t)$.  The Rosenbluth potentials are
+evaluated via a precomputed phi-distance kernel \texttt{sum\_phi} using
+Gauss--Legendre quadrature (subroutine \texttt{distance\_v\_gauss\_legendre}).
+This kernel depends only on the velocity grid and is computed once and saved
+to disk (\texttt{sum\_phi.dat}); it can be reloaded for subsequent runs on the
+same grid.  The operator is rebuilt at every time step, making the problem
+nonlinear.  Requires a time-dependent run.
+
+\subsection{Beam Source and Particle Losses}\label{sec:beam}
+
+When \texttt{isource} $= -1$, a neutral-beam injection (NBI) source is added:
+\begin{equation}
+  S(\vp,\vpa) = \frac{n_0}{\tau_s}\,
+    \frac{\delta_G(\vp - \vp^\mathrm{beam})\,\delta_G(\vpa - \vpa^\mathrm{beam})}
+         {\mathcal{N}},
+\end{equation}
+where $\delta_G(x) = e^{-(x/\sigma)^2}/(\sqrt{\pi}\,\sigma)$ is a Gaussian
+approximation to the Dirac delta, $\vp^\mathrm{beam} = v_\mathrm{beam}\sin\alpha$,
+$\vpa^\mathrm{beam} = v_\mathrm{beam}\cos\alpha$ with $\alpha$ the injection
+angle, and $\mathcal{N}$ is the normalization factor
+\begin{equation}
+  \mathcal{N} = \sqrt{\pi}\,\sigma_\perp\,e^{-(\vp^\mathrm{beam}/\sigma_\perp)^2}
+               + \pi\,\vp^\mathrm{beam}\,\mathrm{erfc}(-\vp^\mathrm{beam}/\sigma_\perp),
+\end{equation}
+which reduces to $2\pi\,\vp^\mathrm{beam}$ for $\vp^\mathrm{beam} \gg \sigma_\perp$
+and to $\sqrt{\pi}\,\sigma_\perp$ for a purely parallel beam ($\vp^\mathrm{beam}=0$).
+
+The loss term is $-f/\tau_s$ (isotropic particle losses with slowing-down time $\tau_s$).
+
+
+% ============================================================
+\section{Numerical Methods}
+% ============================================================
+
+\subsection{Velocity-Space Grid}
+
+The computational domain is $[\vp_{\min},\,\vp_{\max}] \times [\vpa_{\min},\,\vpa_{\max}]$,
+discretized on a $N_\perp \times N_\parallel$ grid with 1-based indices
+$(i,j)$ where $i \in [1,N_\perp]$ and $j \in [1,N_\parallel]$.
+
+Three grid spacing modes are available, controlled by \texttt{ising}:
+
+\begin{description}
+  \item[\texttt{ising = 0}] Uniform spacing in both directions.
+        $\Delta\vp = (\vp_{\max}-\vp_{\min})/(N_\perp-1)$,
+        $\Delta\vpa = (\vpa_{\max}-\vpa_{\min})/(N_\parallel-1)$.
+
+  \item[\texttt{ising = -1}] Two-domain grid in $\vp$.  A finer mesh of
+        \texttt{nsing} points is used for $\vp \le \texttt{vbound}$, and a
+        coarser uniform mesh for $\vp > \texttt{vbound}$.  This provides
+        higher resolution near the magnetic axis where gradients are typically
+        steeper.
+
+  \item[\texttt{ising = +1}] Quadratic spacing in $\vp$.  \textit{Not
+        recommended for production runs} as the finite-difference weights are
+        not adapted for this spacing.
+\end{description}
+
+The cylindrical Jacobian is $J = 2\pi\,\vp$, so that integrals over velocity
+space are $\int\!\int f\,J\,\mathrm{d}\vp\,\mathrm{d}\vpa$.
+
+The global 1D degree-of-freedom (DOF) index is
+\begin{equation}
+  \mathrm{ix}(i,j) = (i-1)\,N_\parallel + j,
+  \quad i \in [1,N_\perp],\; j \in [1,N_\parallel],
+\end{equation}
+giving $N_\mathrm{dof} = N_\perp \times N_\parallel$ total DOFs.
+
+\subsection{Finite-Difference Discretization}
+
+Spatial derivatives are discretized using the \textbf{7-point Fornberg
+stencil} (subroutine \texttt{fd\_stencil\_2d}), which is a fourth-order
+accurate scheme.  The stencil uses 4 points in each direction: at the current
+node and its 3 neighbours.  For a non-uniform $\vp$ grid, the Fornberg
+algorithm computes the exact derivative weights for the local grid spacing via
+subroutine \texttt{fornberg\_weights}.
+
+The stencil returns at most 49 entries per row (7~points in $\vp$ by 7 in
+$\vpa$), although boundary rows have fewer entries.
+
+\subsubsection{Boundary Conditions}
+
+\begin{description}
+  \item[Axis ($i=1$, $\vp=\vp_{\min}$):] Neumann condition $\partial f/\partial\vp = 0$,
+        enforcing axial symmetry.
+
+  \item[Outer boundary ($i=N_\perp$):] Dirichlet condition $f = 0$.
+
+  \item[Parallel boundaries ($j=1$ and $j=N_\parallel$):] Dirichlet condition $f = 0$.
+\end{description}
+
+\subsection{Sparse Matrix Storage}
+
+All matrices are stored in \textbf{1-based Compressed Sparse Row (CSR)} format.
+For a matrix of size $N_\mathrm{dof}$:
+\begin{itemize}
+  \item \texttt{ia(1:$N_\mathrm{dof}$+1)}: row pointer array.
+  \item \texttt{ja(1:nnz)}: column indices.
+  \item \texttt{aa(1:nnz)}: non-zero values.
+\end{itemize}
+Entries within each row are sorted by column index before passing to PARDISO.
+The maximum number of non-zeros per row is 49 (7$\times$7 stencil), so
+$\texttt{nnz\_max} = 49\,N_\mathrm{dof}$.
+
+\subsection{Direct Solver: Intel MKL PARDISO}
+
+All linear systems are solved with \textbf{Intel MKL PARDISO} using matrix
+type \texttt{mtype = 11} (real non-symmetric general).  The module
+\texttt{pardiso\_solver} exposes four phased entry points that exploit
+PARDISO's factorization phases:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Entry point & PARDISO phases \\
+\midrule
+\texttt{pardiso\_solve\_steady}  & 11 + 22 + 33 (full solve, then release) \\
+\texttt{pardiso\_solve\_init}    & 11 + 22 (symbolic + numeric factorization) \\
+\texttt{pardiso\_solve\_step}    & 33 only (back-substitution) \\
+\texttt{pardiso\_solve\_finalize}& release internal memory \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This phased approach is critical for performance in the time-dependent solver:
+when the LHS matrix is constant (linear problem), the factorization is done
+once and only the back-substitution is repeated at each time step.
+
+
+% ============================================================
+\section{Algorithms}
+% ============================================================
+
+\subsection{Steady-State Solver}
+
+When \texttt{ntimes(1) = 0}, the code solves the steady-state FP equation
+\begin{equation}
+  \Lcal[f] = -S,
+\end{equation}
+where $\Lcal$ is the FP differential operator assembled from the coefficient
+arrays \texttt{all00}, \ldots, \texttt{all02}.  The two-pass assembly (first
+count non-zeros, then fill values) builds the CSR matrix, which is then
+passed to \texttt{pardiso\_solve\_steady} for a direct solve (subroutine
+\texttt{FP\_steady\_state} in module \texttt{mod\_linear}).
+
+\subsection{Time-Dependent Solver -- Linear Problem (\texttt{timefp\_7pt})}
+
+Used when \texttt{ntimes(1) > 0} and $\texttt{isc} \ne -1$.
+
+\subsubsection{Time Discretization}
+
+A $\theta$-method is used:
+\begin{equation}
+  \bigl(I - \theta\,\dt\,\Lcal\bigr)\,f^{n+1}
+  = \bigl(I + (1-\theta)\,\dt\,\Lcal\bigr)\,f^n + \dt\,S.
+\end{equation}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\texttt{icn} & $\theta$ & Scheme \\
+\midrule
+$-1$  & $0.5$ & Crank--Nicolson \\
+else  & $1.0$ & Fully implicit \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Algorithm}
+
+\begin{enumerate}
+  \item \textbf{Assemble} the FP operator $\Lcal$ in CSR format (two-pass loop).
+  \item \textbf{Build LHS}: $M_\mathrm{lhs} = I - \theta\,\dt\,\Lcal$.  The sparsity
+        pattern is identical to $\Lcal$ since the diagonal already exists.
+  \item \textbf{Factorize} $M_\mathrm{lhs}$ once (PARDISO phases 11+22).
+  \item \textbf{Time loop} for $n = 1, \ldots, N_\mathrm{times}$:
+        \begin{enumerate}
+          \item Recompute the Coulomb logarithm from the current effective
+                temperature and rebuild the linear FP operator (allows a
+                time-varying Coulomb logarithm).
+          \item Rebuild $M_\mathrm{lhs}$ with the updated operator.
+          \item Compute the RHS:
+                $b = \bigl(I + (1-\theta)\,\dt\,\Lcal\bigr)\,f^n + \dt\,S$
+                via a hand-coded sparse matrix--vector product.
+          \item Enforce zero RHS on boundary DOFs.
+          \item Solve $M_\mathrm{lhs}\,f^{n+1} = b$ (PARDISO phase 33 only).
+          \item Compute diagnostics (density, energy, power, momentum).
+        \end{enumerate}
+  \item \textbf{Finalize} PARDISO.
+  \item If \texttt{isource = 0}: rescale $f \leftarrow f \cdot n_0/\int f\,\mathrm{d}^3v$
+        to conserve total particle number.
+\end{enumerate}
+
+\subsection{Time-Dependent Solver -- Nonlinear Self-Collisions (\texttt{timefp\_7pt\_nl})}
+
+Used when \texttt{ntimes(1) > 0} and \texttt{isc = -1}.  The LHS matrix now
+changes at every time step because the self-collision operator depends on
+$f^n$.
+
+\subsubsection{Phi-Distance Kernel Precomputation}
+
+Before entering the time loop, the phi-distance kernel
+$\Phi_{ij} = \phi(|\bm{v}_i - \bm{v}_j|)$ is either computed from scratch
+(Gauss--Legendre quadrature, $O(N_\mathrm{dof}^2)$) and saved to
+\texttt{sum\_phi.dat}, or loaded from a previous run:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\texttt{new\_grid} & Action \\
+\midrule
+$-1$ & Compute kernel and save to \texttt{sum\_phi.dat} \\
+$0$  & Load kernel from \texttt{sum\_phi.dat} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textit{Warning:} loading is only valid if the velocity grid is identical to
+the one used when the file was created.
+
+\subsubsection{Time-Stepping Scheme}
+
+The $\theta$ parameter has an additional option for the NL solver:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\texttt{icn} & $\theta$ & Comment \\
+\midrule
+$-1$ & $0.5$ & Crank--Nicolson (may be unstable for NL SC) \\
+$+1$ & $0.75$ & Intermediate \\
+else & $1.0$ & Fully implicit (recommended) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Algorithm}
+
+\begin{enumerate}
+  \item \textbf{Build sparsity pattern} of $\Lcal$ using the linear
+        coefficients only (pattern is fixed; NL SC uses the same stencil).
+  \item \textbf{Factorize symbolically} (PARDISO phase 11 only).
+  \item \textbf{Time loop} for $n = 1, \ldots, N_\mathrm{times}$:
+        \begin{enumerate}
+          \item \textbf{Build NL self-collision term}: call
+                \texttt{main\_nlterm}$(f^n)$ to compute the self-collision
+                coefficient arrays \texttt{sc**} from the current distribution
+                via the phi-distance kernel.
+          \item \textbf{Update Coulomb logarithm} and rebuild the linear FP
+                coefficients.
+          \item \textbf{Assemble total operator}: $\Lcal = \Lcal_\mathrm{lin} + \Lcal_\mathrm{SC}$.
+          \item \textbf{Rebuild LHS}: $M_\mathrm{lhs} = I - \theta\,\dt\,\Lcal$.
+          \item \textbf{Compute RHS}:
+                $b = (I+(1-\theta)\,\dt\,\Lcal)\,f^n + \dt\,S$.
+          \item \textbf{Solve} (PARDISO phases 22+33 every step since $M_\mathrm{lhs}$ changes).
+          \item Compute diagnostics.
+        \end{enumerate}
+  \item \textbf{Finalize} PARDISO.
+\end{enumerate}
+
+\textit{Note on start-up:} when starting from $f = 0$ with a beam source
+(i.e., \texttt{istart = 0}), the NL self-collision term is skipped for the
+first few steps until the beam density becomes significant enough for the
+Rosenbluth potentials to be numerically meaningful.
+
+\subsection{Multi-Phase Time-Stepping}
+
+The namelist parameters \texttt{ntimes} and \texttt{timestep} are each
+3-element arrays, enabling up to three sequential phases with different time
+steps:
+\begin{itemize}
+  \item Phase~$k$ runs \texttt{ntimes(k)} steps of duration \texttt{timestep(k)} seconds.
+  \item Phases with \texttt{ntimes(k) = 0} are skipped.
+  \item Phases 2 and 3 append to the output files (restart in time).
+  \item For NL runs (isc = -1), \texttt{new\_grid} is forced to 0 after phase 1
+        so the phi-distance kernel is loaded rather than recomputed.
+\end{itemize}
+Old single-phase input files (\texttt{ntimes = N, timestep = dt}) remain
+backward-compatible: the scalar value fills element~1 and elements 2--3
+default to zero.
+
+\subsection{Initial Condition for Time-Dependent Runs}
+
+The initial distribution $f^0$ is selected by \texttt{istart}:
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\texttt{istart} & Initial condition \\
+\midrule
+0 & $f^0 = 0$ everywhere. Requires \texttt{isource = -1}. \\
+1 & Stix Maxwellian solution (default). \\
+2 & Steady-state solution of the linear solver without self-collisions. \\
+3 & Steady-state solution of the linear solver with Maxwellian SC background. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Steady-State Convergence Detection}
+
+When \texttt{i\_ss\_check = -1}, the code monitors three relative change
+indicators over a rolling window of \texttt{n\_ss\_window} steps:
+relative change in total energy $\Delta E/E$, relative change in density
+$\Delta n/n$, and relative change in net power $\Delta P/P_\mathrm{drive}$.
+When all three drop below \texttt{ss\_tol}, the run stops early with a
+``CONVERGED'' message.
+
+\subsection{Diagnostics and Output}
+
+At each time step the following quantities are written to disk:
+\begin{itemize}
+  \item Density $n(t) = \int f\,J\,\mathrm{d}^3v$.
+  \item Total, perpendicular, and parallel kinetic energies.
+  \item Effective temperature $T_\mathrm{eff} = (2T_\perp + T_\parallel)/3$,
+        where $T_\perp = \tfrac{1}{2}m\langle \vp^2 \rangle$ and
+        $T_\parallel = m\langle \vpa^2 \rangle$.
+  \item Perpendicular anisotropy factor $= 100\,T_\perp/(T_\perp + T_\parallel)$
+        (\%), ranging from 0\% (all-parallel) to 50\% (Maxwellian) to 100\%
+        (all-perpendicular).
+  \item Power densities (collisional by species, RF, beam source, losses,
+        self-collision total), and their perpendicular/parallel split for
+        self-collisions.
+  \item Momentum transfer rates (perpendicular and parallel) for each
+        operator.
+  \item Coulomb logarithm(s) vs.\ time.
+\end{itemize}
+
+At the end of a run, balance diagnostics (power, density, and optionally
+momentum) are printed to standard output.
+
+% ============================================================
+\section{Namelist Reference}
+\label{sec:namelist}
+% ============================================================
+
+The code reads its input from standard input (\texttt{stdin}) as a Fortran
+\texttt{NAMELIST} group named \texttt{INPUT}.  A typical invocation is:
+\begin{lstlisting}
+FP2D_QLRF_NL.exe < jet_beam_case1.dat
+\end{lstlisting}
+The namelist file may omit any variable that has a default value; the code
+will use the default.
+
+\bigskip
+The parameters are grouped thematically below.
+
+% -------------------------------------------------------------------
+\subsection{General and Output Control}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+casename & \texttt{''} &
+  Character string (max.\ 64 chars) appended to every output filename and
+  plot title, e.g.\ \texttt{'JET-beam7-TD0-NLSC'}.  Leave empty for
+  unnamed runs. \\[4pt]
+
+iplot\_pow & $-1$ &
+  Controls writing of power-vs-time output files.
+  $-1$: write all power files.
+  $0$: skip (useful when only energy and density diagnostics are needed). \\[4pt]
+
+iplot\_mom & $0$ &
+  Controls writing of momentum-transfer-rate files.
+  $-1$: write all momentum files.
+  $0$: skip (default; momentum files are large). \\[4pt]
+
+idiag & $0$ &
+  Selects the end-of-run balance diagnostics printed to stdout.
+  $0$: power balance only.
+  $-1$: all three balances (particle density, momentum, power). \\[4pt]
+
+\end{longtable}
+
+% -------------------------------------------------------------------
+\subsection{Velocity-Space Grid}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+nperp & -- &
+  Number of grid points in $\vp$ (perpendicular direction). \\[4pt]
+
+npar & -- &
+  Number of grid points in $\vpa$ (parallel direction). \\[4pt]
+
+vperp\_min & -- &
+  Minimum perpendicular velocity (m/s).  Should be 0 or very small. \\[4pt]
+
+vperp\_max & -- &
+  Maximum perpendicular velocity (m/s).  Should be at least $3$--$5\times$
+  the beam or thermal velocity. \\[4pt]
+
+vpar\_min & -- &
+  Minimum parallel velocity (m/s).  Must be negative. \\[4pt]
+
+vpar\_max & -- &
+  Maximum parallel velocity (m/s).  Must be positive and equal to
+  $|$\texttt{vpar\_min}$|$ for symmetric grids. \\[4pt]
+
+ising & $0$ &
+  Grid spacing mode in $\vp$.
+  $0$: uniform.
+  $-1$: two-domain (fine for $\vp \le \texttt{vbound}$, coarser above).
+  $+1$: quadratic (do not use in production runs). \\[4pt]
+
+nsing & -- &
+  Number of fine grid points in the inner domain when \texttt{ising = -1}.
+  Must satisfy $1 \le \texttt{nsing} < \texttt{nperp}$. \\[4pt]
+
+vbound & -- &
+  Boundary between fine and coarse regions in $\vp$ when \texttt{ising = -1}
+  (m/s). \\[4pt]
+
+\end{longtable}
+
+% -------------------------------------------------------------------
+\subsection{Plasma Parameters}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+nbulk & -- &
+  Number of background species (including electrons).
+  Species 1 is always electrons.  Up to 10 species are supported. \\[4pt]
+
+t(1:nbulk) & -- &
+  Temperatures of background species (eV).
+  \texttt{t(1)}: electron temperature $T_e$.
+  \texttt{t(2)}: temperature of first ion species, etc. \\[4pt]
+
+aa & -- &
+  Mass number of the minority (test) ion species. \\[4pt]
+
+za & -- &
+  Charge number (atomic number) of the minority ion species. \\[4pt]
+
+ab(1:9) & -- &
+  Mass numbers of background ion species 2, 3, \ldots\ (species 1 is
+  always electrons with $m_e/m_p$). \\[4pt]
+
+zb(1:9) & -- &
+  Charge numbers of background ion species 2, 3, \ldots \\[4pt]
+
+ne & -- &
+  Electron density (m$^{-3}$). \\[4pt]
+
+xpart & -- &
+  Concentration of minority ion species relative to $n_e$,
+  i.e.\ $n_a = \texttt{xpart} \times n_e$. \\[4pt]
+
+xb(1:9) & -- &
+  Concentrations of background ion species 2, 3, \ldots\ relative to $n_e$.
+  Quasi-neutrality is assumed: $\sum_b Z_b\,n_b = n_e$. \\[4pt]
+
+\end{longtable}
+
+% -------------------------------------------------------------------
+\subsection{Beam Source}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+isource & -- &
+  Beam source flag.
+  $-1$: include NBI beam source and particle losses.
+  $0$: no source; distribution is sourceless (total particles conserved). \\[4pt]
+
+beam\_ekin & -- &
+  Beam injection energy (keV). \\[4pt]
+
+beam\_angle\_deg & -- &
+  Injection angle (degrees) measured from the magnetic field direction.
+  $0^\circ$: purely parallel injection.
+  $90^\circ$: purely perpendicular injection. \\[4pt]
+
+beam\_dvperp & -- &
+  Width $\sigma_\perp$ of the Gaussian approximation to the delta function
+  in $\vp$ (m/s).  A value of $\sim 5$--$10\%$ of $\vp^\mathrm{beam}$ is
+  typical; must be resolved by the grid. \\[4pt]
+
+beam\_dvpar & -- &
+  Width $\sigma_\parallel$ of the Gaussian in $\vpa$ (m/s). \\[4pt]
+
+taus & -- &
+  Slowing-down time $\tau_s$ (s).  Sets the source amplitude
+  $S_0 = n_a / \tau_s$ and the loss rate. \\[4pt]
+
+\end{longtable}
+
+% -------------------------------------------------------------------
+\subsection{RF Heating}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+irf & -- &
+  RF flag.
+  $-1$: include quasi-linear RF operator.
+  $0$ or else: no RF. \\[4pt]
+
+frek & -- &
+  Wave frequency $f$ (Hz). \\[4pt]
+
+b0 & -- &
+  Static magnetic field $B_0$ (T). \\[4pt]
+
+nharm & -- &
+  Resonance harmonic number $n$ (e.g.\ 1 for fundamental, 2 for second
+  harmonic). \\[4pt]
+
+kpar & -- &
+  Parallel wave vector $k_\parallel$ (rad/m). \\[4pt]
+
+kperp & -- &
+  Perpendicular wave vector $k_\perp$ (complex, rad/m). \\[4pt]
+
+eplus & -- &
+  Left-hand polarisation amplitude $E_+$ (complex, V/m). \\[4pt]
+
+emin & -- &
+  Right-hand polarisation amplitude $E_-$ (complex, V/m). \\[4pt]
+
+delta\_RF & -- &
+  Width of the Gaussian broadening of the resonance in $\vpa$ (m/s).
+  Must be wide enough to resolve the resonance on the grid. \\[4pt]
+
+\end{longtable}
+
+% -------------------------------------------------------------------
+\subsection{Time Integration and Solver Control}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+ntimes(1:3) & \texttt{0,0,0} &
+  Number of time steps per phase.
+  \texttt{ntimes(1) = 0}: steady-state run.
+  \texttt{ntimes(1) > 0}: time-dependent run.
+  Up to three phases with different step sizes are supported; phases with
+  \texttt{ntimes(k) = 0} are skipped.
+  Old-format scalar values (\texttt{ntimes = N}) are backward-compatible and
+  fill \texttt{ntimes(1)}. \\[4pt]
+
+timestep(1:3) & \texttt{0,0,0} &
+  Time step size per phase (s).
+  \texttt{timestep(k)} is used for phase~$k$.
+  Backward-compatible with scalar input. \\[4pt]
+
+icn & -- &
+  Time-differencing scheme.
+  $-1$: Crank--Nicolson ($\theta = 0.5$).
+  $+1$: intermediate scheme ($\theta = 0.75$, NL solver only).
+  else: fully implicit ($\theta = 1.0$, recommended for NL runs). \\[4pt]
+
+iold & -- &
+  Initial condition source.
+  $0$: fresh start (use \texttt{istart} to select the initial condition).
+  $-1$: restart from a previous run by reading \texttt{xout.dat}. \\[4pt]
+
+istart & $1$ &
+  Initial distribution for fresh time-dependent runs (\texttt{iold = 0}).
+  $0$: $f^0 = 0$ (beam-driven only; requires \texttt{isource = -1}).
+  $1$: Stix Maxwellian.
+  $2$: Steady-state solution without self-collisions.
+  $3$: Steady-state solution with Maxwellian self-collisions. \\[4pt]
+
+isc & -- &
+  Self-collision treatment.
+  $0$: no self-collisions (linear FP equation).
+  $1$: Maxwellian background at fixed Stix temperature.
+  $2$: Maxwellian background at evolving temperature.
+  $-1$: fully nonlinear self-collision operator (requires TD run). \\[4pt]
+
+new\_grid & $-1$ &
+  Phi-distance kernel management (NL self-collisions only).
+  $-1$: compute and save to \texttt{sum\_phi.dat}.
+  $0$: load from existing \texttt{sum\_phi.dat}.
+  \textit{Warning:} loading is only valid for the same velocity grid. \\[4pt]
+
+\end{longtable}
+
+% -------------------------------------------------------------------
+\subsection{Steady-State Convergence Detection}
+
+\begin{longtable}{>{\ttfamily}p{3.2cm} p{1.5cm} p{9cm}}
+\toprule
+\normalfont Parameter & Default & Description \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+i\_ss\_check & $0$ &
+  Enable automatic convergence detection.
+  $0$: disabled (run for the full \texttt{ntimes} steps).
+  $-1$: stop early when all convergence criteria are met. \\[4pt]
+
+n\_ss\_window & $50$ &
+  Rolling window width (number of time steps) over which the
+  convergence indicators $\Delta E/E$, $\Delta n/n$, $\Delta P/P$ are
+  evaluated. \\[4pt]
+
+ss\_tol & $10^{-3}$ &
+  Relative convergence tolerance.  All three indicators must fall below
+  this value for the run to stop. \\[4pt]
+
+\end{longtable}
+
+
+% ============================================================
+\section{Output Files}
+% ============================================================
+
+All output files are written to the working directory.  When \texttt{casename}
+is non-empty, the string \texttt{-casename} is inserted before the file
+extension.
+
+\subsection{Final Distribution}
+
+\begin{description}
+  \item[\texttt{fout.txt}] Final VDF as a list of $(\vp, \vpa, f)$ triples.
+  \item[\texttt{xout.dat}] Binary restart file: one header line (final time)
+        followed by the packed 1D solution vector.  Used with \texttt{iold = -1}.
+  \item[\texttt{fstix.dat}] Stix Maxwellian reference distribution.
+\end{description}
+
+\subsection{1D Cuts of the VDF}
+
+\texttt{fout\_at\_vpar0.txt}, \texttt{fout\_at\_vperp0.txt},
+\texttt{fout\_at\_vperpmax.txt}, \texttt{fout\_at\_vparmax.txt}:
+values of $f$ along the four boundary slices of the domain.
+
+\subsection{Time Traces}
+
+Written at every time step during the simulation:
+
+\begin{description}
+  \item[\texttt{density\_vs\_time.txt}] Columns: time (s), $n(t)$ (m$^{-3}$).
+  \item[\texttt{energy\_vs\_time.txt}] Columns: time, $E_\mathrm{tot}$ (keV), $E_\perp$ (keV).
+  \item[\texttt{anisotropy\_vs\_time.txt}] Columns: time, perpendicular anisotropy (\%).
+  \item[\texttt{Teff\_vs\_time.txt}] Columns: time, $T_\mathrm{eff}$ (keV).
+  \item[\texttt{power\_coll\_tot\_vs\_time.txt}] Total collisional power density (MW/m$^3$).
+  \item[\texttt{power\_coll\_e\_vs\_time.txt}] Electron collisional power density.
+  \item[\texttt{power\_coll\_ion$N$\_vs\_time.txt}] Ion $N$ collisional power density.
+  \item[\texttt{power\_coll\_self\_vs\_time.txt}] Self-collision power density
+        (4 columns: time, total, $P_\mathrm{SC}^\perp$, $P_\mathrm{SC}^\parallel$).
+  \item[\texttt{power\_NBI\_vs\_time.txt}] Beam injection and particle loss power.
+  \item[\texttt{power\_RF\_vs\_time.txt}] RF power density.
+  \item[\texttt{coulomb\_log\_vs\_time.txt}] Coulomb logarithm for background ion species.
+  \item[\texttt{coulomb\_log\_self\_vs\_time.txt}] Self-collision Coulomb logarithm.
+  \item[\texttt{momentum\_coll\_*\_vs\_time.txt}] Momentum transfer rates
+        (2 columns per file: $\perp$ and $\parallel$ components), written when
+        \texttt{iplot\_mom = -1}.
+\end{description}
+
+\subsection{End-of-Run Balance Diagnostics (stdout)}
+
+A power balance (and, when \texttt{idiag = -1}, particle density and
+momentum balances) is printed to standard output at the end of the run.
+Values are given in MW/m$^3$ for power, N/m$^3$ for momentum, and s$^{-1}$
+for particle rates.
+
+
+% ============================================================
+\section{Example Namelist}
+% ============================================================
+
+The following example illustrates a time-dependent D-beam simulation in a D
+plasma with nonlinear self-collisions, using a two-phase time-stepping
+strategy: 1000 coarse steps followed by 1000 finer steps.
+
+\begin{lstlisting}
+&INPUT
+  casename = 'JET-beam7-TD0-NLSC',
+  new_grid = 0,
+
+  ! Grid
+  nperp = 151, npar = 151,
+  vperp_min = 0.d0,  vperp_max = 5.d6,
+  vpar_min  = -4.d6, vpar_max  = 4.d6,
+  ising = 1, nsing = 25, vbound = 0.07d6,
+
+  ! Plasma: electrons + D ions
+  nbulk = 2,
+  t     = 15.d3, 10.d3, 8*0.d0,
+  aa = 2.d0, za = 1.d0,
+  ab = 2.d0, 8*0.d0,
+  zb = 1.d0, 8*0.d0,
+  ne     = 5.0d19,
+  xpart  = 0.05d0,
+  xb     = 0.50d0, 8*0.d0,
+
+  ! D-NBI beam at 120 keV, 90 degrees
+  isource = -1,
+  beam_ekin     = 120.d0,
+  beam_angle_deg = 90.d0,
+  beam_dvperp   = 0.12d6,
+  beam_dvpar    = 0.20d6,
+  taus = 300.d-3,
+
+  ! No RF
+  irf = 0,
+
+  ! Time integration: two phases
+  icn     = 1,
+  ntimes  = 1000, 1000, 0,
+  timestep = 1.d-3, 10.d-3, 0.d0,
+  iold   = 0,
+  istart = 0,
+  isc    = -1,
+
+  ! Steady-state convergence detection
+  i_ss_check  = -1,
+  n_ss_window = 50,
+  ss_tol      = 1.d-4,
+
+  ! Output
+  iplot_pow = -1,
+  iplot_mom = -1,
+  idiag     = -1,
+/
+\end{lstlisting}
+
+
+% ============================================================
+\section{Compilation and Execution}
+% ============================================================
+
+\subsection{Build}
+
+Open the Visual Studio solution
+\texttt{FP2D\_QLRF\_NL/FP2D\_QLRF\_NL.sln} and build the
+\texttt{Release|x64} configuration.  The compiler is Intel \texttt{ifx}
+with Intel MKL (sequential).  The executable is placed at
+\texttt{FP2D\_QLRF\_NL/x64/Release/FP2D\_QLRF\_NL.exe}.
+
+\subsection{Running}
+
+The program reads from \texttt{stdin}:
+\begin{lstlisting}
+FP2D_QLRF_NL.exe < inputs/jet_beam_case1.dat
+\end{lstlisting}
+Output files are written to the working directory.
+
+\subsection{Plotting}
+
+Use the companion Python script \texttt{fp2d\_plot.py}:
+\begin{lstlisting}
+python fp2d_plot.py run FP2D_QLRF_NL.exe inputs/jet_beam_case1.dat --show
+python fp2d_plot.py plot x64/Release --casename JET-beam7-TD0-NLSC --save plots/
+python fp2d_plot.py compare x64/Release --cases JET-beam7-TD0-Lin JET-beam7-TD0-NLSC
+\end{lstlisting}
+See \texttt{fp2d\_plot-readme.txt} for the full documentation of the
+plotting tool.
+
+\end{document}
