@@ -183,6 +183,24 @@ def _load_ncol(path: Path, ncols: int):
     return arr.reshape(-1, ncols)
 
 
+def _load_auto(path: Path):
+    """Load a text file; fall back to token-based reshape for line-wrapped records."""
+    data = _load(path)
+    if data is not None:
+        return data
+    try:
+        tokens = path.read_text().split()
+        arr = np.array(tokens, dtype=float)
+        if arr.size == 0:
+            return None
+        for ncols in (4, 3, 2):
+            if arr.size % ncols == 0:
+                return arr.reshape(-1, ncols)
+    except Exception:
+        pass
+    return None
+
+
 def _detect_type(path: Path, data: np.ndarray) -> str:
     """Infer plot type from filename and column count."""
     stem  = path.stem
@@ -1058,6 +1076,87 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="add 3D surface plots for 2D distribution files")
 
 
+def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
+                      log: bool, restrict=None) -> None:
+    """Overlay same-type output files from multiple casenames on shared axes.
+
+    For each FILE_META stem that has at least one matching file, one figure is
+    produced with one curve per case (ts/ts2) or one profile per case (1d).
+    2D distribution files are skipped — they are not meaningful to superpose.
+    """
+    if save_dir is not None:
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
+
+    # Collect (case, data) pairs for every FILE_META stem key
+    stem_cases: dict = {}
+    for case in cases:
+        for key in FILE_META:
+            path = _outfile(outdir, key, case)
+            if not path.exists():
+                continue
+            if restrict and key not in restrict and path.name not in restrict:
+                continue
+            data = _load_auto(path)
+            if data is None or data.shape[0] < 2:
+                continue
+            stem_cases.setdefault(key, []).append((case, data))
+
+    if not stem_cases:
+        print("  (no matching files found for the given casenames)")
+        return
+
+    _lstyles = ["-", "--", ":", "-."]
+
+    for key in sorted(stem_cases):
+        entries = stem_cases[key]
+        meta   = FILE_META[key]
+        ptype  = meta.get("ptype", "")
+        if ptype not in ("ts", "ts2", "1d"):
+            continue
+
+        labels = meta.get("labels", [])
+        print(f"  [cmp]  {key}")
+        fig, ax = plt.subplots(figsize=(8, 5))
+        plotted = False
+
+        for ci, (case, data) in enumerate(entries):
+            color = _PALETTE[ci % len(_PALETTE)]
+            if ptype in ("ts", "ts2"):
+                ncols = data.shape[1]
+                if ncols == 2:
+                    ax.plot(data[:, 0], data[:, 1], color=color,
+                            linewidth=1.5, label=case)
+                else:
+                    for j in range(1, ncols):
+                        col_lbl = labels[j - 1] if j - 1 < len(labels) else f"col{j}"
+                        ax.plot(data[:, 0], data[:, j], color=color,
+                                linestyle=_lstyles[(j - 1) % len(_lstyles)],
+                                linewidth=1.5, label=f"{case}  [{col_lbl}]")
+                ax.set_xlabel("Time (s)")
+                ax.set_xlim(left=0)
+            elif ptype == "1d":
+                ax.plot(data[:, 0], data[:, 1], color=color,
+                        linewidth=1.5, label=case)
+                ax.set_xlabel(meta.get("xlabel", ""))
+                if log:
+                    ax.set_yscale("log")
+            plotted = True
+
+        if not plotted:
+            plt.close(fig)
+            continue
+
+        ax.set_ylabel(meta.get("ylabel", ""))
+        ax.set_title(_title(meta, key, ""))
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        _finish(fig, f"{key}-compare", save_dir, show)
+
+    if show:
+        plt.show()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -1078,6 +1177,22 @@ def build_parser() -> argparse.ArgumentParser:
     plot_p.add_argument("outdir", type=Path, help="directory containing .txt output files")
     _add_common(plot_p)
 
+    cmp_p = sub.add_parser("compare",
+                            help="overlay same-type outputs from multiple cases")
+    cmp_p.add_argument("outdir", type=Path,
+                       help="directory containing the output .txt files")
+    cmp_p.add_argument("--cases", nargs="+", required=True, metavar="CASE",
+                       help="casenames to overlay (e.g. --cases Lin NLSC)")
+    cmp_p.add_argument("--save",  type=Path, default=None, dest="save_dir",
+                       metavar="DIR", help="save PNG files to DIR")
+    cmp_p.add_argument("--show",  action="store_true",
+                       help="display plots interactively")
+    cmp_p.add_argument("--log",   action="store_true",
+                       help="logarithmic y-scale for 1D profile plots")
+    cmp_p.add_argument("--files", nargs="+", default=None, metavar="F",
+                       help="restrict to these file types (stem key, e.g. anisotropy_vs_time)"
+                            " or full filenames")
+
     return p
 
 
@@ -1087,6 +1202,26 @@ def main(argv=None):
     # Default to interactive display when no save directory is given
     if not args.show and args.save_dir is None:
         args.show = True
+
+    # ----------------------------------------------------------------
+    # compare command — handled entirely here, then return
+    # ----------------------------------------------------------------
+    if args.command == "compare":
+        outdir = args.outdir.resolve()
+        if not outdir.is_dir():
+            sys.exit(f"Error: output directory not found: {outdir}")
+        if not args.show:
+            plt.switch_backend("Agg")
+        print(f"\nComparing {len(args.cases)} case(s) in: {outdir}")
+        for c in args.cases:
+            print(f"  • {c}")
+        compare_directory(outdir, args.cases,
+                          save_dir=args.save_dir,
+                          show=args.show,
+                          log=args.log,
+                          restrict=args.files)
+        print("Done.")
+        return
 
     if args.command == "run":
         exe        = args.exe.resolve()
