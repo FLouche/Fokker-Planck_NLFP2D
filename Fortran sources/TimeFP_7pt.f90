@@ -113,6 +113,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   ! Time-stepping weight
   IF (icn == -1) THEN
     theta = 0.5_dp             ! Crank-Nicolson
+  ELSE IF (icn == 1) THEN
+    theta = 0.75_dp            ! intermediate
   ELSE
     theta = 1.0_dp             ! fully implicit
   END IF
