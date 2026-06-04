@@ -104,8 +104,9 @@ FILE_META = {
                                 "title": "RF power density"},
     "power_coll_self_vs_time": {"ptype": "ts2",
                                 "ylabel": "Power density (MW·m⁻³)",
-                                "title": "Self-collision power density",
-                                "labels": ["total", "⊥", "∥"]},
+                                "title": "Self-collision power split (⊥ / ∥)",
+                                "labels": ["total", "⊥", "∥"],
+                                "skip_cols": [1]},
     # Two-curve time series ----------------------------------------------------
     "energy_vs_time":               {"ptype": "ts2", "ylabel": "Energy (keV)",
                                      "title": "Kinetic energy vs time",
@@ -1076,6 +1077,12 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    help="add 3D surface plots for 2D distribution files")
 
 
+_COMPARE_ALIASES = {
+    # power_sc_split_vs_time is a plot-only name; data lives in power_coll_self_vs_time
+    "power_sc_split_vs_time": "power_coll_self_vs_time",
+}
+
+
 def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
                       log: bool, restrict=None) -> None:
     """Overlay same-type output files from multiple casenames on shared axes.
@@ -1086,6 +1093,9 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
     """
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
+
+    if restrict:
+        restrict = [_COMPARE_ALIASES.get(r, r) for r in restrict]
 
     # Collect (case, data) pairs for every FILE_META stem key
     stem_cases: dict = {}
@@ -1114,7 +1124,8 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
         if ptype not in ("ts", "ts2", "1d"):
             continue
 
-        labels = meta.get("labels", [])
+        labels    = meta.get("labels", [])
+        skip_cols = set(meta.get("skip_cols", []))
         print(f"  [cmp]  {key}")
         fig, ax = plt.subplots(figsize=(8, 5))
         plotted = False
@@ -1128,6 +1139,8 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
                             linewidth=1.5, label=case)
                 else:
                     for j in range(1, ncols):
+                        if j in skip_cols:
+                            continue
                         col_lbl = labels[j - 1] if j - 1 < len(labels) else f"col{j}"
                         ax.plot(data[:, 0], data[:, j], color=color,
                                 linestyle=_lstyles[(j - 1) % len(_lstyles)],
