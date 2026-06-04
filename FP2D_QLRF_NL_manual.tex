@@ -37,6 +37,10 @@
 % Short-hands
 \newcommand{\vp}{v_\perp}
 \newcommand{\vpa}{v_\parallel}
+\newcommand{\vpmin}{v_{\perp,\min}}
+\newcommand{\vpmax}{v_{\perp,\max}}
+\newcommand{\vpamin}{v_{\parallel,\min}}
+\newcommand{\vpamax}{v_{\parallel,\max}}
 \newcommand{\fvdf}{f(\vp,\vpa)}
 \newcommand{\dt}{\Delta t}
 \newcommand{\Lcal}{\mathcal{L}}
@@ -244,7 +248,7 @@ The loss term is $-f/\tau_s$ (isotropic particle losses with slowing-down time $
 
 \subsection{Velocity-Space Grid}
 
-The computational domain is $[\vp_{\min},\,\vp_{\max}] \times [\vpa_{\min},\,\vpa_{\max}]$,
+The computational domain is $[\vpmin,\,\vpmax] \times [\vpamin,\,\vpamax]$,
 discretized on a $N_\perp \times N_\parallel$ grid with 1-based indices
 $(i,j)$ where $i \in [1,N_\perp]$ and $j \in [1,N_\parallel]$.
 
@@ -252,8 +256,8 @@ Three grid spacing modes are available, controlled by \texttt{ising}:
 
 \begin{description}
   \item[\texttt{ising = 0}] Uniform spacing in both directions.
-        $\Delta\vp = (\vp_{\max}-\vp_{\min})/(N_\perp-1)$,
-        $\Delta\vpa = (\vpa_{\max}-\vpa_{\min})/(N_\parallel-1)$.
+        $\Delta\vp = (\vpmax-\vpmin)/(N_\perp-1)$,
+        $\Delta\vpa = (\vpamax-\vpamin)/(N_\parallel-1)$.
 
   \item[\texttt{ising = -1}] Two-domain grid in $\vp$.  A finer mesh of
         \texttt{nsing} points is used for $\vp \le \texttt{vbound}$, and a
@@ -291,7 +295,7 @@ $\vpa$), although boundary rows have fewer entries.
 \subsubsection{Boundary Conditions}
 
 \begin{description}
-  \item[Axis ($i=1$, $\vp=\vp_{\min}$):] Neumann condition $\partial f/\partial\vp = 0$,
+  \item[Axis ($i=1$, $\vp=\vpmin$):] Neumann condition $\partial f/\partial\vp = 0$,
         enforcing axial symmetry.
 
   \item[Outer boundary ($i=N_\perp$):] Dirichlet condition $f = 0$.
