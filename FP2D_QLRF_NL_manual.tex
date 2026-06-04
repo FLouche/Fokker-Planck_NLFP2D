@@ -265,9 +265,11 @@ Three grid spacing modes are available, controlled by \texttt{ising}:
         higher resolution near the magnetic axis where gradients are typically
         steeper.
 
-  \item[\texttt{ising = +1}] Quadratic spacing in $\vp$.  \textit{Not
-        recommended for production runs} as the finite-difference weights are
-        not adapted for this spacing.
+  \item[\texttt{ising = +1}] Quadratic spacing in $\vp$, providing higher
+        resolution near the axis $\vp = 0$.  The \texttt{fd\_stencil\_2d}
+        routine uses the Fornberg algorithm (\texttt{fornberg\_weights}) to
+        compute exact finite-difference weights for the local non-uniform
+        spacing, so this mode is fully supported.
 \end{description}
 
 The cylindrical Jacobian is $J = 2\pi\,\vp$, so that integrals over velocity
@@ -375,10 +377,15 @@ A $\theta$-method is used:
 \texttt{icn} & $\theta$ & Scheme \\
 \midrule
 $-1$  & $0.5$ & Crank--Nicolson \\
+$+1$  & $1.0$ & Fully implicit \\
 else  & $1.0$ & Fully implicit \\
 \bottomrule
 \end{tabular}
 \end{center}
+\noindent\textit{Note:} for the linear solver \texttt{icn = +1} gives the same
+$\theta = 1$ as \texttt{icn = else}.  The intermediate value $\theta = 0.75$
+obtained with \texttt{icn = +1} is specific to the nonlinear solver;
+see Table in Section~\ref{sec:nl_theta}.
 
 \subsubsection{Algorithm}
 
@@ -433,6 +440,7 @@ $0$  & Load kernel from \texttt{sum\_phi.dat} \\
 the one used when the file was created.
 
 \subsubsection{Time-Stepping Scheme}
+\label{sec:nl_theta}
 
 The $\theta$ parameter has an additional option for the NL solver:
 
@@ -626,7 +634,7 @@ ising & $0$ &
   Grid spacing mode in $\vp$.
   $0$: uniform.
   $-1$: two-domain (fine for $\vp \le \texttt{vbound}$, coarser above).
-  $+1$: quadratic (do not use in production runs). \\[4pt]
+  $+1$: quadratic spacing, higher resolution near $\vp = 0$. \\[4pt]
 
 nsing & -- &
   Number of fine grid points in the inner domain when \texttt{ising = -1}.
