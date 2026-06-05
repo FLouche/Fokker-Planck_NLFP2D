@@ -1268,7 +1268,7 @@ def main(argv=None):
                 print("iplot_mom=0: momentum vs time plots will be skipped.")
         rc = run_solver(exe, input_file, run_dir, out_file=args.out)
         if rc != 0:
-            print(f"Warning: solver exited with code {rc}", file=sys.stderr)
+            sys.exit(f"Solver exited with code {rc} — aborting (no plots written).")
         outdir = run_dir
     else:
         outdir = args.outdir.resolve()
