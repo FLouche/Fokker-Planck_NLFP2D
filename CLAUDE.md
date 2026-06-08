@@ -60,6 +60,14 @@ Boundary conditions are encoded in `fd_stencil_2d`:
 - `i=1` (v⊥=0): Neumann, df/dv⊥=0 (axis symmetry)
 - `i=nperp`, `j=1`, `j=npar`: Dirichlet, f=0
 
+### Domain Sizing
+
+The velocity domain must contain not just the beam injection point but the full slowing-down tail. For nearly-parallel beams the tail extends in v∥ well beyond the injection point due to pitch-angle scattering during deceleration.
+
+**Confirmed case (2026-06-08):** 120 keV D beam at 10°, xH=50% (cases #3/#5). Beam injection at v∥ ≈ 3.34 Mm/s is within vpar_max=4 Mm/s, but the slowing-down tail reaches the Dirichlet boundary, forcing a strong gradient there. This corrupts the self-collision flux integral, causing apparent SC energy non-conservation (|Psc_perp + Psc_par| / |Psc_par| ~ 80%). Extending to vpar_max=5 Mm/s gives |Psc_perp + Psc_par| < 0.2% of the component magnitude — the SC operator is conservative when the domain is adequate.
+
+**Rule of thumb:** set vpar_max ≥ v_beam × cos(θ) + 3 × max(beam_dvpar, v_th_bulk), and similarly for vperp_max. Always verify SC energy conservation via Psc_perp + Psc_par ≈ 0 in power_coll_self_vs_time.txt when running near-parallel or near-perpendicular beam cases.
+
 ### Solver Path
 All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`). The solver selected by `isc`:
 
