@@ -545,9 +545,11 @@ def plot_power_combined(outdir: Path, save_dir, show: bool, casename: str,
         f = _outfile(outdir, "power_coll_self_vs_time", casename)
         if f.exists():
             _sc = _load_ncol(f, 4)
-            if _sc is not None:
-                ax_top.plot(_sc[:, 0], _sc[:, 1], color=_PALETTE[4],
-                            linewidth=1.5, linestyle="--", label="self")
+            if _sc is not None and _sc.shape[1] >= 4:
+                ax_top.plot(_sc[:, 0], _sc[:, 2], color=_PALETTE[4],
+                            linewidth=1.5, linestyle="--", label="SC ⊥")
+                ax_top.plot(_sc[:, 0], _sc[:, 3], color=_PALETTE[5],
+                            linewidth=1.5, linestyle=":",  label="SC ∥")
                 plotted_top = True
 
     ax_top.set_ylabel("Power density (MW·m⁻³)")
