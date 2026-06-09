@@ -470,30 +470,15 @@ else steady_state
 
     endif
             
-    ! Multi-phase time loop: run up to 3 phases with independent timesteps.
-    ! Phases with ntimes(k)=0 are skipped.  Output files are opened fresh on
-    ! phase 1 (otime=0) and appended on phases 2-3 (otime>0).
-    do k = 1, 3
-        if (ntimes(k) == 0) cycle
-        ntimes_cur   = ntimes(k)
-        timestep_cur = timestep(k)
-        if (k > 1) then
-            ! Pack 2-D fout back into the 1-D fin vector for the next phase.
-            do iv = 1, nperp
-                do imu = 1, npar
-                    fin(index_mat(iv,imu)) = fout(iv,imu)
-                end do
-            end do
-            ! For NL runs: sum_phi was saved to disk in phase 1; load it cheaply.
-            if (isc == -1) new_grid = 0
-        end if
-        if (isc == -1) then
-            call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        else
-            call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
-        end if
-        time1 = time1 + ntimes(k) * timestep(k)
-    end do
+    ! All phases run inside the solver in one uninterrupted loop.
+    ! ntimes_cur/timestep_cur are no longer used here; the solvers
+    ! iterate over ntimes(1..3)/timestep(1..3) directly.
+    if (isc == -1) then
+        call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+    else
+        call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)
+    end if
+    time1 = time1 + sum(ntimes * timestep)
     
  !  
 endif steady_state

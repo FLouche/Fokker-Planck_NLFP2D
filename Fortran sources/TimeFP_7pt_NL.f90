@@ -86,7 +86,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
   REAL(dp) :: t_start, t_end
 
-  INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
+  INTEGER :: ndof, i, j, k, row, ptr, itime, itime_global, iphase, iv, imu, ix
+  REAL(dp) :: phase_offset
   INTEGER :: error, ib
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
@@ -308,7 +309,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END IF
 
   !================================================================
-  ! 5.  Time loop
+  ! 5.  Time loop  (all phases in one uninterrupted loop)
   !================================================================
   DO ix = 1, nbig
     CALL index_mat_inv(ix, iv, imu)
@@ -316,16 +317,24 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END DO
   CALL time_density(f_init, dens_tmp)
   WRITE(*,*) 'Initial density is ', dens_tmp
-  
-  call time_energy(f_init, dens_tmp, teff=teff_tmp)
-   write(*,*) 'Initial effective temperature is ',teff_tmp
-   
-   teff = teff_tmp
-   lnaa_t = 0.0_dp
 
-  time_loop: DO itime = 1, ntimes_cur
+  CALL time_energy(f_init, dens_tmp, teff=teff_tmp)
+  WRITE(*,*) 'Initial effective temperature is ', teff_tmp
 
-    time = otime + itime*timestep_cur
+  teff        = teff_tmp
+  lnaa_t      = 0.0_dp
+  phase_offset = 0.0_dp
+  itime_global = 0
+
+  phase_loop: DO iphase = 1, 3
+    IF (ntimes(iphase) == 0) CYCLE phase_loop
+    timestep_cur = timestep(iphase)
+    IF (iphase > 1) WRITE(*,'(A,I0,A,ES12.4,A)') &
+        '  Phase ', iphase, ': dt = ', timestep_cur, ' s'
+
+  time_loop: DO itime = 1, ntimes(iphase)
+    itime_global = itime_global + 1
+    time = otime + phase_offset + itime*timestep_cur
    ! WRITE(*,*) 'Time is ', time, ' s'
 
     !--- 5a. Self-collision coefficients from f^n ------------------
@@ -503,10 +512,10 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         p_drive_ss = max(p_drive_ss, abs(pcoll(ib)))
       end do
       p_drive_ss = max(p_drive_ss, 1.0_dp)
-      call ss_check(itime, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
+      call ss_check(itime_global, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
       if (ss_converged) then
         write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (steady state reached).'
-        exit time_loop
+        exit phase_loop
       end if
     end if
 
@@ -514,6 +523,10 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     fstart = x_vec
 
   END DO time_loop
+
+    phase_offset = phase_offset + ntimes(iphase) * timestep_cur
+
+  END DO phase_loop
 
   !================================================================
   ! 6.  Finalise

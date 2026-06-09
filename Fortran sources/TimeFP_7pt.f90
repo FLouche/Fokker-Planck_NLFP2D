@@ -85,7 +85,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
 
-  INTEGER :: ndof, i, j, k, row, ptr, itime, iv, imu, ix
+  INTEGER :: ndof, i, j, k, row, ptr, itime, itime_global, iphase, iv, imu, ix
+  REAL(dp) :: phase_offset
   INTEGER :: error, ib
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
@@ -312,9 +313,18 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   ! Fixed Stix background temperature for isc=1 self-collision Coulomb log
   teff_sc_eV = aa * (vteff / 9.79d3)**2
 
-  time_loop: DO itime = 1, ntimes_cur
+  phase_offset  = 0.0_dp
+  itime_global  = 0
 
-    time = otime + itime*timestep_cur
+  phase_loop: DO iphase = 1, 3
+    IF (ntimes(iphase) == 0) CYCLE phase_loop
+    timestep_cur = timestep(iphase)
+    IF (iphase > 1) WRITE(*,'(A,I0,A,ES12.4,A)') &
+        '  Phase ', iphase, ': dt = ', timestep_cur, ' s'
+
+  time_loop: DO itime = 1, ntimes(iphase)
+    itime_global = itime_global + 1
+    time = otime + phase_offset + itime*timestep_cur
    ! WRITE(*,*) 'Time is ', time, ' s'
 
     !--- Update Coulomb log and rebuild linear operator each step ----
@@ -483,10 +493,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         p_drive_ss = max(p_drive_ss, abs(pcoll(ib)))
       end do
       p_drive_ss = max(p_drive_ss, 1.0_dp)
-      call ss_check(itime, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
+      call ss_check(itime_global, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
       if (ss_converged) then
         write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (steady state reached).'
-        exit time_loop
+        exit phase_loop
       end if
     end if
 
@@ -494,6 +504,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     fstart = x_vec!*npart/dens_tmp
 
   END DO time_loop
+
+    phase_offset = phase_offset + ntimes(iphase) * timestep_cur
+
+  END DO phase_loop
 
   !================================================================
   ! 6.  Finalise
