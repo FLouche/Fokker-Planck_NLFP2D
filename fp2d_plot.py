@@ -88,6 +88,11 @@ FILE_META = {
     "Ekin_par":           {"ptype": "2d",  "title": "Par. kinetic energy (keV)"},
     "beam":               {"ptype": "2d",  "title": "Beam source  S(v⊥, v∥)",
                            "sci_z": True},
+    "fsc_maxw":           {"ptype": "2d",  "title": "SC Maxwellian  f_M(v⊥, v∥)  at final T_eff",
+                           "sci_z": True},
+    # 1-D slices of SC Maxwellian ------------------------------------------
+    "fsc_maxw_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)", "ylabel": "f_M",
+                           "title": "SC Maxwellian at v∥ = 0  (final T_eff)", "sci_y": True},
     # Simple time series -------------------------------------------------------
     "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
                                 "title": "Particle density vs time"},
@@ -877,6 +882,50 @@ def plot_momentum_balance(outdir: Path, save_dir, show: bool, casename: str) -> 
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_fout_vs_maxw_at_vpar0(outdir: Path, save_dir, show: bool, log: bool,
+                               casename: str) -> None:
+    """Overlay VDF and SC Maxwellian at v∥ = 0 on the same axes (isc=2 runs)."""
+    f_maxw = _outfile(outdir, "fsc_maxw_at_vpar0", casename)
+    if not f_maxw.exists():
+        return
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plotted = False
+
+    f_fout = _outfile(outdir, "fout_at_vpar0", casename)
+    if f_fout.exists():
+        d = _load(f_fout)
+        if d is not None and d.shape[1] >= 2:
+            ax.plot(d[:, 0], d[:, 1], color=_PALETTE[0], linewidth=1.5, label="f  (VDF)")
+            plotted = True
+
+    d = _load(f_maxw)
+    if d is not None and d.shape[1] >= 2:
+        ax.plot(d[:, 0], d[:, 1], color=_PALETTE[1], linewidth=1.5,
+                linestyle="--", label="f_M  (SC Maxwellian at T_eff)")
+        plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        return
+
+    ax.set_xlabel("v⊥ (v_th)")
+    ax.set_ylabel("f")
+    ax.set_title(_title({}, "VDF vs SC Maxwellian at v∥ = 0", casename))
+    if log:
+        all_y = np.concatenate([l.get_ydata() for l in ax.lines])
+        if np.any(all_y > 0):
+            ax.set_yscale("log")
+    else:
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    if ax.get_xlim()[0] < 0:
+        ax.set_xlim(left=0)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    stem_out = f"fout_vs_maxw_at_vpar0-{casename}" if casename else "fout_vs_maxw_at_vpar0"
+    _finish(fig, stem_out, save_dir, show)
+
+
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
@@ -945,6 +994,12 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
             plot_momentum_breakdown(outdir, save_dir, show, casename, show_sc=show_sc)
             print("  [cmp]  momentum_balance_vs_time")
             plot_momentum_balance(outdir, save_dir, show, casename)
+
+    if restrict is None:
+        f_check = _outfile(outdir, "fsc_maxw_at_vpar0", casename)
+        if f_check.exists():
+            print("  [cmp]  fout_vs_maxw_at_vpar0")
+            plot_fout_vs_maxw_at_vpar0(outdir, save_dir, show, log, casename)
 
     if show:
         plt.show()  # single blocking call — all windows open simultaneously
