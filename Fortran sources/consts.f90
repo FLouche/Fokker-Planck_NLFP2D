@@ -17,6 +17,7 @@ use shared_timer
 use shared_rf
 
 use coulomb_log_mod
+use mod_ncint
 
 implicit none
 
@@ -159,7 +160,7 @@ write(77,81) teff*1.d-3
 
 cinit=npart/(2.d0*pi*vteff**2)**1.5d0
 
-open(40, file=TRIM(outfile('fstix.dat')),status='unknown')	
+open(40, file=TRIM(outfile('fstix.dat')),status='unknown')
 do i=1,nperp
     do j=1,npar
         arg=(vpar(j)**2+vperp(i)**2)/(2.d0*vteff**2)
@@ -168,6 +169,24 @@ do i=1,nperp
     enddo
 enddo
 close(40)
+
+! Renormalise fstix to exactly npart on the numerical grid.
+! The analytical cinit gives the correct continuous integral, but the
+! discretised quadrature (non-uniform vperp grid + Simpson weights) may
+! differ by a small amount.  Rescaling here ensures time_density returns
+! exactly npart at t=0 for any grid configuration.
+block
+    double precision :: fstix_dens
+    double precision :: fint_tmp(nperp,npar)
+    integer :: ii, jj
+    do ii = 1, nperp
+        do jj = 1, npar
+            fint_tmp(ii,jj) = fstix(ii,jj) * jacob(ii,jj)
+        enddo
+    enddo
+    call ncint_2d(fint_tmp, fstix_dens)
+    if (fstix_dens > 0.d0) fstix = fstix * npart / fstix_dens
+end block
 !
 !===================================================================
 
