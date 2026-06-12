@@ -560,7 +560,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !================================================================
   IF (isource == 0) THEN
     WRITE(*,*) 'Renormalizing...'
-    fout = fout * npart / dens_tmp
+    fout  = fout  * npart / dens_tmp
+    x_vec = x_vec * npart / dens_tmp   ! keep x_vec consistent so xout.dat restarts correctly
   END IF
 
   !================================================================
