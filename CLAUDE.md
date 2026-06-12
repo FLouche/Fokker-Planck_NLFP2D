@@ -124,3 +124,96 @@ All output is written to the run directory. Key files:
 The two main solver calls use different argument orders than each other. In `main`:
 - `solve_fp_pardiso(A, B, C, D, E, F, …)` → `(all00, all10, all01, all20, all11, all02, …)`
 - `timefp_7pt(all00, all10, all01, all11, all20, all02, …)` — note E and D are swapped relative to `solve_fp_pardiso`'s `(A,B,C,D,E,F)`
+
+## Directory Layout
+
+```
+FP2D_QLRF_NL/                  ← project root; git repo lives here
+  CLAUDE.md
+  fp2d_plot.py
+  Fortran sources/              ← ALL .f90 source files live here (not inside FP2D_QLRF_NL/)
+  FP2D_QLRF_NL/                 ← Visual Studio project subfolder (contains .sln, .vfproj)
+    x64/
+      Debug/    ← Debug build output; exe + all .txt run outputs land here
+      Release/  ← Release build output
+  inputs/                       ← Fortran namelist input files (.dat)
+  Simulations/                  ← archived simulation results
+```
+
+**Key source files in `Fortran sources/`:**
+
+| File | Purpose |
+|------|---------|
+| `main-FP_Coll_2D.f90` | Entry point: reads namelist, assembles FP terms, calls solvers, writes 1D slices |
+| `shared_data.f90` | All shared modules: `shared_grid`, `shared_plasma`, `shared_timer`, `shared_FPterms`, `shared_RF` |
+| `TimeFP_7pt.f90` | Time-dependent solver for `isc ≥ 0` (linear/Maxwellian-SC); Crank-Nicolson or implicit |
+| `TimeFP_7pt_NL.f90` | Time-dependent solver for `isc = -1` (nonlinear self-collisions) |
+| `self_coll_max.f90` | Computes SC FP coefficients `sc**` for a Maxwellian background via `cblin` |
+| `fd_stencil_2d.f90` | 7-point Fornberg stencil; central routine called by all solvers |
+| `time_comps_mod.f90` | `time_energy(f, dens, teff=…)` and `time_density(f, dens)` — moment integrals |
+| `analysis.f90` | Post-time-loop analysis and additional output |
+| `pardiso_solver (2).f90` | MKL PARDISO wrapper (phased factorisation) |
+| `consts.f90` | Physical constants, fstix Maxwellian, initialisation |
+| `assemble_FP_terms.f90` | Fills `all**` arrays from `colin**`, `rf**` |
+
+## Fortran Internals
+
+### Shared variable semantics
+
+| Variable | Module | Meaning |
+|----------|--------|---------|
+| `npart` | `shared_plasma` | Particle density from namelist (m⁻³); used as SC-operator density and renorm target |
+| `dens_tmp` | local in solvers | Actual density of `fout` at current step (diverges from `npart` during NBI fill) |
+| `vteff` | `shared_plasma` | Thermal velocity at Stix temperature (fixed; used by `isc=1`) |
+| `teff` | local in `timefp_7pt` | Effective temperature (keV) updated unconditionally every step via `time_energy(fout,…,teff=teff)` |
+| `ta_eV` | local in `timefp_7pt` | `teff * 1.0d3` — Teff in eV, recomputed each step for isc=2 |
+| `vteff_t` | local in `timefp_7pt` | Thermal velocity used for SC this step: `vteff` (isc=1) or `9.79d3*sqrt(ta_eV/aa)` (isc=2) |
+| `jmid` | `shared_grid` | v∥ grid index for v∥ = 0 (used for all `_at_vpar0` output slices) |
+| `gamma0` | PARAMETER in solvers | `2.390775d-1` — collision frequency pre-factor |
+| `pi15` | PARAMETER in `timefp_7pt` | `5.5683279968` = π^(3/2), used for SC Maxwellian normalisation |
+
+### Maxwellian background formula (isc=2)
+
+The SC operator uses a Maxwellian background with density `npart` and thermal velocity `vteff_t`:
+```
+f_M(v⊥, v∥) = npart / (π^{3/2} · vth³) · exp(−(v⊥² + v∥²) / vth²)
+              where  vth = 9.79×10³ · sqrt(Teff[eV] / aa)  m/s
+```
+Written to `fsc_maxw.txt` and `fsc_maxw_at_vpar0.txt` at the end of `timefp_7pt` when `isc==2`.
+
+### Output file-unit registry (`timefp_7pt`)
+
+New output files must use units not in this table:
+
+| Unit(s) | File(s) | Condition |
+|---------|---------|-----------|
+| 40 | `fout.txt`, 1D slices (main) | always |
+| 45–47 | density / energy / anisotropy vs time | always |
+| 470–479 | power_coll_tot / per-species | `iplot_pow=-1` |
+| 480 | power_RF_vs_time | RF |
+| 490 | power_NBI_vs_time | NBI |
+| 500 | power_coll_self_vs_time | `isc≠0` |
+| 505 | coulomb_log_vs_time | `nbulk>1` |
+| 506 | coulomb_log_self_vs_time | `isc=1,2` |
+| 507 | Teff_vs_time | always |
+| 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2` |
+| 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
+| 580 | momentum_RF_vs_time | RF |
+| 590 | momentum_NBI_vs_time | NBI |
+| 600 | momentum_coll_self_vs_time | `isc≠0` |
+
+### Output filename convention
+All output files go through `outfile(name)` (defined in `shared_timer`):
+- `casename = ''` → writes `name` unchanged
+- `casename = 'foo'` → writes `stem-foo.ext` (e.g. `fout-foo.txt`)
+
+## fp2d_plot.py Structure
+
+The script is at the project root. Key extension points:
+
+- **`FILE_META`** — dict keyed by file stem; `ptype` in `{"1d","2d","ts","ts2"}` controls which plot function is used. Add new entries here to make a new output file auto-discovered. `_SKIP_STEMS` lists stems that are handled by composite functions instead of the per-file loop.
+- **Per-file plot functions** — `plot_1d`, `plot_2d`, `plot_3d`, `plot_ts`, `plot_ts2` (called by the main loop in `plot_directory`)
+- **Composite plot functions** — `plot_power_combined`, `plot_power_coll`, `plot_sc_power_split`, `plot_coulomb_log`, `plot_momentum_coll`, `plot_momentum_breakdown`, `plot_momentum_balance`, `plot_fout_vs_maxw_at_vpar0` — called at the end of `plot_directory` when `restrict is None`
+- **`plot_directory`** — main orchestrator: iterates txt files, dispatches to per-file functions, then calls composite functions
+- **`_outfile(outdir, stem, casename)`** — constructs the expected filename for a given stem+casename (mirrors the Fortran `outfile()` function)
+- **Namelist readers** — `_read_ntimes_from_namelist`, `_read_isc_from_namelist`, `_read_iplot_pow_from_namelist`, `_read_iplot_mom_from_namelist` used by `run` subcommand to set plotting flags before the solver runs
