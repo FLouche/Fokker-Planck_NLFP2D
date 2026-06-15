@@ -205,3 +205,83 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   taum = taum_save   ! restore original value for the caller
 
 END SUBROUTINE time_power_7pt
+
+
+!*******************************************************************
+! DIAGNOSTIC (SC_diagnostics branch only): velocity-space density of
+! the self-collision power,
+!
+!     dP_SC/d3v = (1/2) m v^2 * C_SC[f]
+!
+! i.e. the integrand of P_SC *without* the jacobian (the d3v measure).
+! Integrating dP_SC/d3v * jacob over the grid reproduces pcoll_self.
+! Shows directly WHERE in velocity space the SC operator deposits
+! (>0) or removes (<0) energy.  Writes a 2D map and a vpar=0 slice.
+!*******************************************************************
+
+SUBROUTINE sc_power_density_diag(f, dens)
+
+  USE shared_grid
+  USE shared_plasma
+  USE shared_beam        ! isource, taum
+  USE shared_FPterms     ! sc00..sc02
+  USE shared_timer       ! isc, outfile()
+  USE func_index
+  USE mod_apply_operator
+
+  IMPLICIT NONE
+
+  INTEGER, PARAMETER :: dp = KIND(1.0D0)
+
+  REAL(dp), INTENT(IN) :: f(nbig), dens
+
+  REAL(dp) :: Lf(nbig)
+  REAL(dp) :: pdens(nperp,npar)
+  REAL(dp) :: normfac, taum_save
+  REAL(dp), PARAMETER :: pmass = 1.6726d-27   ! proton mass [kg]
+  INTEGER  :: iv, ip, ix
+
+  IF (isc == 0) RETURN
+
+  ! apply_operator (via fd_stencil_2d) reads taum from shared_beam;
+  ! the collision operator must not include the -f/taus loss term.
+  taum_save = taum
+  taum = 0.0_dp
+
+  IF (isource == 0) THEN
+    normfac = npart / dens
+  ELSE
+    normfac = 1.0_dp
+  END IF
+
+  CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
+
+  DO iv = 1, nperp
+    DO ip = 1, npar
+      ix = index_mat(iv, ip)
+      pdens(iv,ip) = 0.5_dp * pmass * aa &
+                   * (vperp(iv)**2 + vpar(ip)**2) * normfac * Lf(ix)
+    END DO
+  END DO
+
+  taum = taum_save
+
+  ! 2D map
+  OPEN(512, file=TRIM(outfile('sc_power_density.txt')), status='unknown')
+  DO iv = 1, nperp
+    DO ip = 1, npar
+      WRITE(512,*) vperp(iv), vpar(ip), pdens(iv,ip)
+    END DO
+  END DO
+  CLOSE(512)
+
+  ! vpar = 0 slice (column jmid)
+  OPEN(513, file=TRIM(outfile('sc_power_density_at_vpar0.txt')), status='unknown')
+  DO iv = 1, nperp
+    WRITE(513,*) vperp(iv), pdens(iv,jmid)
+  END DO
+  CLOSE(513)
+
+  WRITE(*,*) '  SC power density (2D map + vpar=0 slice) written.'
+
+END SUBROUTINE sc_power_density_diag

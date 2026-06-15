@@ -93,6 +93,20 @@ FILE_META = {
     # 1-D slices of SC Maxwellian ------------------------------------------
     "fsc_maxw_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)", "ylabel": "f_M",
                            "title": "SC Maxwellian at v∥ = 0  (final T_eff)", "sci_y": True},
+    # SC coefficient diagnostics (written by isc=1,2 via TimeFP_7pt
+    #                              and isc=-1 via TimeFP_7pt_NL) --------
+    "sc_Dpepe_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "D⊥⊥ (m² s⁻³)",
+                            "title":  "SC diffusion D⊥⊥ at v∥ = 0", "sci_y": True},
+    "sc_Fpe_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "F⊥ (m s⁻²)",
+                            "title":  "SC friction F⊥ at v∥ = 0",   "sci_y": True},
+    # SC power-density diagnostic  dP_SC/d³v = ½ m v² C_SC[f]  (signed) ----
+    "sc_power_density":   {"ptype": "2d",  "diverging": True, "sci_z": True,
+                            "title": "SC power density  dP_SC/d³v  (>0 source, <0 sink)"},
+    "sc_power_density_at_vpar0": {"ptype": "1d", "xlabel": "v⊥ (v_th)",
+                            "ylabel": "dP_SC/d³v at v∥=0", "sci_y": True,
+                            "title": "SC power density at v∥ = 0  (>0 source, <0 sink)"},
     # Simple time series -------------------------------------------------------
     "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
                                 "title": "Particle density vs time"},
@@ -293,16 +307,26 @@ def plot_2d(data, meta, stem, save_dir, show, log, casename):
     if zmin == zmax:
         zmax = zmin + 1.0
 
-    if log and np.any(Z > 0):
+    diverging = meta.get("diverging", False)
+    if diverging:
+        # Signed field: symmetric range about 0 with a diverging colormap so
+        # sources (>0) and sinks (<0) are immediately distinguishable.
+        zabs   = max(abs(zmin), abs(zmax)) or 1.0
+        norm   = None
+        levels = np.linspace(-zabs, zabs, 21)
+        cmap   = "RdBu_r"
+    elif log and np.any(Z > 0):
         pos    = Z[Z > 0]
         norm   = mcolors.LogNorm(vmin=float(pos.min()), vmax=zmax)
         levels = np.logspace(np.log10(float(pos.min())), np.log10(zmax), 20)
+        cmap   = "rainbow"
     else:
         norm   = None
         levels = np.linspace(zmin, zmax, 20)
+        cmap   = "rainbow"
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    cf   = ax.contourf(vpar_u, vperp_u, Z, levels=levels, norm=norm, cmap="rainbow")
+    cf   = ax.contourf(vpar_u, vperp_u, Z, levels=levels, norm=norm, cmap=cmap)
     cbar = fig.colorbar(cf, ax=ax)
     if meta.get("sci_z") and norm is None:
         cbar.formatter.set_powerlimits((0, 0))

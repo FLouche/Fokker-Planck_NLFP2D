@@ -99,7 +99,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: mRF_perp, mRF_par, msrc_perp, msrc_par
   REAL(dp) :: mloss_perp, mloss_par, mSC_perp, mSC_par
 
-  EXTERNAL :: time_power_7pt, time_momentum_7pt
+  EXTERNAL :: time_power_7pt, time_momentum_7pt, sc_power_density_diag
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
@@ -551,6 +551,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     CLOSE(511); CLOSE(510)
     WRITE(*,*) '  SC diagnostic (Dpepe, Fpe at vpar=0) written.'
   END BLOCK
+
+  ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
+  CALL sc_power_density_diag(x_vec, dens_tmp)
 
   DEALLOCATE(sum_phi)
 
