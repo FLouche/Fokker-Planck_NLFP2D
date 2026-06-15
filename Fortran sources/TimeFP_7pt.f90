@@ -586,6 +586,43 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (T_eff=', teff, ' keV) written to fsc_maxw.txt'
   END IF
 
+  !================================================================
+  ! 10. Diagnostic: SC Dpepe and Fpe at v_par≈0  (isc=1 or 2)
+  !
+  !   Dpepe(v⊥) = sc20(iv, jmid)             [= Theta + vpar²·Phi]
+  !   Fpe(v⊥)   = gammaa * (-v⊥ * Psi)
+  !
+  ! Psi is recomputed here from the Chandrasekhar function, matching
+  ! exactly what cblin uses (cblin does not return Psi directly).
+  !================================================================
+  IF (isc == 1 .OR. isc == 2) THEN
+    BLOCK
+      REAL(dp) :: sq2_d, sqrt_pi_d, v1_d, arg_d, arg2_d
+      REAL(dp) :: func1_d, derfarg_d, chandra_d, Psi_d, Fpe_d
+      INTEGER  :: iv_d
+      sq2_d     = SQRT(2.0_dp)
+      sqrt_pi_d = SQRT(ACOS(-1.0_dp))
+      OPEN(510, file=TRIM(outfile('sc_Dpepe_at_vpar0.txt')), status='unknown')
+      OPEN(511, file=TRIM(outfile('sc_Fpe_at_vpar0.txt')),   status='unknown')
+      DO iv_d = 1, nperp
+        ! Dpepe = sc20  (the v⊥/v⊥ diffusion coefficient, already computed)
+        WRITE(510,*) vperp(iv_d), sc20(iv_d, jmid)
+        ! Fpe = gammaa * (-v⊥ * Psi),  Psi = G(u)/(v * vth²),  u = v/(√2 vth)
+        v1_d      = SQRT(vperp(iv_d)**2 + vpar(jmid)**2)
+        arg_d     = v1_d / (sq2_d * vteff_t)
+        arg2_d    = arg_d**2
+        func1_d   = ERF(arg_d)
+        derfarg_d = (2.0_dp / sqrt_pi_d) * EXP(-arg2_d)
+        chandra_d = (func1_d - arg_d * derfarg_d) / (2.0_dp * arg2_d)
+        Psi_d     = chandra_d / (v1_d * vteff_t**2)   ! maonmb = 1 (same species)
+        Fpe_d     = gammaa * (-vperp(iv_d) * Psi_d)
+        WRITE(511,*) vperp(iv_d), Fpe_d
+      END DO
+      CLOSE(511); CLOSE(510)
+      WRITE(*,*) '  SC diagnostic (Dpepe, Fpe at vpar=0) written.'
+    END BLOCK
+  END IF
+
   DEALLOCATE(ia_L, ja_L, aa_L, ia_lhs, ja_lhs, aa_lhs, rhs_vec, x_vec, Lf)
 
 CONTAINS

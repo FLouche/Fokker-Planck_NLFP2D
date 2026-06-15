@@ -534,6 +534,24 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
 
+  !================================================================
+  ! Diagnostic: SC Dpepe and Fpe at v_par≈0  (isc=-1)
+  !   Dpepe = coef * d²ψ/dv⊥²,   Fpe = coef * dφ/dv⊥
+  ! Must come BEFORE DEALLOCATE(sum_phi) — compute_psi needs it.
+  !================================================================
+  BLOCK
+    REAL(dp), DIMENSION(nperp) :: Dpepe_diag, Fpe_diag
+    CALL sc_diag_vpar0(x_vec, teff, Dpepe_diag, Fpe_diag)
+    OPEN(510, file=TRIM(outfile('sc_Dpepe_at_vpar0.txt')), status='unknown')
+    OPEN(511, file=TRIM(outfile('sc_Fpe_at_vpar0.txt')),   status='unknown')
+    DO iv = 1, nperp
+      WRITE(510,*) vperp(iv), Dpepe_diag(iv)
+      WRITE(511,*) vperp(iv), Fpe_diag(iv)
+    END DO
+    CLOSE(511); CLOSE(510)
+    WRITE(*,*) '  SC diagnostic (Dpepe, Fpe at vpar=0) written.'
+  END BLOCK
+
   DEALLOCATE(sum_phi)
 
   IF (iplot_pow == -1) THEN

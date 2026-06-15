@@ -596,5 +596,80 @@ END SUBROUTINE regularise_axis_3
 !   
 !  end subroutine output_results
 
+
+!***********************************************************************
+! Diagnostic subroutine: SC Dpepe and Fpe at v_par = jmid (≈0)
+!
+!   Dpepe(v⊥) = coef * d2psi/dv⊥2  |_{v_par=jmid}
+!   Fpe(v⊥)   = coef * dphi/dv⊥     |_{v_par=jmid}
+!
+! with coef = -4π * γ / npart,  γ = γ₀ * lnΛ * (za/aa)² * npart * za²
+!
+! NOTE: requires sum_phi to be allocated (uses compute_psi internally).
+!       In timefp_7pt_nl, call before DEALLOCATE(sum_phi).
+!***********************************************************************
+
+    subroutine sc_diag_vpar0(xout, teff, Dpepe_slice, Fpe_slice)
+
+      use shared_grid
+      use func_index
+      use shared_plasma
+      use shared_timer
+      use coulomb_log_mod
+      use derivatives_2d
+
+      implicit none
+
+      double precision, intent(in),  dimension(nbig)  :: xout
+      double precision, intent(in)                    :: teff
+      double precision, intent(out), dimension(nperp) :: Dpepe_slice, Fpe_slice
+
+      double precision, dimension(nperp, npar) :: fout_loc, psi, phi
+      double precision, dimension(nperp, npar) :: Lphi_radial, d2phidpe2
+      double precision, dimension(nperp, npar) :: dphidpe, d2psidpe2, d2psidpa2
+
+      double precision, parameter :: gamma0_d = 2.390775d-1
+
+      double precision :: pi_d, ta_eV_d, lnaa_d, cte0_d, coef_d
+      integer :: ipe, ipa, ix
+
+      pi_d = 4.0d0 * atan(1.0d0)
+
+      ! Unpack 1-D solution vector to 2-D grid
+      do ipe = 1, nperp
+        do ipa = 1, npar
+          ix = index_mat(ipe, ipa)
+          fout_loc(ipe, ipa) = xout(ix)
+        end do
+      end do
+
+      ! First Rosenbluth potential psi
+      call compute_psi(fout_loc, psi)
+
+      ! Second potential phi = Δ_v psi   (cylindrical Laplacian + d²/dvpar²)
+      call deriv_y2(psi, nperp, npar, dvpar, d2psidpa2)
+      call laplacian_radial(psi, vperp, nperp, npar, Lphi_radial)
+      phi = Lphi_radial + d2psidpa2
+
+      ! Regularise phi near the axis then recompute its v⊥ derivative
+      call deriv_x2(phi, vperp, nperp, npar, d2phidpe2)
+      call regularise_axis_3(phi, d2phidpe2, vperp, nperp, npar)
+      call deriv_x1(phi, vperp, nperp, npar, dphidpe)
+
+      ! d²psi/dv⊥²  (needed for Dpepe)
+      call deriv_x2(psi, vperp, nperp, npar, d2psidpe2)
+
+      ! Coulomb logarithm and prefactor
+      ta_eV_d = teff * 1.0d3
+      call coulomb_log_ab(za, aa, ta_eV_d, npart, za, aa, ta_eV_d, npart, lnaa_d)
+      cte0_d = gamma0_d * lnaa_d * (za/aa)**2
+      gammaa  = cte0_d * npart * za**2
+      coef_d  = -4.0d0 * pi_d * gammaa / npart
+
+      ! Extract slices at jmid (v_par ≈ 0)
+      Dpepe_slice(:) = coef_d * d2psidpe2(:, jmid)
+      Fpe_slice(:)   = coef_d * dphidpe(:,   jmid)
+
+    end subroutine sc_diag_vpar0
+
     end module nlterm
-    
