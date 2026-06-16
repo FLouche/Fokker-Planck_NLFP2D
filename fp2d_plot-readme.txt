@@ -180,10 +180,15 @@ COMMON OPTIONS  (all three sub-commands)
 
   --xrange xmin:xmax
                     (plot and compare only)  Zoom the x-axis of every figure
-                    to the interval [xmin, xmax].  Applies to whatever lies on
-                    the x-axis of each plot: v_par for 2D maps, v_perp or v_par
-                    for 1D profiles, and time for *_vs_time traces.  Accepts a
-                    ':' or ',' separator and requires xmin < xmax.
+                    to the interval [xmin, xmax], and rescale the y-axis to the
+                    data within that window.  Applies to whatever lies on the
+                    x-axis of each plot: v_par for 2D maps, v_perp or v_par for
+                    1D profiles, and time for *_vs_time traces.  Bounds are in
+                    the file's own x-axis units: m/s for velocities (the grid
+                    spans ~0 to a few 1e7 m/s, so use e.g. 0:5e6, NOT 0:1) and
+                    seconds for time traces.  Accepts a ':' or ',' separator
+                    and requires xmin < xmax.  If the window contains no data a
+                    warning is printed (the plot would otherwise be blank).
                     Example: --xrange 0:5e6
 
   --casename STR    (run and plot only)  Case label appended to every plot

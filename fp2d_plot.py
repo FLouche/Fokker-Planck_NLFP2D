@@ -298,6 +298,25 @@ def _autoscale_y_to_xrange(ax, xrange) -> None:
         ax.set_ylim(ylo - pad, yhi + pad)
 
 
+def _warn_if_xrange_empty(fig, stem: str) -> None:
+    """Warn when --xrange selects no line data (otherwise the plot is blank
+    with no hint why — usually a units mismatch, e.g. 0:1 on an m/s axis)."""
+    xmin, xmax = _XRANGE
+    xs, in_window = [], False
+    for ax in fig.axes:
+        for line in ax.get_lines():
+            xd = np.asarray(line.get_xdata(), dtype=float)
+            if xd.size <= 2:                   # skip reference lines
+                continue
+            xs.append(xd)
+            if np.any((xd >= xmin) & (xd <= xmax)):
+                in_window = True
+    if xs and not in_window:
+        allx = np.concatenate(xs)
+        print(f"    WARNING: --xrange [{xmin:g}, {xmax:g}] selects no data for "
+              f"'{stem}' (x spans [{allx.min():g}, {allx.max():g}]); plot is empty.")
+
+
 def _finish(fig, stem: str, save_dir, show: bool) -> None:
     if _XRANGE is not None and fig.axes:
         # Zoom the data axes' x-range. fig.axes[0] is always the main plot:
@@ -307,6 +326,7 @@ def _finish(fig, stem: str, save_dir, show: bool) -> None:
         # Rescale y to the data now visible in the x-window (line plots only).
         for ax in fig.axes:
             _autoscale_y_to_xrange(ax, _XRANGE)
+        _warn_if_xrange_empty(fig, stem)
     if save_dir is not None:
         out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
