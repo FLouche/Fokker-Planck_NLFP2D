@@ -17,6 +17,11 @@ Options (both subcommands)
   --casename STR  Case label appended to every plot title.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
 
+plot / compare only
+-------------------
+  --xrange xmin:xmax   Zoom the x-axis of every plot to [xmin, xmax]
+                       (e.g. --xrange 0:5e6). Accepts ':' or ',' separators.
+
 run-only options
 ----------------
   --outdir DIR    Solver working directory (default: folder of <input.dat>).
@@ -165,6 +170,26 @@ _SKIP_STEMS = {"RF_dirac", "fstix",
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 
+# x-axis zoom for the 'plot' and 'compare' subcommands; (xmin, xmax) or None.
+# Set in main() from --xrange and applied to every figure in _finish().
+_XRANGE = None
+
+
+def _parse_xrange(s: str):
+    """Parse '--xrange' value 'xmin:xmax' (or 'xmin,xmax') into (xmin, xmax)."""
+    txt = s.strip().lstrip("[").rstrip("]")
+    sep = ":" if ":" in txt else ","
+    parts = txt.split(sep)
+    if len(parts) != 2:
+        sys.exit(f"Error: --xrange expects 'xmin:xmax', got '{s}'")
+    try:
+        lo, hi = float(parts[0]), float(parts[1])
+    except ValueError:
+        sys.exit(f"Error: --xrange bounds must be numbers, got '{s}'")
+    if hi <= lo:
+        sys.exit(f"Error: --xrange requires xmin < xmax, got '{s}'")
+    return (lo, hi)
+
 
 def _get_meta(stem: str) -> dict:
     """Return FILE_META entry for stem, falling back to prefix match for case-named files."""
@@ -241,6 +266,11 @@ def _detect_type(path: Path, data: np.ndarray) -> str:
 # ---------------------------------------------------------------------------
 
 def _finish(fig, stem: str, save_dir, show: bool) -> None:
+    if _XRANGE is not None and fig.axes:
+        # Zoom the data axes' x-range. fig.axes[0] is always the main plot:
+        # colorbars are appended afterwards, and every multi-panel figure is
+        # built with sharex=True, so a single set_xlim propagates to all panels.
+        fig.axes[0].set_xlim(_XRANGE)
     if save_dir is not None:
         out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
@@ -1270,6 +1300,8 @@ def build_parser() -> argparse.ArgumentParser:
     plot_p = sub.add_parser("plot", help="plot from an existing output directory")
     plot_p.add_argument("outdir", type=Path, help="directory containing .txt output files")
     _add_common(plot_p)
+    plot_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
+                        help="zoom the x-axis of every plot to [xmin, xmax]")
 
     cmp_p = sub.add_parser("compare",
                             help="overlay same-type outputs from multiple cases")
@@ -1286,16 +1318,23 @@ def build_parser() -> argparse.ArgumentParser:
     cmp_p.add_argument("--files", nargs="+", default=None, metavar="F",
                        help="restrict to these file types (stem key, e.g. anisotropy_vs_time)"
                             " or full filenames")
+    cmp_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
+                       help="zoom the x-axis of every plot to [xmin, xmax]")
 
     return p
 
 
 def main(argv=None):
+    global _XRANGE
     args = build_parser().parse_args(argv)
 
     # Default to interactive display when no save directory is given
     if not args.show and args.save_dir is None:
         args.show = True
+
+    # x-axis zoom (plot / compare only; run never defines --xrange)
+    if getattr(args, "xrange", None):
+        _XRANGE = _parse_xrange(args.xrange)
 
     # ----------------------------------------------------------------
     # compare command — handled entirely here, then return
