@@ -265,12 +265,48 @@ def _detect_type(path: Path, data: np.ndarray) -> str:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+def _autoscale_y_to_xrange(ax, xrange) -> None:
+    """Rescale an axes' y-limits to the line data lying within *xrange*.
+
+    Only line plots are affected: contour maps, colorbars and 3D surfaces have
+    no Line2D data and are left untouched. Reference lines (axhline/axvline,
+    exactly 2 points) are ignored so they cannot corrupt the range.
+    """
+    xmin, xmax = xrange
+    is_log = ax.get_yscale() == "log"
+    ys = []
+    for line in ax.get_lines():
+        xd = np.asarray(line.get_xdata(), dtype=float)
+        yd = np.asarray(line.get_ydata(), dtype=float)
+        if xd.size <= 2:                       # skip axhline/axvline references
+            continue
+        m = (xd >= xmin) & (xd <= xmax) & np.isfinite(yd)
+        if is_log:
+            m &= yd > 0
+        if np.any(m):
+            ys.append(yd[m])
+    if not ys:
+        return
+    yall = np.concatenate(ys)
+    ylo, yhi = float(yall.min()), float(yall.max())
+    if is_log:
+        lo, hi = np.log10(ylo), np.log10(yhi)
+        pad = 0.05 * (hi - lo) if hi > lo else 0.1
+        ax.set_ylim(10.0**(lo - pad), 10.0**(hi + pad))
+    else:
+        pad = 0.05 * (yhi - ylo) if yhi > ylo else (abs(yhi) * 0.05 or 1.0)
+        ax.set_ylim(ylo - pad, yhi + pad)
+
+
 def _finish(fig, stem: str, save_dir, show: bool) -> None:
     if _XRANGE is not None and fig.axes:
         # Zoom the data axes' x-range. fig.axes[0] is always the main plot:
         # colorbars are appended afterwards, and every multi-panel figure is
         # built with sharex=True, so a single set_xlim propagates to all panels.
         fig.axes[0].set_xlim(_XRANGE)
+        # Rescale y to the data now visible in the x-window (line plots only).
+        for ax in fig.axes:
+            _autoscale_y_to_xrange(ax, _XRANGE)
     if save_dir is not None:
         out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
