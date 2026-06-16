@@ -1,6 +1,7 @@
 ================================================================================
   fp2d_plot.py  --  Run & plot wrapper for the FP2D_QLRF_NL Fokker-Planck solver
   F. Louche -- LPP-ERM/KMS
+  June 2026
 ================================================================================
 
 OVERVIEW
@@ -102,6 +103,9 @@ EXAMPLES
   # Skip momentum plots (e.g. they were not written)
   python fp2d_plot.py plot x64/Release --no-mom --show
 
+  # Zoom every plot to the low-velocity region 0 - 5e6 m/s
+  python fp2d_plot.py plot x64/Release --xrange 0:5e6 --show
+
 
 ================================================================================
 SUBCOMMAND: compare
@@ -156,6 +160,11 @@ EXAMPLES
       --cases JET-beam7-TD0-Lin JET-beam7-TD0-NLSC ^
       --save plots/Lin_vs_NLSC
 
+  # Compare 1D profiles, zoomed to the perpendicular tail
+  python fp2d_plot.py compare x64/Release ^
+      --cases ITER-RF1-TD1-NLMax1 ITER-RF1-TD1-NLSC ^
+      --files sc_Fpe_at_vpar0 --xrange 0:5e6 --show
+
 
 ================================================================================
 COMMON OPTIONS  (all three sub-commands)
@@ -168,6 +177,14 @@ COMMON OPTIONS  (all three sub-commands)
 
   --log             Use logarithmic y-scale for 1D profiles, or logarithmic
                     colour scale for 2D contour maps (distribution functions).
+
+  --xrange xmin:xmax
+                    (plot and compare only)  Zoom the x-axis of every figure
+                    to the interval [xmin, xmax].  Applies to whatever lies on
+                    the x-axis of each plot: v_par for 2D maps, v_perp or v_par
+                    for 1D profiles, and time for *_vs_time traces.  Accepts a
+                    ':' or ',' separator and requires xmin < xmax.
+                    Example: --xrange 0:5e6
 
   --casename STR    (run and plot only)  Case label appended to every plot
                     title and used to locate output files.  Detected
@@ -210,6 +227,15 @@ INDIVIDUAL FIGURES
                                 at v_par = 0
   fstix_at_vpar0.txt          Stix Maxwellian at v_par = 0
   fstix_at_vperp0.txt         Stix Maxwellian at v_perp = 0
+  fsc_maxw_at_vpar0.txt       SC Maxwellian background at v_par = 0, evaluated
+                                at the final T_eff  (written when isc = 2)
+
+  Self-collision diagnostics  (v_par = 0 slices; SC_diagnostics build)
+  --------------------------
+  sc_Dpepe_at_vpar0.txt       SC perpendicular diffusion  D_perp,perp(v_perp)
+  sc_Fpe_at_vpar0.txt         SC perpendicular friction   F_perp(v_perp)
+  sc_power_density_at_vpar0.txt  SC power density  dP_SC/d^3v = 1/2 m v^2 C_SC[f]
+                                at v_par = 0 (>0 source, <0 sink)
 
   2D distribution maps
   --------------------
@@ -218,6 +244,11 @@ INDIVIDUAL FIGURES
   Ekin_perp.txt               Perpendicular kinetic energy map (keV)
   Ekin_par.txt                Parallel kinetic energy map (keV)
   beam.txt                    Beam source S(v_perp, v_par)
+  fsc_maxw.txt                SC Maxwellian background f_M(v_perp, v_par) at the
+                                final T_eff  (written when isc = 2)
+  sc_power_density.txt        SC power density map dP_SC/d^3v (signed; drawn with
+                                a diverging colour scale: red > 0 source,
+                                blue < 0 sink)  -- SC_diagnostics build
 
   Time traces -- single curve
   ----------------------------
