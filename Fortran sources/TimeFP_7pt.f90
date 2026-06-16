@@ -456,6 +456,36 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(47,*) time, anisotropy
     WRITE(507,*) time, teff
 
+    !--- Refresh Teff-dependent coefficients from the just-solved f^{n} ------
+    ! The operator used for the time step is built from the start-of-step
+    ! (lagged) Teff.  Reporting the collisional/self-collision power with that
+    ! lagged operator produces a transient in the power whenever the Teff jumps
+    ! a lot in one step -- e.g. at a dt change -- because the isc=2 background
+    ! scales as sqrt(Teff).  Rebuild gammab/sc** from the post-step teff (and
+    ! dens_tmp) above so the reported power is consistent with the current f.
+    ! Only the diagnostic coefficients are touched; all** and the solution are
+    ! unchanged, and the next step rebuilds everything from fstart regardless.
+    IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
+      ta_eV = teff * 1.0d3
+      DO ib = 2, nbulk
+        CALL coulomb_log_ab(za, aa, ta_eV, npart, &
+                            zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
+        lnab_arr(ib) = lnab_t
+        gammab(ib)   = gamma0 * lnab_t * (za/aa)**2 * nb(ib) * zb(ib-1)**2
+      END DO
+      IF (isc == 1 .OR. isc == 2) THEN
+        IF (isc == 1) THEN
+          vteff_t = vteff
+          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
+        ELSE
+          vteff_t = 9.79d3 * SQRT(ta_eV / aa)
+          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
+        END IF
+        gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
+        CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+      END IF
+    END IF
+
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
                         pcoll_self, pcoll_self_perp, pcoll_self_par)
 
