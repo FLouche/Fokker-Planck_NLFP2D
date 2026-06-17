@@ -138,6 +138,9 @@ FILE_META = {
     # Effective temperature
     "Teff_vs_time":                 {"ptype": "ts",  "ylabel": "T_eff (keV)",
                                      "title":  "Effective temperature vs time"},
+    # Density-characteristic (log-slope) temperature
+    "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
+                                     "title":  "Density-characteristic temperature vs time"},
     # Momentum transfer rate (⊥ and ∥ per file) --------------------------------
     "momentum_coll_tot_vs_time":    {"ptype": "ts2",
                                      "ylabel": "Momentum transfer rate (N·m⁻³)",

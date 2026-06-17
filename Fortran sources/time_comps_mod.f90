@@ -114,4 +114,52 @@ CONTAINS
 
   END SUBROUTINE time_energy
 
+  !***************************************************
+  !* Density-characteristic (log-slope) temperature  *
+  !*   Tn [keV] from the harmonic mean of v^2:        *
+  !*     1/vth_n^2 = <1/v^2>,   Tn = m / <1/v^2>      *
+  !*   Equivalent to the f-weighted local log-slope   *
+  !*   temperature; dominated by the dense cold bulk  *
+  !*   (cf. Tn_density_temperature note).             *
+  !*   Code convention vth = 9.79e3*sqrt(T[eV]/A):    *
+  !*     Tn[eV] = A / ( (9.79e3)^2 * <1/v^2> ).        *
+  !*   05/2026: F. Louche                             *
+  !***************************************************
+
+  SUBROUTINE time_Tn(f, dens, Tn)
+
+    USE shared_grid
+    USE mod_ncint
+    USE shared_plasma
+
+    IMPLICIT NONE
+
+    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar), dens
+    DOUBLE PRECISION, INTENT(OUT) :: Tn          ! [keV]
+
+    DOUBLE PRECISION, PARAMETER :: cvth = 9.79d3 ! sqrt(e/m_p) [m/s per sqrt(eV/amu)]
+    DOUBLE PRECISION, ALLOCATABLE :: fint(:,:)
+    DOUBLE PRECISION :: v2, v2_floor, inv_v2_avg, mom
+    INTEGER :: iv, ip
+
+    ALLOCATE(fint(nperp, npar))
+
+    ! f/v^2 integrand (jacob included).  The 1/v^2 weight is integrable;
+    ! guard only the exact origin.
+    v2_floor = MAX(vperp(1)**2, 1.0d0)
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        v2 = vperp(iv)**2 + vpar(ip)**2
+        fint(iv,ip) = f(iv,ip) / MAX(v2, v2_floor) * jacob(iv,ip)
+      END DO
+    END DO
+    CALL ncint_2d(fint, mom)          ! = n * <1/v^2>
+    inv_v2_avg = mom / dens           ! <1/v^2>
+
+    Tn = aa / (cvth**2 * inv_v2_avg) / 1.0d3   ! keV
+
+    DEALLOCATE(fint)
+
+  END SUBROUTINE time_Tn
+
 END MODULE time_comps_mod

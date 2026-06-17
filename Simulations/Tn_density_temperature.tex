@@ -1,0 +1,161 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{parskip}
+
+\geometry{margin=2.5cm}
+
+\title{A density-characteristic temperature $T_n$ from the logarithmic
+  slope of $f$\\ for the \texttt{isc=2} self-collision background}
+\author{FP2D\_QLRF\_NL --- design note}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+This note gives a complete, self-consistent definition of a
+density-characteristic temperature $T_n$ that can be used in place of the
+energy-weighted $T_\mathrm{eff}$ as the background temperature of the
+\texttt{isc=2} self-collision operator, with the velocity convention pinned
+down so it is a drop-in replacement.
+
+% ---------------------------------------------------------------------------
+\section{Convention (what the operator actually uses)}
+% ---------------------------------------------------------------------------
+
+\texttt{cblin} builds its background Maxwellian as the standard Maxwellian
+\begin{equation}
+  f_M \propto \exp\!\left(-\frac{v^2}{2v_\mathrm{th}^2}\right),
+  \qquad
+  v_\mathrm{th} = 9.79\times10^3\,\sqrt{T[\mathrm{eV}]/A}\;=\;\sqrt{T/m},
+  \qquad m = A\,m_p .
+\end{equation}
+(In \texttt{cblin}, \texttt{arg = v1/($\sqrt2$\,vth)} and
+\texttt{arg2 = v\textasciicircum2/(2\,vth\textasciicircum2)} --- i.e.\ the
+Maxwellian at temperature $T$.) A temperature is therefore turned into a
+background through $v_\mathrm{th}^2 = T/m$. We define $T_n$ so that it plugs
+straight into that same mapping; then it is a drop-in replacement for
+$T_\mathrm{eff}$ in the \texttt{isc=2} branch.
+
+% ---------------------------------------------------------------------------
+\section{Building block: the local log-slope temperature}
+% ---------------------------------------------------------------------------
+
+For that Maxwellian, $\ln f = \mathrm{const} - v^2/2v_\mathrm{th}^2$, so the
+radial logarithmic slope is
+\begin{equation}
+  \frac{\partial \ln f}{\partial v} = -\frac{v}{v_\mathrm{th}^2}
+  \quad\Longrightarrow\quad
+  v_\mathrm{th}^2(\mathbf v) \equiv \frac{-v}{\partial_v \ln f}
+  = \frac{-v^2}{\mathbf v\cdot\nabla_v \ln f},
+  \qquad
+  T_\mathrm{loc}(\mathbf v) = m\,v_\mathrm{th}^2(\mathbf v).
+\end{equation}
+This is the pointwise ``temperature seen in the slope of $f$''. It is exact
+(constant, equal to $T$) for a Maxwellian and varies across velocity space for
+a non-Maxwellian $f$.
+
+% ---------------------------------------------------------------------------
+\section{The scalar $T_n$ (density-weighted log-slope)}
+% ---------------------------------------------------------------------------
+
+Average the \emph{inverse} local thermal speed, weighted by the distribution
+itself (so the dense bulk dominates):
+\begin{equation}
+  \boxed{\;
+  \frac{1}{v_{\mathrm{th},n}^2}
+  \;\equiv\;
+  \frac{1}{n}\int f\;\frac{-\,\mathbf v\cdot\nabla_v \ln f}{v^2}\,d^3v
+  \;=\;
+  \frac{1}{n}\int \frac{-\,\mathbf v\cdot\nabla_v f}{v^2}\,d^3v
+  \;}, \qquad T_n = m\,v_{\mathrm{th},n}^2 .
+\end{equation}
+The second form (no $1/f$) is the one to implement. Integrating it by parts,
+using $\nabla_v\!\cdot(\mathbf v/v^2) = 1/v^2$ (boundary terms vanish), gives a
+remarkably clean closed form:
+\begin{equation}
+  \boxed{\;
+  \frac{1}{v_{\mathrm{th},n}^2}
+  = \left\langle \frac{1}{v^2}\right\rangle
+  \equiv \frac{1}{n}\int \frac{f}{v^2}\,d^3v
+  \quad\Longrightarrow\quad
+  T_n = \frac{m}{\langle v^{-2}\rangle}
+  \;}
+\end{equation}
+
+So the ``log-slope temperature'' \emph{is exactly the harmonic mean of
+$v^2$}. Both forms are mathematically identical; the $\langle v^{-2}\rangle$
+form is preferable numerically (no derivatives of $f$).
+
+\paragraph{Why this is the right ``density-characteristic'' temperature.}
+\begin{itemize}
+  \item It reduces to $T$ for a Maxwellian: for
+        $f\propto\exp(-v^2/2v_\mathrm{th}^2)$ one finds
+        $\langle v^{-2}\rangle = 1/v_\mathrm{th}^2$, hence $T_n = T$.
+  \item $\langle v^{-2}\rangle$ is dominated by \emph{small} $v$ (the dense,
+        cold core), so $T_n$ tracks the bulk and largely ignores the hot
+        perpendicular tail. Contrast this with
+        $T_\mathrm{eff}\propto\langle v^2\rangle$, which is tail-weighted. For
+        the RF case this gives $T_n\approx$ bulk ($\sim$12\,keV) while
+        $T_\mathrm{eff}\approx22$\,keV --- exactly the gap that drives the
+        \texttt{isc=2} pathology.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Code recipe (2D cylindrical, existing machinery)}
+% ---------------------------------------------------------------------------
+
+\begin{equation}
+  \langle v^{-2}\rangle
+  = \frac{\displaystyle\sum_{i,j}\frac{f_{ij}}{v_{\perp i}^2+v_{\parallel j}^2}\,J_{ij}}
+         {\displaystyle\sum_{i,j} f_{ij}\,J_{ij}},
+  \qquad
+  T_n[\mathrm{eV}] = \frac{A}{(9.79\times10^3)^2\,\langle v^{-2}\rangle},
+\end{equation}
+where $J_{ij}$ is the existing \texttt{jacob} ($2\pi v_\perp\times$ grid
+weights). Concretely, mirroring \texttt{time\_energy}:
+
+\begin{verbatim}
+! density-characteristic (log-slope) temperature; code convention vth^2 = T/m
+do iv = 1, nperp
+  do ip = 1, npar
+    v2 = vperp(iv)**2 + vpar(ip)**2
+    fint(iv,ip) = f(iv,ip) / max(v2, v2_floor) * jacob(iv,ip)   ! integrand <1/v^2>
+  end do
+end do
+call ncint_2d(fint, mom_invv2)          ! = n * <1/v^2>
+inv_v2_avg = mom_invv2 / dens           ! <1/v^2>
+Tn_eV = aa / (9.79d3**2 * inv_v2_avg)   ! drop-in for ta_eV/1e3 in the isc=2 branch
+\end{verbatim}
+
+\begin{itemize}
+  \item \textbf{Origin guard:} the integrand $\propto f/v^2$ has only a mild,
+        integrable singularity at $\mathbf v = 0$; since
+        \texttt{vperp(1)}~$\approx 394$~m\,s$^{-1} > 0$ there is no exact zero,
+        but keep a small \texttt{v2\_floor} (e.g.\ \texttt{vperp(1)**2}) for
+        safety.
+  \item To use it, replace the \texttt{isc=2} line
+        \texttt{vteff\_t = 9.79d3*SQRT(ta\_eV/aa)} by
+        \texttt{vteff\_t = 9.79d3*SQRT(Tn\_eV/aa)} (and use \texttt{Tn\_eV} for
+        the self-collision Coulomb log). Keep writing both
+        \texttt{Teff\_vs\_time} and a new \texttt{Tn\_vs\_time} so that the gap
+        $T_\mathrm{eff}/T_n$ is visible.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section*{Remark: a related convention point}
+% ---------------------------------------------------------------------------
+
+The diagnostic SC-Maxwellian output (\texttt{fsc\_maxw} in
+\texttt{TimeFP\_7pt.f90}, and \texttt{stix\_maxw\_plot.py}) originally used
+$\exp(-v^2/v_\mathrm{th}^2)$ with prefactor $1/(\pi^{3/2}v_\mathrm{th}^3)$ ---
+too narrow by $\sqrt2$ and mis-normalised relative to the
+$\exp(-v^2/2v_\mathrm{th}^2)$, $1/((2\pi)^{3/2}v_\mathrm{th}^3)$ background that
+\texttt{cblin} actually uses. This has since been corrected so the diagnostic
+matches the operator. It does not affect the $T_n$ definition above, which is
+stated directly in the \texttt{cblin} convention.
+
+\end{document}
