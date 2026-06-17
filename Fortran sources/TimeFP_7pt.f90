@@ -99,7 +99,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   real(dp), dimension(nperp,npar) :: f_init
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
-  REAL(dp), PARAMETER :: pi15   = 5.5683279968_dp   ! π^(3/2), for SC Maxwellian output
+  REAL(dp), PARAMETER :: twopi15 = 15.749609945722419_dp  ! (2π)^(3/2), SC Maxwellian norm
   REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV, vteff_t
   REAL(dp) :: vteff_fin, fM_ij   ! temporaries for SC Maxwellian output
   REAL(dp) :: lnab_arr(nbulk)
@@ -595,8 +595,9 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   !================================================================
   ! 9.  Write SC Maxwellian at final T_eff  (isc=2 only)
-  !     f_M(v⊥,v∥) = npart / (π^{3/2} * vth^3) * exp(-v²/vth²)
-  !     where vth = 9.79e3 * sqrt(Teff_eV / aa)
+  !     Matches the background used by cblin:
+  !       f_M(v⊥,v∥) = npart / ((2π)^{3/2} vth^3) * exp(-v²/(2 vth²))
+  !     with vth = 9.79e3 * sqrt(Teff_eV / aa) = sqrt(T/m).
   !================================================================
   IF (isc == 2) THEN
     vteff_fin = 9.79d3 * SQRT(teff * 1.0d3 / aa)
@@ -604,12 +605,12 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     OPEN(509, file=TRIM(outfile('fsc_maxw_at_vpar0.txt')), status='unknown')
     DO iv = 1, nperp
       DO imu = 1, npar
-        fM_ij = npart / (pi15 * vteff_fin**3) * &
-                EXP(-(vperp(iv)**2 + vpar(imu)**2) / vteff_fin**2)
+        fM_ij = npart / (twopi15 * vteff_fin**3) * &
+                EXP(-(vperp(iv)**2 + vpar(imu)**2) / (2.0_dp * vteff_fin**2))
         WRITE(508,*) vperp(iv), vpar(imu), fM_ij
       END DO
-      fM_ij = npart / (pi15 * vteff_fin**3) * &
-              EXP(-(vperp(iv)**2 + vpar(jmid)**2) / vteff_fin**2)
+      fM_ij = npart / (twopi15 * vteff_fin**3) * &
+              EXP(-(vperp(iv)**2 + vpar(jmid)**2) / (2.0_dp * vteff_fin**2))
       WRITE(509,*) vperp(iv), fM_ij
     END DO
     CLOSE(509); CLOSE(508)
