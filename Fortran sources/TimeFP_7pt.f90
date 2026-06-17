@@ -363,7 +363,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
           CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
         ELSE  ! isc == 2: background at the density-characteristic temperature Tn
           vteff_t = 9.79d3 * SQRT(Tn_eV / aa)              ! thermal velocity at current Tn
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
+          CALL coulomb_log_ab(za, aa, Tn_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
         END IF
         gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
         CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
@@ -490,7 +490,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
           CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
         ELSE
           vteff_t = 9.79d3 * SQRT(Tn_eV / aa)
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
+          CALL coulomb_log_ab(za, aa, Tn_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
         END IF
         gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
         CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
