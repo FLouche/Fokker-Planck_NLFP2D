@@ -299,4 +299,57 @@ out_path2 = Path(__file__).with_name('stix_maxw_vs_nlsc.png')
 fig2.savefig(out_path2, dpi=150, bbox_inches='tight')
 print(f'Saved -> {out_path2}')
 
+# ---------------------------------------------------------------------------
+# Figure 3: zoom of figure 1's right panel (1D cut at v_par=0) to 0 - 3 Mm/s,
+#           with the log y-axis adapted to the data inside that x-window.
+# ---------------------------------------------------------------------------
+XZOOM_MAX = 3.0   # Mm/s
+
+fig3, ax3 = plt.subplots(figsize=(8, 6))
+xz = v_perp_Mms <= XZOOM_MAX
+ymins, ymaxs = [], []
+
+for i, T in enumerate(TEFF_KEV):
+    vt_SI  = vth(T) * 1e6
+    fpk    = fM_peak(T)
+    f1d    = fpk * np.exp(-(v_perp_Mms * 1e6)**2 / (2.0 * vt_SI**2))
+    vt_Mms = vth(T)
+    ax3.plot(v_perp_Mms, f1d, color=COLORS[i], lw=2.2,
+             label=rf'$f_M$: $T_\mathrm{{eff}}$ = {T} keV'
+                   rf'  ($v_\mathrm{{th}}$ = {vt_Mms:.2f} Mm/s)')
+    if vt_Mms <= XZOOM_MAX:
+        ax3.axvline(vt_Mms, color=COLORS[i], lw=0.9, ls='--', alpha=0.55)
+    yz = f1d[xz]
+    ymins.append(yz[yz > 0].min()); ymaxs.append(yz.max())
+
+mask = FOUT_VPERP <= XZOOM_MAX
+ax3.plot(FOUT_VPERP[mask], FOUT_F1D[mask],
+         color=NLSC_COLOR, lw=NLSC_LW,
+         label=rf'NLSC VDF ($T_\mathrm{{eff}}$ = {FOUT_TEFF_KEV:.0f} keV, $v_\parallel \approx 0$)')
+yz = FOUT_F1D[mask]
+if np.any(yz > 0):
+    ymins.append(yz[yz > 0].min()); ymaxs.append(yz.max())
+
+# Adapt the (log) y-range to the data within 0 - XZOOM_MAX, with a small margin
+lo, hi = np.log10(min(ymins)), np.log10(max(ymaxs))
+pad = 0.05 * (hi - lo)
+ax3.set_ylim(10.0**(lo - pad), 10.0**(hi + pad))
+
+ax3.set_xlabel(r'$v_\perp$ (Mm s$^{-1}$)', fontsize=12)
+ax3.set_ylabel(r'$f(v_\perp,\,0)$   (m$^{-3}$ (m s$^{-1})^{-3}$)', fontsize=11)
+ax3.set_title(rf'1D cut at $v_\parallel \approx 0$  '
+              rf'(log scale, zoom $0$--${XZOOM_MAX:.0f}$ Mm s$^{{-1}}$)', fontsize=11)
+ax3.set_yscale('log')
+ax3.set_xlim(0, XZOOM_MAX)
+ax3.legend(fontsize=8.5, loc='lower left')
+ax3.grid(True, alpha=0.25, which='both')
+ax3.text(0.97, 0.55, r'Dashed verticals: $v_\perp = v_\mathrm{th}$',
+         transform=ax3.transAxes, ha='right', va='bottom',
+         fontsize=8, color='grey')
+
+fig3.tight_layout()
+out_path3 = Path(__file__).with_name('stix_maxw_at_vpar0_zoom.png')
+fig3.savefig(out_path3, dpi=150, bbox_inches='tight')
+print(f'Saved -> {out_path3}')
+
 plt.show()
