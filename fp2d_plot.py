@@ -141,6 +141,14 @@ FILE_META = {
     # Density-characteristic (log-slope) temperature
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
+    # Coulomb logarithms (data files behind the coulomb_log_all_vs_time plot).
+    # Listed here so 'compare' can overlay them; still skipped in plot mode
+    # (the composite plot_coulomb_log handles them) via _SKIP_STEMS.
+    "coulomb_log_self_vs_time":     {"ptype": "ts",  "ylabel": "ln Λ (self)",
+                                     "title":  "Self-collision Coulomb logarithm vs time"},
+    "coulomb_log_vs_time":          {"ptype": "ts2", "ylabel": "ln Λ",
+                                     "title":  "Background-ion Coulomb logarithm vs time",
+                                     "labels": ["ion 1", "ion 2", "ion 3"]},
     # Momentum transfer rate (⊥ and ∥ per file) --------------------------------
     "momentum_coll_tot_vs_time":    {"ptype": "ts2",
                                      "ylabel": "Momentum transfer rate (N·m⁻³)",
@@ -1250,6 +1258,10 @@ def _add_common(p: argparse.ArgumentParser) -> None:
 _COMPARE_ALIASES = {
     # power_sc_split_vs_time is a plot-only name; data lives in power_coll_self_vs_time
     "power_sc_split_vs_time": "power_coll_self_vs_time",
+    # coulomb_log_all_vs_time is a plot-only composite; for compare, default to
+    # the self-collision log (the one that differs between isc models). Use
+    # coulomb_log_vs_time explicitly for the background-ion logs.
+    "coulomb_log_all_vs_time": "coulomb_log_self_vs_time",
 }
 
 
