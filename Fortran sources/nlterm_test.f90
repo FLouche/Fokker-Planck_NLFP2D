@@ -598,18 +598,22 @@ END SUBROUTINE regularise_axis_3
 
 
 !***********************************************************************
-! Diagnostic subroutine: SC Dpepe and Fpe at v_par = jmid (≈0)
+! Diagnostic subroutine: full SC friction/diffusion tensor and Rosenbluth
+! potentials at v_par = jmid (≈0), for a GENERAL background, from the
+! Rosenbluth potentials.  coef = -4π γ / npart (the FP operator prefactor),
+! so the components match the Maxwellian-background diagnostic and the
+! existing Dperperp/Fperp:
+!   Dperperp = coef d2psi/dv⊥2     Dparpar = coef d2psi/dv∥2
+!   Dperpar  = coef d2psi/dv⊥dv∥
+!   Fperp    = coef dphi/dv⊥        Fpar    = coef dphi/dv∥
+! Potentials psi, phi written directly.  Writes one v_par=0 slice per
+! quantity.
 !
-!   Dpepe(v⊥) = coef * d2psi/dv⊥2  |_{v_par=jmid}
-!   Fpe(v⊥)   = coef * dphi/dv⊥     |_{v_par=jmid}
-!
-! with coef = -4π * γ / npart,  γ = γ₀ * lnΛ * (za/aa)² * npart * za²
-!
-! NOTE: requires sum_phi to be allocated (uses compute_psi internally).
-!       In timefp_7pt_nl, call before DEALLOCATE(sum_phi).
+! NOTE: requires sum_phi to be allocated (uses compute_psi).  In
+!       timefp_7pt_nl, call before DEALLOCATE(sum_phi).
 !***********************************************************************
 
-    subroutine sc_diag_vpar0(xout, teff, Dpepe_slice, Fpe_slice)
+    subroutine sc_components_diag(xout, teff)
 
       use shared_grid
       use func_index
@@ -620,17 +624,17 @@ END SUBROUTINE regularise_axis_3
 
       implicit none
 
-      double precision, intent(in),  dimension(nbig)  :: xout
-      double precision, intent(in)                    :: teff
-      double precision, intent(out), dimension(nperp) :: Dpepe_slice, Fpe_slice
+      double precision, intent(in), dimension(nbig) :: xout
+      double precision, intent(in)                  :: teff
 
       double precision, dimension(nperp, npar) :: fout_loc, psi, phi
       double precision, dimension(nperp, npar) :: Lphi_radial, d2phidpe2
-      double precision, dimension(nperp, npar) :: dphidpe, d2psidpe2, d2psidpa2
+      double precision, dimension(nperp, npar) :: dphidpe, dphidpa
+      double precision, dimension(nperp, npar) :: d2psidpe2, d2psidpa2, d2psidpepa
 
       double precision, parameter :: gamma0_d = 2.390775d-1
 
-      double precision :: pi_d, ta_eV_d, lnaa_d, cte0_d, coef_d
+      double precision :: pi_d, ta_eV_d, lnaa_d, coef_d
       integer :: ipe, ipa, ix
 
       pi_d = 4.0d0 * atan(1.0d0)
@@ -643,33 +647,50 @@ END SUBROUTINE regularise_axis_3
         end do
       end do
 
-      ! First Rosenbluth potential psi
+      ! First Rosenbluth potential psi and its second derivatives
       call compute_psi(fout_loc, psi)
+      call deriv_x2(psi, vperp, nperp, npar, d2psidpe2)
+      call deriv_y2(psi, nperp, npar, dvpar, d2psidpa2)
+      call deriv_xy(psi, vperp, nperp, npar, dvpar, d2psidpepa)
 
       ! Second potential phi = Δ_v psi   (cylindrical Laplacian + d²/dvpar²)
-      call deriv_y2(psi, nperp, npar, dvpar, d2psidpa2)
       call laplacian_radial(psi, vperp, nperp, npar, Lphi_radial)
       phi = Lphi_radial + d2psidpa2
 
-      ! Regularise phi near the axis then recompute its v⊥ derivative
+      ! Regularise phi near the axis then take its derivatives
       call deriv_x2(phi, vperp, nperp, npar, d2phidpe2)
       call regularise_axis_3(phi, d2phidpe2, vperp, nperp, npar)
       call deriv_x1(phi, vperp, nperp, npar, dphidpe)
-
-      ! d²psi/dv⊥²  (needed for Dpepe)
-      call deriv_x2(psi, vperp, nperp, npar, d2psidpe2)
+      call deriv_y1(phi, nperp, npar, dvpar, dphidpa)
 
       ! Coulomb logarithm and prefactor
       ta_eV_d = teff * 1.0d3
       call coulomb_log_ab(za, aa, ta_eV_d, npart, za, aa, ta_eV_d, npart, lnaa_d)
-      cte0_d = gamma0_d * lnaa_d * (za/aa)**2
-      gammaa  = cte0_d * npart * za**2
-      coef_d  = -4.0d0 * pi_d * gammaa / npart
+      gammaa = gamma0_d * lnaa_d * (za/aa)**2 * npart * za**2
+      coef_d = -4.0d0 * pi_d * gammaa / npart
 
-      ! Extract slices at jmid (v_par ≈ 0)
-      Dpepe_slice(:) = coef_d * d2psidpe2(:, jmid)
-      Fpe_slice(:)   = coef_d * dphidpe(:,   jmid)
+      ! v_par=0 slices (coef applied; matches the Maxwellian diagnostic)
+      call wr1d('sc_Dpepe_at_vpar0.txt', coef_d * d2psidpe2(:, jmid))
+      call wr1d('sc_Dpapa_at_vpar0.txt', coef_d * d2psidpa2(:, jmid))
+      call wr1d('sc_Dpepa_at_vpar0.txt', coef_d * d2psidpepa(:, jmid))
+      call wr1d('sc_Fpe_at_vpar0.txt',   coef_d * dphidpe(:, jmid))
+      call wr1d('sc_Fpa_at_vpar0.txt',   coef_d * dphidpa(:, jmid))
+      call wr1d('sc_psi_at_vpar0.txt',   psi(:, jmid))
+      call wr1d('sc_phi_at_vpar0.txt',   phi(:, jmid))
+      write(*,*) '  SC components at vpar=0 (D, F, psi, phi) written.'
 
-    end subroutine sc_diag_vpar0
+    contains
+      subroutine wr1d(name, a)
+        character(*),     intent(in) :: name
+        double precision, intent(in) :: a(nperp)
+        integer :: i
+        open(521, file=trim(outfile(name)), status='unknown')
+        do i = 1, nperp
+          write(521,*) vperp(i), a(i)
+        end do
+        close(521)
+      end subroutine wr1d
+
+    end subroutine sc_components_diag
 
     end module nlterm

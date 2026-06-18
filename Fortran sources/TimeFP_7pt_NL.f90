@@ -540,22 +540,11 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   WRITE(*,*) 'Solve completed.'
 
   !================================================================
-  ! Diagnostic: SC Dpepe and Fpe at v_par≈0  (isc=-1)
-  !   Dpepe = coef * d²ψ/dv⊥²,   Fpe = coef * dφ/dv⊥
+  ! Diagnostic: SC friction/diffusion tensor and Rosenbluth potentials
+  ! at v_par≈0  (isc=-1): Dperperp, Dparpar, Dperpar, Fperp, Fpar, psi, phi.
   ! Must come BEFORE DEALLOCATE(sum_phi) — compute_psi needs it.
   !================================================================
-  BLOCK
-    REAL(dp), DIMENSION(nperp) :: Dpepe_diag, Fpe_diag
-    CALL sc_diag_vpar0(x_vec, teff, Dpepe_diag, Fpe_diag)
-    OPEN(510, file=TRIM(outfile('sc_Dpepe_at_vpar0.txt')), status='unknown')
-    OPEN(511, file=TRIM(outfile('sc_Fpe_at_vpar0.txt')),   status='unknown')
-    DO iv = 1, nperp
-      WRITE(510,*) vperp(iv), Dpepe_diag(iv)
-      WRITE(511,*) vperp(iv), Fpe_diag(iv)
-    END DO
-    CLOSE(511); CLOSE(510)
-    WRITE(*,*) '  SC diagnostic (Dpepe, Fpe at vpar=0) written.'
-  END BLOCK
+  CALL sc_components_diag(x_vec, teff)
 
   ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
   CALL sc_power_density_diag(x_vec, dens_tmp)

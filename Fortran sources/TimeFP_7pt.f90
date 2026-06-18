@@ -93,6 +93,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=256) :: dynfname
 
   EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt, sc_power_density_diag
+  EXTERNAL :: sc_components_maxw_diag
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
@@ -644,42 +645,15 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   END IF
 
   !================================================================
-  ! 10. Diagnostic: SC Dpepe and Fpe at v_par≈0  (isc=1, 2 or 3)
-  !
-  !   Dpepe(v⊥) = sc20(iv, jmid)             [= Theta + vpar²·Phi]
-  !   Fpe(v⊥)   = gammaa * (-v⊥ * Psi)
-  !
-  ! Psi is recomputed here from the Chandrasekhar function, matching
-  ! exactly what cblin uses (cblin does not return Psi directly).  vteff_t
-  ! holds the last-step background thermal velocity (isc=1 fixed, isc=2 Teff,
-  ! isc=3 Tn).
+  ! 10. Diagnostic: SC friction/diffusion tensor and Rosenbluth
+  !     potentials at v_par=0  (isc=1, 2 or 3).
+  !     Components Dperperp, Dparpar, Dperpar, Fperp, Fpar and the
+  !     potentials psi, phi are written as v_par=0 slices, using the
+  !     Maxwellian background of thermal speed vteff_t (the last-step
+  !     value: isc=1 fixed Stix, isc=2 Teff, isc=3 Tn).
   !================================================================
   IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
-    BLOCK
-      REAL(dp) :: sq2_d, sqrt_pi_d, v1_d, arg_d, arg2_d
-      REAL(dp) :: func1_d, derfarg_d, chandra_d, Psi_d, Fpe_d
-      INTEGER  :: iv_d
-      sq2_d     = SQRT(2.0_dp)
-      sqrt_pi_d = SQRT(ACOS(-1.0_dp))
-      OPEN(510, file=TRIM(outfile('sc_Dpepe_at_vpar0.txt')), status='unknown')
-      OPEN(511, file=TRIM(outfile('sc_Fpe_at_vpar0.txt')),   status='unknown')
-      DO iv_d = 1, nperp
-        ! Dpepe = sc20  (the v⊥/v⊥ diffusion coefficient, already computed)
-        WRITE(510,*) vperp(iv_d), sc20(iv_d, jmid)
-        ! Fpe = gammaa * (-v⊥ * Psi),  Psi = G(u)/(v * vth²),  u = v/(√2 vth)
-        v1_d      = SQRT(vperp(iv_d)**2 + vpar(jmid)**2)
-        arg_d     = v1_d / (sq2_d * vteff_t)
-        arg2_d    = arg_d**2
-        func1_d   = ERF(arg_d)
-        derfarg_d = (2.0_dp / sqrt_pi_d) * EXP(-arg2_d)
-        chandra_d = (func1_d - arg_d * derfarg_d) / (2.0_dp * arg2_d)
-        Psi_d     = chandra_d / (v1_d * vteff_t**2)   ! maonmb = 1 (same species)
-        Fpe_d     = gammaa * (-vperp(iv_d) * Psi_d)
-        WRITE(511,*) vperp(iv_d), Fpe_d
-      END DO
-      CLOSE(511); CLOSE(510)
-      WRITE(*,*) '  SC diagnostic (Dpepe, Fpe at vpar=0) written.'
-    END BLOCK
+    CALL sc_components_maxw_diag(vteff_t)
 
     ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
     CALL sc_power_density_diag(x_vec, dens_tmp)
