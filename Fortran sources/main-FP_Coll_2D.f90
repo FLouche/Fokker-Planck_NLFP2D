@@ -127,7 +127,9 @@ double precision start_time,end_time
 !           -1: Consistent self-collisions (non-linear operator)
 !            0: no self-collisions
 !           +1: Maxwellian background at fixed Tstix (Stix solution without RF)
-!           +2: Maxwellian background at varying temperature (starts at Tstix, updated each step)
+!           +2: Maxwellian background at varying Teff (energy-weighted; starts at Tstix)
+!           +3: Maxwellian background at varying Tn  (density-characteristic; starts at Tstix)
+!               [+3 is a diagnostic variant for comparison with +2]
 !  ising: homogeneity of the grid in vperp:
 !            0: homogeneous grid
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
@@ -180,8 +182,8 @@ if (new_grid == -1 .and. iold == -1 .and. isc == -1) then
     stop
 endif
 
-! isc=-1 and isc=2 require a time-dependent run
-if ((isc == -1 .or. isc == 2) .and. ntimes(1) == 0) then
+! isc=-1, isc=2 and isc=3 require a time-dependent run
+if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
     write(*,'(A,I0,A)') 'ERROR: isc=', isc, ' requires a time-dependent run (ntimes > 0).'
     write(*,*) 'Steady-state solver cannot be used with a time-varying self-collision operator.'
     stop
@@ -316,8 +318,8 @@ call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
     if(isc /= 0) then
         allocate(sc00(nperp,npar))
         allocate(sc20,sc02,sc11,sc10,sc01,mold=sc00)
-        if (isc == 1 .OR. isc == 2) then
-           ! Initial SC term: Maxwellian background at Tstix (same starting point for isc=1 and isc=2)
+        if (isc == 1 .OR. isc == 2 .OR. isc == 3) then
+           ! Initial SC term: Maxwellian background at Tstix (same starting point for isc=1,2,3)
            teff_sc = aa * (vteff / 9.79d3)**2     ! convert vteff [m/s] to T [eV]
            call coulomb_log_ab(za, aa, teff_sc, npart, za, aa, teff_sc, npart, lnaa_sc)
            gammaa = gamma0_sc * lnaa_sc * (za/aa)**2 * npart * za**2
@@ -330,7 +332,8 @@ call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
              all11 = all11+sc11
              all00 = all00+sc00
              if (isc == 1) write(*,*) 'Self-collisions: Maxwellian background at fixed Tstix'
-             if (isc == 2) write(*,*) 'Self-collisions: Maxwellian background at varying temperature (initial: Tstix)'
+             if (isc == 2) write(*,*) 'Self-collisions: Maxwellian background at varying Teff (initial: Tstix)'
+             if (isc == 3) write(*,*) 'Self-collisions: Maxwellian background at varying Tn (initial: Tstix)'
         !else
         !    allocate(sum_phi(nbig,nbig))
         !    write(*,*) 'Starting distance evaluation'

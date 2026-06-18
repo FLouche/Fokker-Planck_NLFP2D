@@ -82,7 +82,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
-  REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=2 background)
+  REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=3 background)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
 
@@ -217,7 +217,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='unknown')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='unknown')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),     status='unknown')
-    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
+    IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='unknown')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='unknown')
     IF (iplot_pow == -1) THEN
@@ -255,7 +255,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='old', access='append')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='old', access='append')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),     status='old', access='append')
-    IF (isc==1 .OR. isc==2) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
+    IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='old', access='append')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='old', access='append')
     IF (iplot_pow == -1) THEN
@@ -357,11 +357,14 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       CALL assemble_FP_terms(all00, all10, all01, all20, all11, all02)
       ! Self-collision: rebuild sc** with updated Coulomb log and add to all**
-      IF (isc == 1 .OR. isc == 2) THEN
+      IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
         IF (isc == 1) THEN
           vteff_t = vteff                                    ! fixed Stix thermal velocity
           CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
-        ELSE  ! isc == 2: background at the density-characteristic temperature Tn
+        ELSE IF (isc == 2) THEN  ! background at the effective temperature Teff
+          vteff_t = 9.79d3 * SQRT(ta_eV / aa)              ! thermal velocity at current Teff
+          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
+        ELSE  ! isc == 3: background at the density-characteristic temperature Tn
           vteff_t = 9.79d3 * SQRT(Tn_eV / aa)              ! thermal velocity at current Tn
           CALL coulomb_log_ab(za, aa, Tn_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
         END IF
@@ -484,11 +487,14 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         lnab_arr(ib) = lnab_t
         gammab(ib)   = gamma0 * lnab_t * (za/aa)**2 * nb(ib) * zb(ib-1)**2
       END DO
-      IF (isc == 1 .OR. isc == 2) THEN
+      IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
         IF (isc == 1) THEN
           vteff_t = vteff
           CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
-        ELSE
+        ELSE IF (isc == 2) THEN
+          vteff_t = 9.79d3 * SQRT(ta_eV / aa)
+          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
+        ELSE  ! isc == 3
           vteff_t = 9.79d3 * SQRT(Tn_eV / aa)
           CALL coulomb_log_ab(za, aa, Tn_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
         END IF
@@ -511,7 +517,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
                                          pcoll_self_perp/1.d6, pcoll_self_par/1.d6
     END IF
     IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
-    IF (isc==1 .OR. isc==2) WRITE(506,*) time, lnaa_t
+    IF (isc==1 .OR. isc==2 .OR. isc==3) WRITE(506,*) time, lnaa_t
     IF (iplot_mom == -1) THEN
       CALL time_momentum_7pt(x_vec, dens_tmp, &
                              mcoll_perp, mcoll_par, &
@@ -568,7 +574,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END DO
   END IF
   IF (nbulk   >   1) CLOSE(505)
-  IF (isc==1 .OR. isc==2) CLOSE(506)
+  IF (isc==1 .OR. isc==2 .OR. isc==3) CLOSE(506)
   CLOSE(507); CLOSE(514)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
@@ -605,15 +611,18 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CLOSE(42); CLOSE(40)
 
   !================================================================
-  ! 9.  Write SC Maxwellian background at final Tn  (isc=2 only)
-  !     Matches the background used by cblin:
+  ! 9.  Write SC Maxwellian background at its final temperature
+  !     (isc=2: Teff;  isc=3: Tn).  Matches the background used by cblin:
   !       f_M(v⊥,v∥) = npart / ((2π)^{3/2} vth^3) * exp(-v²/(2 vth²))
-  !     with vth = 9.79e3 * sqrt(Tn_eV / aa) = sqrt(Tn/m).  Tn here is the
-  !     density-characteristic temperature from the last step (scale-invariant,
-  !     so unaffected by the renormalisation of fout).
+  !     with vth = 9.79e3 * sqrt(T/aa) = sqrt(T/m).  The temperature is taken
+  !     from the last step (scale-invariant, so unaffected by renormalisation).
   !================================================================
-  IF (isc == 2) THEN
-    vteff_fin = 9.79d3 * SQRT(Tn * 1.0d3 / aa)
+  IF (isc == 2 .OR. isc == 3) THEN
+    IF (isc == 2) THEN
+      vteff_fin = 9.79d3 * SQRT(teff * 1.0d3 / aa)   ! Teff background
+    ELSE
+      vteff_fin = 9.79d3 * SQRT(Tn   * 1.0d3 / aa)   ! Tn background
+    END IF
     OPEN(508, file=TRIM(outfile('fsc_maxw.txt')),          status='unknown')
     OPEN(509, file=TRIM(outfile('fsc_maxw_at_vpar0.txt')), status='unknown')
     DO iv = 1, nperp
@@ -627,19 +636,25 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       WRITE(509,*) vperp(iv), fM_ij
     END DO
     CLOSE(509); CLOSE(508)
-    WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Tn=', Tn, ' keV) written to fsc_maxw.txt'
+    IF (isc == 2) THEN
+      WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Teff=', teff, ' keV) written to fsc_maxw.txt'
+    ELSE
+      WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Tn=', Tn, ' keV) written to fsc_maxw.txt'
+    END IF
   END IF
 
   !================================================================
-  ! 10. Diagnostic: SC Dpepe and Fpe at v_par≈0  (isc=1 or 2)
+  ! 10. Diagnostic: SC Dpepe and Fpe at v_par≈0  (isc=1, 2 or 3)
   !
   !   Dpepe(v⊥) = sc20(iv, jmid)             [= Theta + vpar²·Phi]
   !   Fpe(v⊥)   = gammaa * (-v⊥ * Psi)
   !
   ! Psi is recomputed here from the Chandrasekhar function, matching
-  ! exactly what cblin uses (cblin does not return Psi directly).
+  ! exactly what cblin uses (cblin does not return Psi directly).  vteff_t
+  ! holds the last-step background thermal velocity (isc=1 fixed, isc=2 Teff,
+  ! isc=3 Tn).
   !================================================================
-  IF (isc == 1 .OR. isc == 2) THEN
+  IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
     BLOCK
       REAL(dp) :: sq2_d, sqrt_pi_d, v1_d, arg_d, arg2_d
       REAL(dp) :: func1_d, derfarg_d, chandra_d, Psi_d, Fpe_d
