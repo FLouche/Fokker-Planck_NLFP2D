@@ -172,14 +172,19 @@ FP2D_QLRF_NL/                  ← project root; git repo lives here
 | `gamma0` | PARAMETER in solvers | `2.390775d-1` — collision frequency pre-factor |
 | `pi15` | PARAMETER in `timefp_7pt` | `5.5683279968` = π^(3/2), used for SC Maxwellian normalisation |
 
-### Maxwellian background formula (isc=2)
+### Maxwellian background formula (isc=2, isc=3)
 
 The SC operator uses a Maxwellian background with density `npart` and thermal velocity `vteff_t`:
 ```
-f_M(v⊥, v∥) = npart / (π^{3/2} · vth³) · exp(−(v⊥² + v∥²) / vth²)
-              where  vth = 9.79×10³ · sqrt(Teff[eV] / aa)  m/s
+f_M(v⊥, v∥) = npart / ((2π)^{3/2} · vth³) · exp(−(v⊥² + v∥²) / (2·vth²))
+              where  vth = 9.79×10³ · sqrt(T[eV] / aa)  m/s  ( = sqrt(T/m) )
 ```
-Written to `fsc_maxw.txt` and `fsc_maxw_at_vpar0.txt` at the end of `timefp_7pt` when `isc==2`.
+Here `vth` is the per-degree-of-freedom rms speed `sqrt(T/m)` (NOT the most-probable
+speed `sqrt(2T/m)`), so the normalisation constant is `(2π)^{3/2}` and the exponent
+carries a factor `1/(2·vth²)`. The temperature `T` is `Teff` for `isc=2` and `Tn` for
+`isc=3`. See `TimeFP_7pt.f90` (`twopi15` parameter and the `fM_ij` assembly, ~line 631).
+Written to `fsc_maxw.txt` and `fsc_maxw_at_vpar0.txt` at the end of `timefp_7pt` when
+`isc==2` or `isc==3`.
 
 ### Output file-unit registry (`timefp_7pt`)
 
