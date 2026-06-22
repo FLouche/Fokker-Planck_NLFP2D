@@ -202,6 +202,8 @@ New output files must use units not in this table:
 | 506 | coulomb_log_self_vs_time | `isc=1,2` |
 | 507 | Teff_vs_time | always |
 | 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2` |
+| 514 | Tn_vs_time | always |
+| 515 | fmin_axis_vs_time (near-axis & global min of f) | always |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |

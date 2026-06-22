@@ -83,6 +83,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
   REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=3 background)
+  REAL(dp) :: fmin_axis, fmin_glob   ! near-axis / global min of f (negative-f detector)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
 
@@ -101,6 +102,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   real(dp), dimension(nperp,npar) :: f_init
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
+  REAL(dp), PARAMETER :: Tn_floor_frac = 0.05_dp  ! clamp isc=3 Tn >= 5% of Teff for the SC background
   REAL(dp), PARAMETER :: twopi15 = 15.749609945722419_dp  ! (2π)^(3/2), SC Maxwellian norm
   REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV, vteff_t
   REAL(dp) :: vteff_fin, fM_ij   ! temporaries for SC Maxwellian output
@@ -221,6 +223,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='unknown')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='unknown')
+                     OPEN(515,file=TRIM(outfile('fmin_axis_vs_time.txt')),        status='unknown')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
       DO ib = 1, nbulk
@@ -259,6 +262,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='old', access='append')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='old', access='append')
+                     OPEN(515,file=TRIM(outfile('fmin_axis_vs_time.txt')),        status='old', access='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
@@ -349,6 +353,13 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       ta_eV = teff * 1.0d3
       CALL time_Tn(f_init, dens_tmp, Tn)        ! density-characteristic temperature
       Tn_eV = Tn * 1.0d3
+      ! Coulomb-log clamp: keep the isc=3 background temperature positive and
+      ! not absurdly cold even if the (grid-sensitive) Tn moment dips low.
+      IF (isc == 3 .AND. Tn_eV < Tn_floor_frac * ta_eV) THEN
+        WRITE(*,'(A,F9.4,A,F9.4,A)') '  [isc=3] Tn=', Tn, &
+              ' keV clamped to ', Tn_floor_frac*teff, ' keV for SC background'
+        Tn_eV = Tn_floor_frac * ta_eV
+      END IF
       DO ib = 2, nbulk
         CALL coulomb_log_ab(za, aa, ta_eV, npart, &
                             zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
@@ -469,6 +480,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(507,*) time, teff
     CALL time_Tn(fout, dens_tmp, Tn)
     WRITE(514,*) time, Tn
+    CALL time_fmin_axis(fout, fmin_axis, fmin_glob)
+    WRITE(515,*) time, fmin_axis, fmin_glob
 
     !--- Refresh Teff-dependent coefficients from the just-solved f^{n} ------
     ! The operator used for the time step is built from the start-of-step
@@ -482,6 +495,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
       ta_eV = teff * 1.0d3
       Tn_eV = Tn * 1.0d3
+      IF (isc == 3 .AND. Tn_eV < Tn_floor_frac * ta_eV) Tn_eV = Tn_floor_frac * ta_eV
       DO ib = 2, nbulk
         CALL coulomb_log_ab(za, aa, ta_eV, npart, &
                             zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
@@ -576,7 +590,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   END IF
   IF (nbulk   >   1) CLOSE(505)
   IF (isc==1 .OR. isc==2 .OR. isc==3) CLOSE(506)
-  CLOSE(507); CLOSE(514)
+  CLOSE(507); CLOSE(514); CLOSE(515)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)
@@ -653,7 +667,9 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   !     value: isc=1 fixed Stix, isc=2 Teff, isc=3 Tn).
   !================================================================
   IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
-    CALL sc_components_maxw_diag(vteff_t)
+    ! Diagnostic disabled: SC diffusion/friction tensor and Rosenbluth
+    ! potentials at v_par=0 (sc_D*/sc_F*/sc_psi/sc_phi_at_vpar0.txt).
+    ! CALL sc_components_maxw_diag(vteff_t)
 
     ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
     CALL sc_power_density_diag(x_vec, dens_tmp)

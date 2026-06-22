@@ -156,6 +156,10 @@ FILE_META = {
     # Density-characteristic (log-slope) temperature
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
+    # Minimum of f near the axis / over the grid (negative-f detector for isc=3)
+    "fmin_axis_vs_time":            {"ptype": "ts2", "ylabel": "min f",
+                                     "title":  "Minimum of f (near-axis / global) vs time",
+                                     "labels": ["near-axis", "global"]},
     # Coulomb logarithms (data files behind the coulomb_log_all_vs_time plot).
     # Listed here so 'compare' can overlay them; still skipped in plot mode
     # (the composite plot_coulomb_log handles them) via _SKIP_STEMS.

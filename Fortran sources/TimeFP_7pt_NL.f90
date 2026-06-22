@@ -83,6 +83,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: theta
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff,teff_tmp
   REAL(dp) :: Tn          ! density-characteristic temperature (diagnostic)
+  REAL(dp) :: fmin_axis, fmin_glob   ! near-axis / global min of f (negative-f detector)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
   REAL(dp) :: t_start, t_end
@@ -241,6 +242,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                    OPEN(507, file=TRIM(outfile('Teff_vs_time.txt')),              status='unknown')
                    OPEN(514, file=TRIM(outfile('Tn_vs_time.txt')),                status='unknown')
+                   OPEN(515, file=TRIM(outfile('fmin_axis_vs_time.txt')),         status='unknown')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
       DO ib = 1, nbulk
@@ -279,6 +281,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown', position='append')
                    OPEN(507, file=TRIM(outfile('Teff_vs_time.txt')),              status='old',     access='append')
                    OPEN(514, file=TRIM(outfile('Tn_vs_time.txt')),                status='old',     access='append')
+                   OPEN(515, file=TRIM(outfile('fmin_axis_vs_time.txt')),         status='old',     access='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
@@ -478,6 +481,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     WRITE(507,*) time, teff
     CALL time_Tn(fout, dens_tmp, Tn)
     WRITE(514,*) time, Tn
+    CALL time_fmin_axis(fout, fmin_axis, fmin_glob)
+    WRITE(515,*) time, fmin_axis, fmin_glob
 
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
@@ -544,7 +549,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ! at v_par≈0  (isc=-1): Dperperp, Dparpar, Dperpar, Fperp, Fpar, psi, phi.
   ! Must come BEFORE DEALLOCATE(sum_phi) — compute_psi needs it.
   !================================================================
-  CALL sc_components_diag(x_vec, teff)
+  ! Diagnostic disabled: SC diffusion/friction tensor and Rosenbluth
+  ! potentials at v_par=0 (sc_D*/sc_F*/sc_psi/sc_phi_at_vpar0.txt).
+  ! CALL sc_components_diag(x_vec, teff)
 
   ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
   CALL sc_power_density_diag(x_vec, dens_tmp)
@@ -560,7 +567,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END IF
   IF (nbulk > 1) CLOSE(505)
   IF (isc /= 0)  CLOSE(506)
-                 CLOSE(507); CLOSE(514)
+                 CLOSE(507); CLOSE(514); CLOSE(515)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)
