@@ -116,56 +116,82 @@ CONTAINS
 
   !***************************************************
   !* Density-characteristic (log-slope) temperature  *
-  !*   Tn [keV] from the harmonic mean of v^2:        *
-  !*     1/vth_n^2 = <1/v^2>,   Tn = m / <1/v^2>      *
-  !*   Equivalent to the f-weighted local log-slope   *
-  !*   temperature; dominated by the dense cold bulk  *
-  !*   (cf. Tn_density_temperature note).             *
-  !*   Code convention vth = 9.79e3*sqrt(T[eV]/A):    *
-  !*     Tn[eV] = A / ( (9.79e3)^2 * <1/v^2> ).        *
-  !*   05/2026: F. Louche                             *
+  !*   Tn [keV] from the phase-space-weighted least-  *
+  !*   squares slope of ln f vs v^2:                  *
+  !*     slope = d(ln f)/d(v^2) ~ -1/(2 vth_n^2)      *
+  !*     vth_n^2 = -1/(2 slope),  Tn = A vth_n^2/cvth^2*
+  !*   For a Maxwellian ln f is exactly linear in v^2,*
+  !*   so the slope -> -1/(2 vth^2) on ANY grid: this *
+  !*   estimator has no 1/v^2 weight, no near-axis     *
+  !*   singularity, is grid-convergent and stays > 0. *
+  !*   Weighting by f*jacob lets the dense cold bulk  *
+  !*   (the SC-drag population, isc=3 background)      *
+  !*   dominate.  Code convention vth=9.79e3*sqrt(T/A)*
+  !*   05/2026: F. Louche  (06/2026: log-slope form)  *
   !***************************************************
 
   SUBROUTINE time_Tn(f, dens, Tn)
 
     USE shared_grid
-    USE mod_ncint
     USE shared_plasma
 
     IMPLICIT NONE
 
-    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar), dens
+    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar), dens   ! dens kept for interface
     DOUBLE PRECISION, INTENT(OUT) :: Tn          ! [keV]
 
     DOUBLE PRECISION, PARAMETER :: cvth = 9.79d3 ! sqrt(e/m_p) [m/s per sqrt(eV/amu)]
-    DOUBLE PRECISION, ALLOCATABLE :: fint(:,:)
-    DOUBLE PRECISION :: v2, v2_floor, inv_v2_avg, mom, dv_axis
+    DOUBLE PRECISION, PARAMETER :: ftol = 1.0d-6 ! include cells with f > ftol*max(f)
+    DOUBLE PRECISION :: fmax, ffloor, w, x, y, vth2, slope
+    DOUBLE PRECISION :: sw, swx, swy, swxx, swxy, xbar, ybar, denom
     INTEGER :: iv, ip
 
-    ALLOCATE(fint(nperp, npar))
-
-    ! f/v^2 integrand (jacob included).  Two safeguards against the known
-    ! grid-fragility of this harmonic-mean moment (cf. branch SC_diagnostics):
-    !  (1) clip f to its non-negative part -- a small negative undershoot near
-    !      the axis, amplified by 1/v^2, would otherwise flip the sign of
-    !      <1/v^2> and make Tn (hence the isc=3 self Coulomb log) go negative;
-    !  (2) cap the 1/v^2 weight at the smallest resolved velocity scale (half
-    !      the near-axis cell) rather than the token 1 m^2/s^2 floor, so that
-    !      under-resolved near-axis cells cannot dominate the integral.
-    dv_axis  = MIN(vperp(2) - vperp(1), dvpar)
-    v2_floor = MAX(vperp(1)**2, (0.5d0*dv_axis)**2)
-    DO iv = 1, nperp
-      DO ip = 1, npar
-        v2 = vperp(iv)**2 + vpar(ip)**2
-        fint(iv,ip) = MAX(f(iv,ip), 0.0d0) / MAX(v2, v2_floor) * jacob(iv,ip)
+    ! Bulk threshold: ignore the noisy far tail and any round-off-negative
+    ! cells, then fit ln f as a linear function of v^2 by weighted LSQ.
+    fmax = 0.0d0
+    DO ip = 1, npar
+      DO iv = 1, nperp
+        IF (f(iv,ip) > fmax) fmax = f(iv,ip)
       END DO
     END DO
-    CALL ncint_2d(fint, mom)          ! = n * <1/v^2>
-    inv_v2_avg = mom / dens           ! <1/v^2>
+    ffloor = ftol * fmax
 
-    Tn = aa / (cvth**2 * inv_v2_avg) / 1.0d3   ! keV
+    sw = 0.0d0; swx = 0.0d0; swy = 0.0d0; swxx = 0.0d0; swxy = 0.0d0
+    DO ip = 1, npar
+      DO iv = 1, nperp
+        IF (f(iv,ip) <= ffloor) CYCLE
+        w = f(iv,ip) * jacob(iv,ip)          ! phase-space (density) weight
+        x = vperp(iv)**2 + vpar(ip)**2       ! v^2
+        y = LOG(f(iv,ip))                    ! ln f
+        sw   = sw   + w
+        swx  = swx  + w*x
+        swy  = swy  + w*y
+        swxx = swxx + w*x*x
+        swxy = swxy + w*x*y
+      END DO
+    END DO
 
-    DEALLOCATE(fint)
+    IF (sw <= 0.0d0) THEN                     ! no valid cells
+      Tn = 0.0d0
+      RETURN
+    END IF
+
+    xbar  = swx / sw
+    ybar  = swy / sw
+    denom = swxx - sw*xbar*xbar               ! Sum w (x-xbar)^2
+    IF (denom <= 0.0d0) THEN                   ! degenerate (all f at one v^2)
+      Tn = 0.0d0
+      RETURN
+    END IF
+
+    slope = (swxy - sw*xbar*ybar) / denom      ! d(ln f)/d(v^2) ~ -1/(2 vth^2)
+    IF (slope >= 0.0d0) THEN                    ! f not decreasing with v^2: no T
+      Tn = 0.0d0
+      RETURN
+    END IF
+
+    vth2 = -1.0d0 / (2.0d0 * slope)            ! [m^2/s^2]
+    Tn   = aa * vth2 / cvth**2 / 1.0d3         ! keV  (T[eV] = A vth^2 / cvth^2)
 
   END SUBROUTINE time_Tn
 
