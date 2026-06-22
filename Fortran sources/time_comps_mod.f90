@@ -141,25 +141,30 @@ CONTAINS
     DOUBLE PRECISION, INTENT(OUT) :: Tn          ! [keV]
 
     DOUBLE PRECISION, PARAMETER :: cvth = 9.79d3 ! sqrt(e/m_p) [m/s per sqrt(eV/amu)]
-    DOUBLE PRECISION, PARAMETER :: ftol = 1.0d-6 ! include cells with f > ftol*max(f)
-    DOUBLE PRECISION :: fmax, ffloor, w, x, y, vth2, slope
+    DOUBLE PRECISION, PARAMETER :: core_frac = 1.0d-2 ! fit only the bulk core: f > core_frac*max(f)
+    DOUBLE PRECISION :: fmax, fcore, w, x, y, vth2, slope
     DOUBLE PRECISION :: sw, swx, swy, swxx, swxy, xbar, ybar, denom
     INTEGER :: iv, ip
 
-    ! Bulk threshold: ignore the noisy far tail and any round-off-negative
-    ! cells, then fit ln f as a linear function of v^2 by weighted LSQ.
+    ! Restrict the ln f vs v^2 fit to the dense thermal CORE (f within
+    ! core_frac of the peak).  A fit spanning the full bulk + RF tail returns
+    ! a slope shallower than the bulk's, overestimating Tn (Tn > Teff) and
+    ! making isc=3 overheat like isc=2.  Limiting to the core isolates the
+    ! cold-bulk slope -> Tn < Teff, while staying grid-robust (the core is
+    ! well resolved and free of the 1/v^2 singularity).  core_frac is the knob
+    ! trading bulk-purity (smaller) against fit stability (larger).
     fmax = 0.0d0
     DO ip = 1, npar
       DO iv = 1, nperp
         IF (f(iv,ip) > fmax) fmax = f(iv,ip)
       END DO
     END DO
-    ffloor = ftol * fmax
+    fcore = core_frac * fmax
 
     sw = 0.0d0; swx = 0.0d0; swy = 0.0d0; swxx = 0.0d0; swxy = 0.0d0
     DO ip = 1, npar
       DO iv = 1, nperp
-        IF (f(iv,ip) <= ffloor) CYCLE
+        IF (f(iv,ip) <= fcore) CYCLE
         w = f(iv,ip) * jacob(iv,ip)          ! phase-space (density) weight
         x = vperp(iv)**2 + vpar(ip)**2       ! v^2
         y = LOG(f(iv,ip))                    ! ln f
