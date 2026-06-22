@@ -139,18 +139,25 @@ CONTAINS
 
     DOUBLE PRECISION, PARAMETER :: cvth = 9.79d3 ! sqrt(e/m_p) [m/s per sqrt(eV/amu)]
     DOUBLE PRECISION, ALLOCATABLE :: fint(:,:)
-    DOUBLE PRECISION :: v2, v2_floor, inv_v2_avg, mom
+    DOUBLE PRECISION :: v2, v2_floor, inv_v2_avg, mom, dv_axis
     INTEGER :: iv, ip
 
     ALLOCATE(fint(nperp, npar))
 
-    ! f/v^2 integrand (jacob included).  The 1/v^2 weight is integrable;
-    ! guard only the exact origin.
-    v2_floor = MAX(vperp(1)**2, 1.0d0)
+    ! f/v^2 integrand (jacob included).  Two safeguards against the known
+    ! grid-fragility of this harmonic-mean moment (cf. branch SC_diagnostics):
+    !  (1) clip f to its non-negative part -- a small negative undershoot near
+    !      the axis, amplified by 1/v^2, would otherwise flip the sign of
+    !      <1/v^2> and make Tn (hence the isc=3 self Coulomb log) go negative;
+    !  (2) cap the 1/v^2 weight at the smallest resolved velocity scale (half
+    !      the near-axis cell) rather than the token 1 m^2/s^2 floor, so that
+    !      under-resolved near-axis cells cannot dominate the integral.
+    dv_axis  = MIN(vperp(2) - vperp(1), dvpar)
+    v2_floor = MAX(vperp(1)**2, (0.5d0*dv_axis)**2)
     DO iv = 1, nperp
       DO ip = 1, npar
         v2 = vperp(iv)**2 + vpar(ip)**2
-        fint(iv,ip) = f(iv,ip) / MAX(v2, v2_floor) * jacob(iv,ip)
+        fint(iv,ip) = MAX(f(iv,ip), 0.0d0) / MAX(v2, v2_floor) * jacob(iv,ip)
       END DO
     END DO
     CALL ncint_2d(fint, mom)          ! = n * <1/v^2>
@@ -161,5 +168,40 @@ CONTAINS
     DEALLOCATE(fint)
 
   END SUBROUTINE time_Tn
+
+  !***************************************************
+  !* Minimum of f near the axis and over the grid    *
+  !*   fmin_axis = min f for v_perp < axis_frac*vmax  *
+  !*   fmin_glob = min f over the whole grid          *
+  !* Small negative values near the axis are the      *
+  !* precursor of the isc=3 Tn sign-flip; tracking    *
+  !* them in time pins down when/where f goes < 0.    *
+  !*   06/2026: F. Louche                             *
+  !***************************************************
+
+  SUBROUTINE time_fmin_axis(f, fmin_axis, fmin_glob)
+
+    USE shared_grid
+
+    IMPLICIT NONE
+
+    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar)
+    DOUBLE PRECISION, INTENT(OUT) :: fmin_axis, fmin_glob
+
+    DOUBLE PRECISION, PARAMETER :: axis_frac = 0.1d0  ! near-axis band: v_perp < 10% of v_perp,max
+    DOUBLE PRECISION :: vcut
+    INTEGER :: iv, ip
+
+    vcut      = axis_frac * vperp(nperp)
+    fmin_glob = f(1,1)
+    fmin_axis = f(1,1)
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        IF (f(iv,ip) < fmin_glob) fmin_glob = f(iv,ip)
+        IF (vperp(iv) <= vcut .AND. f(iv,ip) < fmin_axis) fmin_axis = f(iv,ip)
+      END DO
+    END DO
+
+  END SUBROUTINE time_fmin_axis
 
 END MODULE time_comps_mod
