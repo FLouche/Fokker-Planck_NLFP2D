@@ -114,4 +114,125 @@ CONTAINS
 
   END SUBROUTINE time_energy
 
+  !***************************************************
+  !* Density-characteristic (log-slope) temperature  *
+  !*   Tn [keV] from the phase-space-weighted least-  *
+  !*   squares slope of ln f vs v^2:                  *
+  !*     slope = d(ln f)/d(v^2) ~ -1/(2 vth_n^2)      *
+  !*     vth_n^2 = -1/(2 slope),  Tn = A vth_n^2/cvth^2*
+  !*   For a Maxwellian ln f is exactly linear in v^2,*
+  !*   so the slope -> -1/(2 vth^2) on ANY grid: this *
+  !*   estimator has no 1/v^2 weight, no near-axis     *
+  !*   singularity, is grid-convergent and stays > 0. *
+  !*   Weighting by f*jacob lets the dense cold bulk  *
+  !*   (the SC-drag population, isc=3 background)      *
+  !*   dominate.  Code convention vth=9.79e3*sqrt(T/A)*
+  !*   05/2026: F. Louche  (06/2026: log-slope form)  *
+  !***************************************************
+
+  SUBROUTINE time_Tn(f, dens, Tn)
+
+    USE shared_grid
+    USE shared_plasma
+
+    IMPLICIT NONE
+
+    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar), dens   ! dens kept for interface
+    DOUBLE PRECISION, INTENT(OUT) :: Tn          ! [keV]
+
+    DOUBLE PRECISION, PARAMETER :: cvth = 9.79d3 ! sqrt(e/m_p) [m/s per sqrt(eV/amu)]
+    ! core_frac (namelist, default 1e-2): fit only the bulk core, f > core_frac*max(f)
+    DOUBLE PRECISION :: fmax, fcore, w, x, y, vth2, slope
+    DOUBLE PRECISION :: sw, swx, swy, swxx, swxy, xbar, ybar, denom
+    INTEGER :: iv, ip
+
+    ! Restrict the ln f vs v^2 fit to the dense thermal CORE (f within
+    ! core_frac of the peak).  A fit spanning the full bulk + RF tail returns
+    ! a slope shallower than the bulk's, overestimating Tn (Tn > Teff) and
+    ! making isc=3 overheat like isc=2.  Limiting to the core isolates the
+    ! cold-bulk slope -> Tn < Teff, while staying grid-robust (the core is
+    ! well resolved and free of the 1/v^2 singularity).  core_frac is the knob
+    ! trading bulk-purity (smaller) against fit stability (larger).
+    fmax = 0.0d0
+    DO ip = 1, npar
+      DO iv = 1, nperp
+        IF (f(iv,ip) > fmax) fmax = f(iv,ip)
+      END DO
+    END DO
+    fcore = core_frac * fmax
+
+    sw = 0.0d0; swx = 0.0d0; swy = 0.0d0; swxx = 0.0d0; swxy = 0.0d0
+    DO ip = 1, npar
+      DO iv = 1, nperp
+        IF (f(iv,ip) <= fcore) CYCLE
+        w = f(iv,ip) * jacob(iv,ip)          ! phase-space (density) weight
+        x = vperp(iv)**2 + vpar(ip)**2       ! v^2
+        y = LOG(f(iv,ip))                    ! ln f
+        sw   = sw   + w
+        swx  = swx  + w*x
+        swy  = swy  + w*y
+        swxx = swxx + w*x*x
+        swxy = swxy + w*x*y
+      END DO
+    END DO
+
+    IF (sw <= 0.0d0) THEN                     ! no valid cells
+      Tn = 0.0d0
+      RETURN
+    END IF
+
+    xbar  = swx / sw
+    ybar  = swy / sw
+    denom = swxx - sw*xbar*xbar               ! Sum w (x-xbar)^2
+    IF (denom <= 0.0d0) THEN                   ! degenerate (all f at one v^2)
+      Tn = 0.0d0
+      RETURN
+    END IF
+
+    slope = (swxy - sw*xbar*ybar) / denom      ! d(ln f)/d(v^2) ~ -1/(2 vth^2)
+    IF (slope >= 0.0d0) THEN                    ! f not decreasing with v^2: no T
+      Tn = 0.0d0
+      RETURN
+    END IF
+
+    vth2 = -1.0d0 / (2.0d0 * slope)            ! [m^2/s^2]
+    Tn   = aa * vth2 / cvth**2 / 1.0d3         ! keV  (T[eV] = A vth^2 / cvth^2)
+
+  END SUBROUTINE time_Tn
+
+  !***************************************************
+  !* Minimum of f near the axis and over the grid    *
+  !*   fmin_axis = min f for v_perp < axis_frac*vmax  *
+  !*   fmin_glob = min f over the whole grid          *
+  !* Small negative values near the axis are the      *
+  !* precursor of the isc=3 Tn sign-flip; tracking    *
+  !* them in time pins down when/where f goes < 0.    *
+  !*   06/2026: F. Louche                             *
+  !***************************************************
+
+  SUBROUTINE time_fmin_axis(f, fmin_axis, fmin_glob)
+
+    USE shared_grid
+
+    IMPLICIT NONE
+
+    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar)
+    DOUBLE PRECISION, INTENT(OUT) :: fmin_axis, fmin_glob
+
+    DOUBLE PRECISION, PARAMETER :: axis_frac = 0.1d0  ! near-axis band: v_perp < 10% of v_perp,max
+    DOUBLE PRECISION :: vcut
+    INTEGER :: iv, ip
+
+    vcut      = axis_frac * vperp(nperp)
+    fmin_glob = f(1,1)
+    fmin_axis = f(1,1)
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        IF (f(iv,ip) < fmin_glob) fmin_glob = f(iv,ip)
+        IF (vperp(iv) <= vcut .AND. f(iv,ip) < fmin_axis) fmin_axis = f(iv,ip)
+      END DO
+    END DO
+
+  END SUBROUTINE time_fmin_axis
+
 END MODULE time_comps_mod

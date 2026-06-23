@@ -17,6 +17,11 @@ Options (both subcommands)
   --casename STR  Case label appended to every plot title.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
 
+plot / compare only
+-------------------
+  --xrange xmin:xmax   Zoom the x-axis of every plot to [xmin, xmax]
+                       (e.g. --xrange 0:5e6). Accepts ':' or ',' separators.
+
 run-only options
 ----------------
   --outdir DIR    Solver working directory (default: folder of <input.dat>).
@@ -93,6 +98,35 @@ FILE_META = {
     # 1-D slices of SC Maxwellian ------------------------------------------
     "fsc_maxw_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)", "ylabel": "f_M",
                            "title": "SC Maxwellian at v∥ = 0  (final T_eff)", "sci_y": True},
+    # SC coefficient diagnostics (written by isc=1,2 via TimeFP_7pt
+    #                              and isc=-1 via TimeFP_7pt_NL) --------
+    "sc_Dpepe_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "D⊥⊥ (m² s⁻³)",
+                            "title":  "SC diffusion D⊥⊥ at v∥ = 0", "sci_y": True},
+    "sc_Dpapa_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "D∥∥ (m² s⁻³)",
+                            "title":  "SC diffusion D∥∥ at v∥ = 0", "sci_y": True},
+    "sc_Dpepa_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "D⊥∥ (m² s⁻³)",
+                            "title":  "SC cross diffusion D⊥∥ at v∥ = 0", "sci_y": True},
+    "sc_Fpe_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "F⊥ (m s⁻²)",
+                            "title":  "SC friction F⊥ at v∥ = 0",   "sci_y": True},
+    "sc_Fpa_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "F∥ (m s⁻²)",
+                            "title":  "SC friction F∥ at v∥ = 0",   "sci_y": True},
+    "sc_psi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "ψ",
+                            "title":  "Rosenbluth potential ψ at v∥ = 0", "sci_y": True},
+    "sc_phi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+                            "ylabel": "φ",
+                            "title":  "Rosenbluth potential φ at v∥ = 0", "sci_y": True},
+    # SC power-density diagnostic  dP_SC/d³v = ½ m v² C_SC[f]  (signed) ----
+    "sc_power_density":   {"ptype": "2d",  "diverging": True, "sci_z": True,
+                            "title": "SC power density  dP_SC/d³v  (>0 source, <0 sink)"},
+    "sc_power_density_at_vpar0": {"ptype": "1d", "xlabel": "v⊥ (v_th)",
+                            "ylabel": "dP_SC/d³v at v∥=0", "sci_y": True,
+                            "title": "SC power density at v∥ = 0  (>0 source, <0 sink)"},
     # Simple time series -------------------------------------------------------
     "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
                                 "title": "Particle density vs time"},
@@ -119,6 +153,21 @@ FILE_META = {
     # Effective temperature
     "Teff_vs_time":                 {"ptype": "ts",  "ylabel": "T_eff (keV)",
                                      "title":  "Effective temperature vs time"},
+    # Density-characteristic (log-slope) temperature
+    "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
+                                     "title":  "Density-characteristic temperature vs time"},
+    # Minimum of f near the axis / over the grid (negative-f detector for isc=3)
+    "fmin_axis_vs_time":            {"ptype": "ts2", "ylabel": "min f",
+                                     "title":  "Minimum of f (near-axis / whole grid) vs time",
+                                     "labels": ["near-axis (v⊥ < 0.1·v⊥,max)", "whole grid"]},
+    # Coulomb logarithms (data files behind the coulomb_log_all_vs_time plot).
+    # Listed here so 'compare' can overlay them; still skipped in plot mode
+    # (the composite plot_coulomb_log handles them) via _SKIP_STEMS.
+    "coulomb_log_self_vs_time":     {"ptype": "ts",  "ylabel": "ln Λ (self)",
+                                     "title":  "Self-collision Coulomb logarithm vs time"},
+    "coulomb_log_vs_time":          {"ptype": "ts2", "ylabel": "ln Λ",
+                                     "title":  "Background-ion Coulomb logarithm vs time",
+                                     "labels": ["ion 1", "ion 2", "ion 3"]},
     # Momentum transfer rate (⊥ and ∥ per file) --------------------------------
     "momentum_coll_tot_vs_time":    {"ptype": "ts2",
                                      "ylabel": "Momentum transfer rate (N·m⁻³)",
@@ -150,6 +199,26 @@ _SKIP_STEMS = {"RF_dirac", "fstix",
                "coulomb_log_vs_time", "coulomb_log_self_vs_time"}
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
+
+# x-axis zoom for the 'plot' and 'compare' subcommands; (xmin, xmax) or None.
+# Set in main() from --xrange and applied to every figure in _finish().
+_XRANGE = None
+
+
+def _parse_xrange(s: str):
+    """Parse '--xrange' value 'xmin:xmax' (or 'xmin,xmax') into (xmin, xmax)."""
+    txt = s.strip().lstrip("[").rstrip("]")
+    sep = ":" if ":" in txt else ","
+    parts = txt.split(sep)
+    if len(parts) != 2:
+        sys.exit(f"Error: --xrange expects 'xmin:xmax', got '{s}'")
+    try:
+        lo, hi = float(parts[0]), float(parts[1])
+    except ValueError:
+        sys.exit(f"Error: --xrange bounds must be numbers, got '{s}'")
+    if hi <= lo:
+        sys.exit(f"Error: --xrange requires xmin < xmax, got '{s}'")
+    return (lo, hi)
 
 
 def _get_meta(stem: str) -> dict:
@@ -226,7 +295,68 @@ def _detect_type(path: Path, data: np.ndarray) -> str:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+def _autoscale_y_to_xrange(ax, xrange) -> None:
+    """Rescale an axes' y-limits to the line data lying within *xrange*.
+
+    Only line plots are affected: contour maps, colorbars and 3D surfaces have
+    no Line2D data and are left untouched. Reference lines (axhline/axvline,
+    exactly 2 points) are ignored so they cannot corrupt the range.
+    """
+    xmin, xmax = xrange
+    is_log = ax.get_yscale() == "log"
+    ys = []
+    for line in ax.get_lines():
+        xd = np.asarray(line.get_xdata(), dtype=float)
+        yd = np.asarray(line.get_ydata(), dtype=float)
+        if xd.size <= 2:                       # skip axhline/axvline references
+            continue
+        m = (xd >= xmin) & (xd <= xmax) & np.isfinite(yd)
+        if is_log:
+            m &= yd > 0
+        if np.any(m):
+            ys.append(yd[m])
+    if not ys:
+        return
+    yall = np.concatenate(ys)
+    ylo, yhi = float(yall.min()), float(yall.max())
+    if is_log:
+        lo, hi = np.log10(ylo), np.log10(yhi)
+        pad = 0.05 * (hi - lo) if hi > lo else 0.1
+        ax.set_ylim(10.0**(lo - pad), 10.0**(hi + pad))
+    else:
+        pad = 0.05 * (yhi - ylo) if yhi > ylo else (abs(yhi) * 0.05 or 1.0)
+        ax.set_ylim(ylo - pad, yhi + pad)
+
+
+def _warn_if_xrange_empty(fig, stem: str) -> None:
+    """Warn when --xrange selects no line data (otherwise the plot is blank
+    with no hint why — usually a units mismatch, e.g. 0:1 on an m/s axis)."""
+    xmin, xmax = _XRANGE
+    xs, in_window = [], False
+    for ax in fig.axes:
+        for line in ax.get_lines():
+            xd = np.asarray(line.get_xdata(), dtype=float)
+            if xd.size <= 2:                   # skip reference lines
+                continue
+            xs.append(xd)
+            if np.any((xd >= xmin) & (xd <= xmax)):
+                in_window = True
+    if xs and not in_window:
+        allx = np.concatenate(xs)
+        print(f"    WARNING: --xrange [{xmin:g}, {xmax:g}] selects no data for "
+              f"'{stem}' (x spans [{allx.min():g}, {allx.max():g}]); plot is empty.")
+
+
 def _finish(fig, stem: str, save_dir, show: bool) -> None:
+    if _XRANGE is not None and fig.axes:
+        # Zoom the data axes' x-range. fig.axes[0] is always the main plot:
+        # colorbars are appended afterwards, and every multi-panel figure is
+        # built with sharex=True, so a single set_xlim propagates to all panels.
+        fig.axes[0].set_xlim(_XRANGE)
+        # Rescale y to the data now visible in the x-window (line plots only).
+        for ax in fig.axes:
+            _autoscale_y_to_xrange(ax, _XRANGE)
+        _warn_if_xrange_empty(fig, stem)
     if save_dir is not None:
         out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
@@ -293,16 +423,26 @@ def plot_2d(data, meta, stem, save_dir, show, log, casename):
     if zmin == zmax:
         zmax = zmin + 1.0
 
-    if log and np.any(Z > 0):
+    diverging = meta.get("diverging", False)
+    if diverging:
+        # Signed field: symmetric range about 0 with a diverging colormap so
+        # sources (>0) and sinks (<0) are immediately distinguishable.
+        zabs   = max(abs(zmin), abs(zmax)) or 1.0
+        norm   = None
+        levels = np.linspace(-zabs, zabs, 21)
+        cmap   = "RdBu_r"
+    elif log and np.any(Z > 0):
         pos    = Z[Z > 0]
         norm   = mcolors.LogNorm(vmin=float(pos.min()), vmax=zmax)
         levels = np.logspace(np.log10(float(pos.min())), np.log10(zmax), 20)
+        cmap   = "rainbow"
     else:
         norm   = None
         levels = np.linspace(zmin, zmax, 20)
+        cmap   = "rainbow"
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    cf   = ax.contourf(vpar_u, vperp_u, Z, levels=levels, norm=norm, cmap="rainbow")
+    cf   = ax.contourf(vpar_u, vperp_u, Z, levels=levels, norm=norm, cmap=cmap)
     cbar = fig.colorbar(cf, ax=ax)
     if meta.get("sci_z") and norm is None:
         cbar.formatter.set_powerlimits((0, 0))
@@ -964,17 +1104,21 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
             continue
 
         print(f"  [{ptype:3s}]  {path.name}")
+        # Use each file's own casename for the title, so a directory holding
+        # several cases (e.g. plotted via --files) labels every plot with the
+        # case it actually belongs to instead of one auto-detected casename.
+        file_case = _case_from_stem(stem, casename)
         try:
             if ptype == "1d":
-                plot_1d(data, meta, stem, save_dir, show, log, casename)
+                plot_1d(data, meta, stem, save_dir, show, log, file_case)
             elif ptype == "2d":
-                plot_2d(data, meta, stem, save_dir, show, log, casename)
+                plot_2d(data, meta, stem, save_dir, show, log, file_case)
                 if plot3d:
-                    plot_3d(data, meta, stem, save_dir, show, log, casename)
+                    plot_3d(data, meta, stem, save_dir, show, log, file_case)
             elif ptype == "ts":
-                plot_ts(data, meta, stem, save_dir, show, casename)
+                plot_ts(data, meta, stem, save_dir, show, file_case)
             elif ptype == "ts2":
-                plot_ts2(data, meta, stem, save_dir, show, casename)
+                plot_ts2(data, meta, stem, save_dir, show, file_case)
             else:
                 print("    (skipped — unknown type)")
         except Exception as exc:
@@ -1069,6 +1213,19 @@ def _read_iplot_mom_from_namelist(input_file: Path) -> int:
     return 0
 
 
+def _case_from_stem(stem: str, default: str = "") -> str:
+    """Casename suffix of a single output-file stem, or *default* if none.
+
+    'fmin_axis_vs_time-JET-...-Grid3-test3' -> 'JET-...-Grid3-test3'.
+    Lets each file carry its own casename when several cases are plotted
+    together (e.g. via --files), so titles match the file they describe.
+    """
+    for key in sorted(FILE_META, key=len, reverse=True):
+        if stem.startswith(key + "-"):
+            return stem[len(key) + 1:]
+    return default
+
+
 def _detect_casename(outdir: Path, names=None) -> str:
     """Infer casename from output files by matching known FILE_META stems.
 
@@ -1080,9 +1237,9 @@ def _detect_casename(outdir: Path, names=None) -> str:
     else:
         stems = (p.stem for p in sorted(outdir.glob("*.txt")))
     for stem in stems:
-        for key in sorted(FILE_META, key=len, reverse=True):
-            if stem.startswith(key + "-"):
-                return stem[len(key) + 1:]
+        case = _case_from_stem(stem)
+        if case:
+            return case
     return ""
 
 
@@ -1137,6 +1294,10 @@ def _add_common(p: argparse.ArgumentParser) -> None:
 _COMPARE_ALIASES = {
     # power_sc_split_vs_time is a plot-only name; data lives in power_coll_self_vs_time
     "power_sc_split_vs_time": "power_coll_self_vs_time",
+    # coulomb_log_all_vs_time is a plot-only composite; for compare, default to
+    # the self-collision log (the one that differs between isc models). Use
+    # coulomb_log_vs_time explicitly for the background-ion logs.
+    "coulomb_log_all_vs_time": "coulomb_log_self_vs_time",
 }
 
 
@@ -1246,6 +1407,8 @@ def build_parser() -> argparse.ArgumentParser:
     plot_p = sub.add_parser("plot", help="plot from an existing output directory")
     plot_p.add_argument("outdir", type=Path, help="directory containing .txt output files")
     _add_common(plot_p)
+    plot_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
+                        help="zoom the x-axis of every plot to [xmin, xmax]")
 
     cmp_p = sub.add_parser("compare",
                             help="overlay same-type outputs from multiple cases")
@@ -1262,16 +1425,23 @@ def build_parser() -> argparse.ArgumentParser:
     cmp_p.add_argument("--files", nargs="+", default=None, metavar="F",
                        help="restrict to these file types (stem key, e.g. anisotropy_vs_time)"
                             " or full filenames")
+    cmp_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
+                       help="zoom the x-axis of every plot to [xmin, xmax]")
 
     return p
 
 
 def main(argv=None):
+    global _XRANGE
     args = build_parser().parse_args(argv)
 
     # Default to interactive display when no save directory is given
     if not args.show and args.save_dir is None:
         args.show = True
+
+    # x-axis zoom (plot / compare only; run never defines --xrange)
+    if getattr(args, "xrange", None):
+        _XRANGE = _parse_xrange(args.xrange)
 
     # ----------------------------------------------------------------
     # compare command — handled entirely here, then return

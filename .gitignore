@@ -11,3 +11,17 @@ FP2D_QLRF_NL/*.u2d
 
 # Claude Code local settings
 .claude/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.tex.tmp.*
+
+# Python cache
+__pycache__/
+*.pyc
