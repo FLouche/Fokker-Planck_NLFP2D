@@ -43,6 +43,7 @@ double precision, dimension(9) :: ab,zb,xb
 !double precision :: vcr
 double precision :: xpart,aa,za
 double precision ::  vteff,spit,tauie
+double precision :: core_frac   ! isc=3 Tn log-slope: fit cells with f > core_frac*max(f)
 	   
 integer nbulk
 !integer isource

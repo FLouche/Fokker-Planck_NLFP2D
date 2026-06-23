@@ -166,10 +166,14 @@ namelist /INPUT/ casename, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, &
                 i_ss_check, n_ss_window, ss_tol, &
-                iplot_pow, iplot_mom, idiag
-                
+                iplot_pow, iplot_mom, idiag, core_frac
+
 
 !write(*,*) 'Read namelist'
+
+! Default for the isc=3 Tn log-slope core fraction (overridable via namelist).
+! Backward-compatible: inputs without core_frac keep the calibrated 1% value.
+core_frac = 1.0d-2
 
 read(5,INPUT)
 
