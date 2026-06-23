@@ -46,18 +46,12 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   REAL(dp) :: Lf(nbig)                  ! operator applied to f
   REAL(dp), ALLOCATABLE :: rf00(:,:)
 
-  !--- Stencil workspace (reused for each operator call) -----------
-  INTEGER  :: col_idx(49)
-  REAL(dp) :: stencil_coeff(49)
-  INTEGER  :: n_entries
-  REAL(dp) :: rhs_ij
-
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: normfac
   REAL(dp) :: taum_save          ! saved taum; restored on exit
   REAL(dp), PARAMETER :: pmass = 1.6726d-27   ! proton mass [kg]
 
-  INTEGER :: iv, ip, imu, ix, ib, row, k
+  INTEGER :: iv, ip, imu, ix, ib
 
   !================================================================
   ! 0.  Preliminary

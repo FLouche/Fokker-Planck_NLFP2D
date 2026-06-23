@@ -15,6 +15,11 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 2.2 - 23 June 2026 (FL)
+!
+!   New definiton of isc=3 
+
+
 !     Version 2.1  - 03/06/2026 (FL)
 !
 !    Various corrections + new definition of the anisotropy factor
@@ -30,6 +35,7 @@ program FP_Coll_2D
 !       the treatment of varying Coulomb log is accounted for
 !         in for the options isc=0, isc=1, and isc=2
 !   isc=2: Maxwellian SC background at varying temperature (starts at Tstix)
+    
 
 
 !    
@@ -91,7 +97,7 @@ double precision, parameter :: gamma0_sc = 2.390775d-1
 
 ! do loops indexes
 
-integer :: ib,iv,imu,ix,k
+integer :: ib,iv,imu,ix
 
 ! Other variables
 
@@ -128,14 +134,16 @@ double precision start_time,end_time
 !            0: no self-collisions
 !           +1: Maxwellian background at fixed Tstix (Stix solution without RF)
 !           +2: Maxwellian background at varying Teff (energy-weighted; starts at Tstix)
-!           +3: Maxwellian background at varying Tn  (density-characteristic; starts at Tstix)
-!               [+3 is a diagnostic variant for comparison with +2]
+!           +3: Maxwellian SC background at the density-characteristic (cold-bulk)
+!          temperature Tn, from a log-slope fit of ln(f) vs v^2 over the thermal
+!          core (starts at Tstix). core_frac (namelist, default 3.8d-3) sets the
+!          core threshold f > core_frac*max(f); 3.8d-3 calibrates isc=3 to isc=-1.
 !  ising: homogeneity of the grid in vperp:
 !            0: homogeneous grid
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
 !                      for vperp <= vbound: nsing points (increase the density for small vperp)
 !           +1: Quadratic spacing for higher resolution near vperp=0 (or vperp_min)
-!                 ==> FD scheme needs to be adapted ===> DO NOT USE !!!!
+!               
 !
 ! Convergence for time-dependent simulation:
 !
@@ -164,9 +172,9 @@ namelist /INPUT/ casename, &
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, istart, isc, &
+                icn, ntimes, timestep, iold, istart, isc, core_frac, &
                 i_ss_check, n_ss_window, ss_tol, &
-                iplot_pow, iplot_mom, idiag, core_frac
+                iplot_pow, iplot_mom, idiag
 
 
 !write(*,*) 'Read namelist'
@@ -174,7 +182,7 @@ namelist /INPUT/ casename, &
 ! Default for the isc=3 Tn log-slope core fraction (overridable via namelist).
 ! 3.8d-3 calibrates isc=3 to the rigorous isc=-1 reference (JET RF case5:
 ! Teff ~43.8 keV, grid-independent); see SC_models_grid_convergence report.
-core_frac = 3.8d-3
+!core_frac = 3.8d-3
 
 read(5,INPUT)
 

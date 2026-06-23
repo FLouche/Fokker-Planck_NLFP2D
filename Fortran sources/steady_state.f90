@@ -21,7 +21,6 @@ use mod_build_ss
 use mod_sparse_solve
 
 use shared_timer
-use shared_beam, only: isource
 
 use func_index
 
@@ -39,8 +38,7 @@ double precision :: bigm(nbig,nbig),bigv(nbig)
 
 double precision dens_tmp
 
-integer iv,imu,ix,ipe,ipa
-logical steady_no_beam
+integer iv,imu,ix
 
 
 !======================================================================

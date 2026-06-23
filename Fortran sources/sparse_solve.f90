@@ -50,8 +50,7 @@ integer i,j,index
 !  PARDISO input parameters
 !  ------------------------  
 ! Other variables
-integer maxfct, mnum, mtype, phase, n, nrhs, error, msglvl,flag1
-integer, dimension(64) :: iparm
+integer n, nrhs, error, flag1
 integer, dimension(:), allocatable :: ia,ja
 double precision, dimension(:), allocatable :: a ! b is actually bigv
 

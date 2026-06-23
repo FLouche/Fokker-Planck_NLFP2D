@@ -80,7 +80,6 @@
 			<File RelativePath="..\Fortran sources\self_coll_max.f90"/>
 			<File RelativePath="..\Fortran sources\shared_data.f90">
 			</File>
-			<File RelativePath="..\Fortran sources\simpson_integration_1D.f90"/>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
 			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
 			<File RelativePath="..\Fortran sources\ss_check.f90"/>
