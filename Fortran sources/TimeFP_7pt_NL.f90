@@ -545,15 +545,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   WRITE(*,*) 'Solve completed.'
 
   !================================================================
-  ! Diagnostic: SC friction/diffusion tensor and Rosenbluth potentials
-  ! at v_par≈0  (isc=-1): Dperperp, Dparpar, Dperpar, Fperp, Fpar, psi, phi.
-  ! Must come BEFORE DEALLOCATE(sum_phi) — compute_psi needs it.
-  !================================================================
-  ! Diagnostic disabled: SC diffusion/friction tensor and Rosenbluth
-  ! potentials at v_par=0 (sc_D*/sc_F*/sc_psi/sc_phi_at_vpar0.txt).
-  ! CALL sc_components_diag(x_vec, teff)
-
   ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
+  !================================================================
   CALL sc_power_density_diag(x_vec, dens_tmp)
 
   DEALLOCATE(sum_phi)
