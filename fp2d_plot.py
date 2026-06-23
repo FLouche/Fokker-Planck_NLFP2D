@@ -1104,17 +1104,21 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
             continue
 
         print(f"  [{ptype:3s}]  {path.name}")
+        # Use each file's own casename for the title, so a directory holding
+        # several cases (e.g. plotted via --files) labels every plot with the
+        # case it actually belongs to instead of one auto-detected casename.
+        file_case = _case_from_stem(stem, casename)
         try:
             if ptype == "1d":
-                plot_1d(data, meta, stem, save_dir, show, log, casename)
+                plot_1d(data, meta, stem, save_dir, show, log, file_case)
             elif ptype == "2d":
-                plot_2d(data, meta, stem, save_dir, show, log, casename)
+                plot_2d(data, meta, stem, save_dir, show, log, file_case)
                 if plot3d:
-                    plot_3d(data, meta, stem, save_dir, show, log, casename)
+                    plot_3d(data, meta, stem, save_dir, show, log, file_case)
             elif ptype == "ts":
-                plot_ts(data, meta, stem, save_dir, show, casename)
+                plot_ts(data, meta, stem, save_dir, show, file_case)
             elif ptype == "ts2":
-                plot_ts2(data, meta, stem, save_dir, show, casename)
+                plot_ts2(data, meta, stem, save_dir, show, file_case)
             else:
                 print("    (skipped — unknown type)")
         except Exception as exc:
@@ -1209,6 +1213,19 @@ def _read_iplot_mom_from_namelist(input_file: Path) -> int:
     return 0
 
 
+def _case_from_stem(stem: str, default: str = "") -> str:
+    """Casename suffix of a single output-file stem, or *default* if none.
+
+    'fmin_axis_vs_time-JET-...-Grid3-test3' -> 'JET-...-Grid3-test3'.
+    Lets each file carry its own casename when several cases are plotted
+    together (e.g. via --files), so titles match the file they describe.
+    """
+    for key in sorted(FILE_META, key=len, reverse=True):
+        if stem.startswith(key + "-"):
+            return stem[len(key) + 1:]
+    return default
+
+
 def _detect_casename(outdir: Path, names=None) -> str:
     """Infer casename from output files by matching known FILE_META stems.
 
@@ -1220,9 +1237,9 @@ def _detect_casename(outdir: Path, names=None) -> str:
     else:
         stems = (p.stem for p in sorted(outdir.glob("*.txt")))
     for stem in stems:
-        for key in sorted(FILE_META, key=len, reverse=True):
-            if stem.startswith(key + "-"):
-                return stem[len(key) + 1:]
+        case = _case_from_stem(stem)
+        if case:
+            return case
     return ""
 
 
