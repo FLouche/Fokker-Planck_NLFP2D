@@ -387,6 +387,22 @@ def _matches_casename(path: Path, casename: str) -> bool:
     return "-" not in stem
 
 
+def _restrict_match(name: str, pat: str) -> bool:
+    """True if output filename *name* matches a --files entry *pat*.
+
+    *pat* may be (a) a glob (contains * ? [), used with fnmatch; (b) a full
+    filename ending in .txt, matched exactly; or (c) a bare stem key such as
+    'Teff_vs_time', which matches both the base file 'Teff_vs_time.txt' and any
+    case-named 'Teff_vs_time-<case>.txt' (so plot mode now behaves like compare).
+    """
+    if any(c in pat for c in "*?["):
+        return fnmatch.fnmatch(name, pat)
+    if pat.endswith(".txt"):
+        return name == pat
+    stem = name[:-4] if name.endswith(".txt") else name
+    return stem == pat or stem.startswith(pat + "-")
+
+
 # ---------------------------------------------------------------------------
 # Individual plot functions
 # ---------------------------------------------------------------------------
@@ -1079,9 +1095,10 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
 
     txt_files = sorted(outdir.glob("*.txt"))
     if restrict:
-        # Each entry in restrict may be an exact filename or a glob pattern
+        # Each entry may be a glob, a full filename, or a bare stem key
+        # (e.g. 'Teff_vs_time' matches 'Teff_vs_time-<case>.txt').
         txt_files = [f for f in txt_files
-                     if any(fnmatch.fnmatch(f.name, pat) for pat in restrict)]
+                     if any(_restrict_match(f.name, pat) for pat in restrict)]
     else:
         txt_files = [f for f in txt_files if _matches_casename(f, casename)]
 
