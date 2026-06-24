@@ -1085,6 +1085,19 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
     else:
         txt_files = [f for f in txt_files if _matches_casename(f, casename)]
 
+    if not txt_files:
+        # Nothing matched -- help the user rather than silently printing "Done.".
+        detected = _detect_casename(outdir)
+        hint = (f"\n  Hint: this folder contains case '{detected}' -- "
+                f"add  --casename {detected}") if (detected and detected != casename) else ""
+        if restrict:
+            print(f"  No output files matched the --files pattern(s).{hint}")
+        elif casename:
+            print(f"  No output files matched casename '{casename}'.{hint}")
+        else:
+            print(f"  No case-named output files matched (empty casename).{hint}")
+        return
+
     for path in txt_files:
         stem = path.stem
         if any(stem.startswith(s) for s in _SKIP_STEMS):
@@ -1503,7 +1516,10 @@ def main(argv=None):
     if not outdir.is_dir():
         sys.exit(f"Error: output directory not found: {outdir}")
 
-    if not args.casename and args.files:
+    if not args.casename:
+        # Auto-detect the casename from the output filenames. With --files, search
+        # only those names; otherwise scan the whole directory, so a plain
+        # `plot <dir>` works for a single-case folder without requiring --casename.
         args.casename = _detect_casename(outdir, names=args.files)
         if args.casename:
             print(f"Casename (auto-detected): {args.casename}")
