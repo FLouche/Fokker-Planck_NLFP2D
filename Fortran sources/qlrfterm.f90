@@ -26,6 +26,8 @@ use shared_rf
 
 use shared_FPterms
 
+use shared_timer, only: notxt   ! RF_dirac.txt written only when notxt==0
+
 use delta_dirac
 
 use Complex_Bessel
@@ -54,17 +56,17 @@ complex*16, dimension(0:nharm+1) :: djbes
 
 allocate(dirac(npar))
 
-open (40,file='RF_dirac.txt',status='unknown')
+if (notxt == 0) open (40,file='RF_dirac.txt',status='unknown')
 
 do i = 1,npar
 
    x = vpar(i)-vres
    dirac(i) = delta_d(x,delta_RF)
-   write(40,*) vpar(i),dirac(i)
-   
+   if (notxt == 0) write(40,*) vpar(i),dirac(i)
+
 enddo
 
-close(40)
+if (notxt == 0) close(40)
 
 ! Bessel functions
 ! ----------------

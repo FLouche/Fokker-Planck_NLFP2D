@@ -97,6 +97,7 @@ integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Sti
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
 integer :: idiag     = 0         ! 0: power balance only; -1: all balances (density+momentum+power)
+integer :: notxt     = 0         ! .txt output: 0=write all; 1=suppress all; 2=keep only the minimal test/diagnostic set
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''
 !
@@ -108,6 +109,29 @@ contains
     character(len=*), intent(in) :: name
     character(len=256) :: fname
     integer :: idot
+    logical :: keep
+    character(len=64) :: stem
+    ! .txt output control via notxt: 0 = write all; 1 = suppress all; 2 = keep
+    ! only the minimal test/diagnostic set below.  Suppressed .txt files are
+    ! routed to the OS null device.  (.dat restart/kernel files are unaffected.)
+    if (notxt /= 0) then
+      idot = index(name, '.', back=.true.)
+      if (idot > 0 .and. name(idot:len_trim(name)) == '.txt') then
+        keep = .false.
+        if (notxt == 2) then
+          stem = name(1:idot-1)
+          keep =      trim(stem) == 'Ekin_perp'          &
+                 .or. trim(stem) == 'Ekin_perp_at_vpar0' &
+                 .or. trim(stem) == 'fout_at_vpar0'      &
+                 .or. trim(stem) == 'Teff_vs_time'       &
+                 .or. trim(stem) == 'anisotropy_vs_time'
+        end if
+        if (.not. keep) then
+          fname = 'NUL'
+          return
+        end if
+      end if
+    end if
     if (len_trim(casename) == 0) then
       fname = trim(name)
     else
