@@ -2,6 +2,7 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}   % scalable fonts (needed for microtype font expansion)
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{mathtools}
 \usepackage{bm}
@@ -52,7 +53,7 @@
        \normalsize 2D Fokker--Planck solver for ion velocity distribution
        functions in cylindrical velocity space}
 \author{F.~Louche\\LPP-ERM/KMS}
-\date{Version 2.1 -- June 2026}
+\date{Version 2.2 -- June 2026}
 % ============================================================
 
 \begin{document}
@@ -80,7 +81,7 @@ The code accounts for three physical operators:
         quasi-linear diffusion operator, evaluated using complex Bessel
         functions.
   \item \textbf{Self-collisions} (collisions of minority ions with
-        themselves), with four levels of approximation selectable at runtime.
+        themselves), with five levels of approximation selectable at runtime.
 \end{enumerate}
 An optional NBI \textbf{beam source} term and an associated particle
 \textbf{loss term} are also included.
@@ -198,10 +199,25 @@ Maxwellian distribution at the Stix effective temperature $T_\mathrm{eff}$
 (computed once at the start of the simulation and kept constant).  This adds
 a fixed linear operator to the coefficient arrays.
 
-\paragraph{\texttt{isc = 2} -- Maxwellian background at varying temperature.}
+\paragraph{\texttt{isc = 2} -- Maxwellian background at varying effective temperature.}
 Same as \texttt{isc = 1}, but the background temperature and Coulomb
 logarithm are updated at each time step to track the evolving effective
-temperature $T_\mathrm{eff}(t)$.  Requires a time-dependent run.
+temperature $T_\mathrm{eff}(t) = (2T_\perp + T_\parallel)/3$.  Requires a
+time-dependent run.
+
+\paragraph{\texttt{isc = 3} -- Maxwellian background at the density-characteristic
+temperature.}
+Same as \texttt{isc = 2}, but the background temperature is the
+\emph{density-characteristic} (cold-bulk) temperature $T_n(t)$ instead of the
+energy-weighted $T_\mathrm{eff}(t)$.  $T_n$ is obtained from a
+phase-space-weighted least-squares fit of $\ln f$ versus $v^2$ restricted to the
+dense thermal core --- only cells with $f > \texttt{core\_frac}\cdot\max f$ enter
+the fit --- which returns the temperature exactly for a Maxwellian.  Being tied to
+the cold bulk rather than to the supra-thermal tail, this background better
+represents the population that dominates the collisional drag.  The core fraction
+\texttt{core\_frac} (default $3.8\times10^{-3}$) is tunable; the appropriate value
+depends on the shape of the distribution, so it may need re-calibrating against the
+fully nonlinear operator for a new scenario.  Requires a time-dependent run.
 
 \paragraph{\texttt{isc = -1} -- Fully nonlinear self-collisions.}
 The complete nonlinear Landau/Fokker--Planck self-collision operator
@@ -392,9 +408,12 @@ else  & $1.0$  & Fully implicit \\
   \item \textbf{Factorize} $M_\mathrm{lhs}$ once (PARDISO phases 11+22).
   \item \textbf{Time loop} for $n = 1, \ldots, N_\mathrm{times}$:
         \begin{enumerate}
-          \item Recompute the Coulomb logarithm from the current effective
-                temperature and rebuild the linear FP operator (allows a
-                time-varying Coulomb logarithm).
+          \item Recompute the Coulomb logarithm and, for
+                \texttt{isc} $\in \{1,2,3\}$, the Maxwellian self-collision
+                background (at the fixed Stix, $T_\mathrm{eff}(t)$, or $T_n(t)$
+                temperature, respectively) from the current distribution, then
+                rebuild the FP operator (allowing a time-varying Coulomb logarithm
+                and self-collision term).
           \item Rebuild $M_\mathrm{lhs}$ with the updated operator.
           \item Compute the RHS:
                 $b = \bigl(I + (1-\theta)\,\dt\,\Lcal\bigr)\,f^n + \dt\,S$
@@ -532,6 +551,12 @@ At each time step the following quantities are written to disk:
   \item Effective temperature $T_\mathrm{eff} = (2T_\perp + T_\parallel)/3$,
         where $T_\perp = \tfrac{1}{2}m\langle \vp^2 \rangle$ and
         $T_\parallel = m\langle \vpa^2 \rangle$.
+  \item Density-characteristic temperature $T_n$ (the cold-bulk temperature from
+        the $\ln f$-vs-$v^2$ log-slope fit; it is the background used by
+        \texttt{isc = 3} but is written as a diagnostic for \emph{all} runs).
+  \item Near-axis and whole-grid minima of $f$ (a negative-$f$ monitor: small
+        negative undershoots near the axis can corrupt low-velocity moments such
+        as $T_n$).
   \item Perpendicular anisotropy factor $= 100\,T_\perp/(T_\perp + T_\parallel)$
         (\%), ranging from 0\% (all-parallel) to 50\% (Maxwellian) to 100\%
         (all-perpendicular).
@@ -592,6 +617,17 @@ idiag & $0$ &
   Selects the end-of-run balance diagnostics printed to stdout.
   $0$: power balance only.
   $-1$: all three balances (particle density, momentum, power). \\[4pt]
+
+notxt & $0$ &
+  Controls how many \texttt{.txt} output files are written (the \texttt{.dat}
+  restart/kernel files are never affected).
+  $0$: write all \texttt{.txt} outputs (normal).
+  $1$: suppress all \texttt{.txt} outputs.
+  $2$: write only the minimal test/diagnostic set, namely
+  \texttt{Ekin\_perp}, \texttt{Ekin\_perp\_at\_vpar0}, \texttt{fout\_at\_vpar0},
+  \texttt{Teff\_vs\_time}, and \texttt{anisotropy\_vs\_time}.
+  Suppressed files are routed to the OS null device, so the run is otherwise
+  unchanged (all stdout diagnostics still print). \\[4pt]
 
 \end{longtable}
 
@@ -817,8 +853,17 @@ isc & -- &
   Self-collision treatment.
   $0$: no self-collisions (linear FP equation).
   $1$: Maxwellian background at fixed Stix temperature.
-  $2$: Maxwellian background at evolving temperature.
+  $2$: Maxwellian background at evolving effective temperature $T_\mathrm{eff}(t)$
+       (requires TD run).
+  $3$: Maxwellian background at the density-characteristic temperature $T_n(t)$
+       (requires TD run; see \texttt{core\_frac}).
   $-1$: fully nonlinear self-collision operator (requires TD run). \\[4pt]
+
+core\_frac & $3.8\!\times\!10^{-3}$ &
+  Core fraction defining the $T_n$ log-slope fit for \texttt{isc = 3}: only grid
+  cells with $f > \texttt{core\_frac}\cdot\max f$ enter the $\ln f$-vs-$v^2$ fit.
+  Smaller values weight the cold bulk more heavily.  Ignored unless
+  \texttt{isc = 3}; the appropriate value is scenario-dependent. \\[4pt]
 
 new\_grid & $-1$ &
   Phi-distance kernel management (NL self-collisions only).
@@ -888,6 +933,10 @@ Written at every time step during the simulation:
   \item[\texttt{energy\_vs\_time.txt}] Columns: time, $E_\mathrm{tot}$ (keV), $E_\perp$ (keV).
   \item[\texttt{anisotropy\_vs\_time.txt}] Columns: time, perpendicular anisotropy (\%).
   \item[\texttt{Teff\_vs\_time.txt}] Columns: time, $T_\mathrm{eff}$ (keV).
+  \item[\texttt{Tn\_vs\_time.txt}] Columns: time, $T_n$ (keV) -- density-characteristic
+        (cold-bulk) temperature; written for all runs.
+  \item[\texttt{fmin\_axis\_vs\_time.txt}] Columns: time, near-axis min $f$,
+        whole-grid min $f$ -- negative-$f$ monitor.
   \item[\texttt{power\_coll\_tot\_vs\_time.txt}] Total collisional power density (MW/m$^3$).
   \item[\texttt{power\_coll\_e\_vs\_time.txt}] Electron collisional power density.
   \item[\texttt{power\_coll\_ion$N$\_vs\_time.txt}] Ion $N$ collisional power density.
