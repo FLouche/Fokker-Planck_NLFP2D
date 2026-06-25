@@ -1364,6 +1364,7 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
         return
 
     _lstyles = ["-", "--", ":", "-."]
+    _markers = ["o", "s", "^", "D", "v", "*", "P", "X"]
 
     for key in sorted(stem_cases):
         entries = stem_cases[key]
@@ -1379,24 +1380,33 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
         plotted = False
 
         for ci, (case, data) in enumerate(entries):
-            color = _PALETTE[ci % len(_PALETTE)]
+            color  = _PALETTE[ci % len(_PALETTE)]
+            lstyle = _lstyles[ci % len(_lstyles)]   # distinguish each case by line style
+            marker = _markers[ci % len(_markers)]   # ... and by marker shape
+            # ~12 markers spread along the curve (not one per data point)
+            mevery = max(1, int(round(data.shape[0] / 12.0)))
             if ptype in ("ts", "ts2"):
                 ncols = data.shape[1]
                 if ncols == 2:
-                    ax.plot(data[:, 0], data[:, 1], color=color,
+                    ax.plot(data[:, 0], data[:, 1], color=color, linestyle=lstyle,
+                            marker=marker, markevery=mevery, markersize=5,
                             linewidth=1.5, label=case)
                 else:
+                    # Multi-column file: columns within a case differ by line
+                    # style; cases are told apart by colour + marker shape.
                     for j in range(1, ncols):
                         if j in skip_cols:
                             continue
                         col_lbl = labels[j - 1] if j - 1 < len(labels) else f"col{j}"
                         ax.plot(data[:, 0], data[:, j], color=color,
                                 linestyle=_lstyles[(j - 1) % len(_lstyles)],
+                                marker=marker, markevery=mevery, markersize=5,
                                 linewidth=1.5, label=f"{case}  [{col_lbl}]")
                 ax.set_xlabel("Time (s)")
                 ax.set_xlim(left=0)
             elif ptype == "1d":
-                ax.plot(data[:, 0], data[:, 1], color=color,
+                ax.plot(data[:, 0], data[:, 1], color=color, linestyle=lstyle,
+                        marker=marker, markevery=mevery, markersize=5,
                         linewidth=1.5, label=case)
                 ax.set_xlabel(meta.get("xlabel", ""))
                 if log:
