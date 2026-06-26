@@ -106,6 +106,10 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
 
+  ! CN-ringing diagnostics (i_ring_diag = -1)
+  REAL(dp) :: chk, dfmax, dloc, fmn, fmx
+  INTEGER  :: imn, jmn, idf, jdf, ip, jp
+
   REAL(dp), DIMENSION(nperp,npar) :: f_init
 
   !================================================================
@@ -332,6 +336,13 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   phase_offset = 0.0_dp
   itime_global = 0
 
+  IF (i_ring_diag == -1) THEN
+    ip = nperp - 3              ! fixed probe: high-vperp / RF-resonance corner
+    jp = (69 * npar) / 100      ! (where the negative-f undershoot nucleates)
+    OPEN(701, file='ring_diag.txt', status='unknown')
+    WRITE(701,'(A)') '# step time teff lnaa chk fmin imin jmin fmax dfmax idf jdf sc00_at_df all00_at_df sc00_fix all00_fix'
+  END IF
+
   phase_loop: DO iphase = 1, 3
     IF (ntimes(iphase) == 0) CYCLE phase_loop
     timestep_cur = timestep(iphase)
@@ -484,6 +495,45 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     CALL time_fmin_axis(fout, fmin_axis, fmin_glob)
     WRITE(515,*) time, fmin_axis, fmin_glob
 
+    !--- CN-ringing diagnostics (per step) -------------------------
+    ! chk = checkerboard/Nyquist projection sum (-1)^(i+j) f_ij : the
+    ! highest-wavenumber mode that CN's g->-1 ringing lives in. We also
+    ! track the global min of f and the cell of largest step-to-step
+    ! change |f^{n+1}-f^n|, and the self-collision (sc00) and total
+    ! (all00) diagonal coefficients at that cell -- the "matrix term".
+    IF (i_ring_diag == -1) THEN
+      chk = 0.0_dp; dfmax = 0.0_dp
+      fmn = fout(1,1); fmx = fout(1,1); imn = 1; jmn = 1; idf = 1; jdf = 1
+      DO iv = 1, nperp
+        DO imu = 1, npar
+          chk = chk + REAL(1 - 2*MOD(iv+imu,2), dp) * fout(iv,imu)
+          IF (fout(iv,imu) < fmn) THEN
+            fmn = fout(iv,imu); imn = iv; jmn = imu
+          END IF
+          IF (fout(iv,imu) > fmx) fmx = fout(iv,imu)
+          dloc = ABS(fout(iv,imu) - fstart(index_mat(iv,imu)))
+          IF (dloc > dfmax) THEN
+            dfmax = dloc; idf = iv; jdf = imu
+          END IF
+        END DO
+      END DO
+      WRITE(701,'(I7,15(1X,ES15.7))') itime_global, time, teff, lnaa_t, &
+            chk, fmn, REAL(imn,dp), REAL(jmn,dp), fmx, dfmax, &
+            REAL(idf,dp), REAL(jdf,dp), sc00(idf,jdf), all00(idf,jdf), &
+            sc00(ip,jp), all00(ip,jp)
+      IF (MOD(itime_global, 50) == 0) THEN
+        WRITE(dynfname,'(A,I0,A)') 'ring_df_', itime_global, '.txt'
+        OPEN(702, file=TRIM(dynfname), status='unknown')
+        DO iv = 1, nperp
+          DO imu = 1, npar
+            WRITE(702,'(2(1X,ES15.7),1X,ES15.7)') vperp(iv), vpar(imu), &
+                  fout(iv,imu) - fstart(index_mat(iv,imu))
+          END DO
+        END DO
+        CLOSE(702)
+      END IF
+    END IF
+
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
                         pcoll_self, pcoll_self_perp, pcoll_self_par)
@@ -537,6 +587,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     phase_offset = phase_offset + ntimes(iphase) * timestep_cur
 
   END DO phase_loop
+
+  IF (i_ring_diag == -1) CLOSE(701)
 
   !================================================================
   ! 6.  Finalise
