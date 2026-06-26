@@ -535,12 +535,24 @@ The initial distribution $f^0$ is selected by \texttt{istart}:
 
 \subsection{Steady-State Convergence Detection}
 
-When \texttt{i\_ss\_check = -1}, the code monitors three relative change
-indicators over a rolling window of \texttt{n\_ss\_window} steps:
-relative change in total energy $\Delta E/E$, relative change in density
-$\Delta n/n$, and relative change in net power $\Delta P/P_\mathrm{drive}$.
-When all three drop below \texttt{ss\_tol}, the run stops early with a
-``CONVERGED'' message.
+When \texttt{i\_ss\_check = -1}, the code monitors the relative \emph{rate of
+change} of four indicators over a rolling window of \texttt{n\_ss\_window}
+steps: the total kinetic energy $\Delta E/E$, the perpendicular kinetic energy
+$\Delta E_\perp/E_\perp$ (which equilibrates last under RF drive and is the most
+discriminating), the RF power $\Delta P_\mathrm{RF}/P_\mathrm{drive}$, and the
+net power $\Delta P/P_\mathrm{drive}$.  Each relative change is divided by the
+\emph{physical duration} of the window ($t_\mathrm{now}-t_{\mathrm{now}-W}$), so
+the criterion measures a relative change \emph{per second}.  When all four rates
+fall below \texttt{ss\_tol}, the run stops early with a ``CONVERGED'' message.
+
+Because the window duration is taken from the simulation time rather than a step
+count, \texttt{ss\_tol} is \emph{independent of the time step}: two runs with
+different \texttt{timestep} that are equally close to steady state report the
+same rate, so the same \texttt{ss\_tol} enforces the same physical stringency
+(the duration is also measured correctly across phase boundaries where
+\texttt{timestep} changes).  \textbf{Units:} \texttt{ss\_tol} is a per-second
+relative rate; e.g.\ \texttt{ss\_tol = 3.d-4} stops the run when all four
+indicators change by less than $3\times10^{-4}$ per second of simulated time.
 
 \subsection{Diagnostics and Output}
 
