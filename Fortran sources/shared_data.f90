@@ -92,7 +92,7 @@ integer :: iold,icn,isc
 integer :: new_grid = -1    ! -1: new grid (compute+save sum_phi); 0: same grid (load sum_phi)
 integer :: i_ss_check  = 0       ! 0: disabled; -1: auto-stop when SS reached
 integer :: n_ss_window = 50      ! rolling window width (steps) for SS detection
-double precision :: ss_tol = 1.0d-3  ! relative tolerance for SS convergence
+double precision :: ss_tol = 1.0d-3  ! SS convergence tolerance: max relative change PER SECOND (rate-based, dt-independent)
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip

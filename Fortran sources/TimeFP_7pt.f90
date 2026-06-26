@@ -586,7 +586,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         p_drive_ss = max(p_drive_ss, abs(pcoll(ib)))
       end do
       p_drive_ss = max(p_drive_ss, 1.0_dp)
-      call ss_check(itime_global, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
+      call ss_check(itime_global, time, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
       if (ss_converged) then
         write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (steady state reached).'
         exit phase_loop
