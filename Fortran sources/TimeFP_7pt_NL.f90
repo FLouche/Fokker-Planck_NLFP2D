@@ -526,11 +526,24 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         OPEN(702, file=TRIM(dynfname), status='unknown')
         DO iv = 1, nperp
           DO imu = 1, npar
-            WRITE(702,'(2(1X,ES15.7),1X,ES15.7)') vperp(iv), vpar(imu), &
-                  fout(iv,imu) - fstart(index_mat(iv,imu))
+            ! columns: vperp  vpar  df  D_perp(all20)  D_par(all02)
+            WRITE(702,'(5(1X,ES15.7))') vperp(iv), vpar(imu), &
+                  fout(iv,imu) - fstart(index_mat(iv,imu)), &
+                  all20(iv,imu), all02(iv,imu)
           END DO
         END DO
         CLOSE(702)
+        ! Dump the frozen operator L in COO form (overwritten each snapshot,
+        ! so the final L_matrix.txt is taken near steady state) for an
+        ! off-line eigenvalue (stiffness) analysis. Header: ndof nnz.
+        OPEN(703, file='L_matrix.txt', status='unknown')
+        WRITE(703,'(2(1X,I9))') ndof, nnz_L
+        DO row = 1, ndof
+          DO ptr = ia_L(row), ia_L(row+1)-1
+            WRITE(703,'(2(1X,I8),1X,ES16.8)') row, ja_L(ptr), aa_L(ptr)
+          END DO
+        END DO
+        CLOSE(703)
       END IF
     END IF
 
