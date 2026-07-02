@@ -53,7 +53,7 @@
        \normalsize 2D Fokker--Planck solver for ion velocity distribution
        functions in cylindrical velocity space}
 \author{F.~Louche\\LPP-ERM/KMS}
-\date{Version 2.2 -- June 2026}
+\date{Version 2.3 -- July 2026}
 % ============================================================
 
 \begin{document}
@@ -321,6 +321,42 @@ $\vpa$), although boundary rows have fewer entries.
   \item[Parallel boundaries ($j=1$ and $j=N_\parallel$):] Dirichlet condition $f = 0$.
 \end{description}
 
+\subsection{Advection Stabilization at High $\vp$ (\texttt{i\_upwind})}
+\label{sec:upwind}
+
+The perpendicular drag coefficient $B$ (collisional friction) grows with $\vp$
+while the perpendicular diffusion $D$ falls off on the supra-thermal tail, so the
+cell-P\'eclet number
+\begin{equation}
+  \mathrm{Pe}_\perp = \frac{|B|\,\Delta\vp}{D}
+\end{equation}
+increases steeply toward the outer boundary and can reach $\mathrm{Pe}_\perp \sim
+40$ at $\vp = \vpmax$ for high-energy (e.g.\ second-harmonic ICRF) scenarios.
+Beyond $\mathrm{Pe}_\perp \gtrsim 2$ a central discretization of the advection
+term is no longer dissipative; at the outer Dirichlet wall, where the Fornberg
+stencil is one-sided, the effective perpendicular diffusion of the discrete
+operator can even become \emph{negative}.  The assembled operator $\Lcal$ then
+acquires a small set of eigenvalues with positive real part, localized in a thin
+layer against the $\vp = \vpmax$ boundary.  Under Crank--Nicolson
+(\texttt{icn = -1}) these modes are amplified and the run eventually blows up,
+whereas the fully-implicit scheme damps them.  The instability is governed by
+$\vpmax$ (the wall velocity) and is essentially independent of the RF term and of
+the grid resolution.
+
+Setting \texttt{i\_upwind = -1} cures this at the discretization level: in every
+cell with $\mathrm{Pe}_\perp > 2$ the drag term $B\,\partial f/\partial\vp$ is
+evaluated with a first-order \emph{upwind} one-sided difference (forward for
+$B>0$, backward for $B<0$, i.e.\ the side that makes the semi-discrete eigenvalue
+dissipative), while the diffusion term keeps its central Fornberg weights.  The
+sparsity pattern is unchanged (the diffusion stencil already fills every
+same-column entry), so the phased-PARDISO machinery is untouched.  This removes
+all positive-real-part modes with a bulk-physics change of at most a few percent,
+because the upwinding acts only on the near-empty tail.  The default
+\texttt{i\_upwind = 0} keeps the pure central scheme; running fully implicit
+(\texttt{icn = 0}) is an alternative stabilization.  Note that first-order
+upwinding adds some numerical diffusion on the tail; a flux-limited or
+exponentially-fitted variant would reduce this if higher tail accuracy is needed.
+
 \subsection{Sparse Matrix Storage}
 
 All matrices are stored in \textbf{1-based Compressed Sparse Row (CSR)} format.
@@ -464,7 +500,7 @@ The $\theta$ parameter has an additional option for the NL solver:
 \toprule
 \texttt{icn} & $\theta$ & Comment \\
 \midrule
-$-1$ & $0.5$ & Crank--Nicolson (may be unstable for NL SC) \\
+$-1$ & $0.5$ & Crank--Nicolson (may be unstable at high $\vp$; see Sec.~\ref{sec:upwind}) \\
 $+1$ & $0.75$ & Intermediate \\
 else & $1.0$ & Fully implicit (recommended) \\
 \bottomrule
@@ -640,6 +676,16 @@ notxt & $0$ &
   \texttt{Teff\_vs\_time}, and \texttt{anisotropy\_vs\_time}.
   Suppressed files are routed to the OS null device, so the run is otherwise
   unchanged (all stdout diagnostics still print). \\[4pt]
+
+i\_ring\_diag & $0$ &
+  Per-step ringing / operator diagnostics for the time-dependent solvers
+  (Section~\ref{sec:upwind}).
+  $0$: off.
+  $-1$: dump the assembled operator $\Lcal$ (\texttt{L\_matrix.txt}, COO format)
+  and $\delta f = f^{n+1}-f^n$ snapshots (\texttt{ring\_df\_*.txt}) for off-line
+  eigenvalue / stability analysis in \emph{both} time-dependent solvers; the NL
+  solver additionally writes a per-step scalar trace (\texttt{ring\_diag.txt}).
+  Diagnostic only; the solution is unaffected. \\[4pt]
 
 \end{longtable}
 
@@ -883,6 +929,23 @@ new\_grid & $-1$ &
   $0$: load from existing \texttt{sum\_phi.dat}.
   \textit{Warning:} loading is only valid for the same velocity grid. \\[4pt]
 
+i\_upwind & $0$ &
+  Advection stabilization of the perpendicular drag term $B\,\partial f/\partial\vp$
+  (Section~\ref{sec:upwind}).
+  $0$: central Fornberg weights (default).
+  $-1$: P\'eclet-hybrid upwinding --- in cells where the cell-P\'eclet number
+  $|B|\,\Delta\vp/D > 2$ the drag term uses a one-sided upwind difference,
+  restoring dissipativity of the advection-dominated outer boundary layer and
+  removing the Crank--Nicolson high-$\vp$ instability. \\[4pt]
+
+i\_freeze\_lnl & $0$ &
+  Test mode (linear solver \texttt{timefp\_7pt}, \texttt{isc} $\ne -1$).
+  $0$: normal (the Coulomb logarithm and Maxwellian self-collision background
+  track the evolving $T_\mathrm{eff}(t)$).
+  $-1$: freeze the Coulomb logarithm at the initial $T_\mathrm{eff}$ so the
+  operator coefficients no longer depend on $f$ --- a truly linear operator ---
+  to isolate the temperature-dependent-$\ln\Lambda$ nonlinearity. \\[4pt]
+
 \end{longtable}
 
 % -------------------------------------------------------------------
@@ -962,6 +1025,27 @@ Written at every time step during the simulation:
         (2 columns per file: $\perp$ and $\parallel$ components), written when
         \texttt{iplot\_mom = -1}.
 \end{description}
+
+\subsection{Ringing / Operator Diagnostics (\texttt{i\_ring\_diag})}
+
+When \texttt{i\_ring\_diag = -1}, the time-dependent solvers write additional
+files for off-line stability analysis (see Section~\ref{sec:upwind}):
+\begin{description}
+  \item[\texttt{L\_matrix.txt}] The assembled FP operator $\Lcal$ in coordinate
+        (COO) format: a header line \texttt{ndof nnz} followed by
+        \texttt{row col value} triples (1-based).  Written by both time-dependent
+        solvers --- the NL solver overwrites it every 50 steps (so the final file
+        is near steady state), the linear solver writes it once on step~1.
+  \item[\texttt{ring\_df\_$n$.txt}] $\delta f = f^{n+1}-f^n$ snapshots on step~1
+        and every 50 steps (columns: $\vp$, $\vpa$, $\delta f$, $D_\perp$,
+        $D_\parallel$).
+  \item[\texttt{ring\_diag.txt}] (NL solver only) Per-step scalar trace: step,
+        time, $T_\mathrm{eff}$, $\ln\Lambda_{aa}$, checkerboard/Nyquist projection
+        $\sum(-1)^{i+j}f$, min/max of $f$ and their cells, and the cell of largest
+        $|\delta f|$.
+\end{description}
+These files underpin the eigenvalue diagnosis of the high-$\vp$ Crank--Nicolson
+instability described in Section~\ref{sec:upwind}.
 
 \subsection{End-of-Run Balance Diagnostics (stdout)}
 
