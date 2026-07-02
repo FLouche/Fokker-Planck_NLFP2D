@@ -2,6 +2,7 @@ MODULE mod_fd_stencil_2d
 
   USE derivatives_2d, ONLY: dp, fornberg_weights
   USE shared_beam,   ONLY: taum
+  USE shared_grid,   ONLY: i_upwind
 
   IMPLICIT NONE
   PRIVATE
@@ -48,6 +49,7 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   REAL(dp) :: wi(7,0:2), wj(7,0:2)
   REAL(dp) :: acc(7,7)
   REAL(dp) :: wmax
+  REAL(dp) :: wb(7), dvp, dvm, dv_loc, Pe_perp
 
   ! Initialise outputs
   rhs       = 0.0_dp
@@ -118,6 +120,32 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   mi = i - Li + 1
   mj = j - Lj + 1
 
+  !--- v⊥ drag (B) weights: central by default; Peclet-hybrid upwind
+  !    when i_upwind=-1 and the local cell-Peclet |B|dv/D > 2.  The
+  !    upwind side is chosen so the semi-discrete eigenvalue has Re<=0
+  !    (B>0 => advection speed -B<0 => forward difference, and vice
+  !    versa).  This restores dissipativity of the advection-dominated
+  !    high-v⊥ boundary layer without changing the sparsity pattern
+  !    (the D 2nd-derivative stencil already fills all same-j columns).
+  wb(:) = wi(:,1)
+  IF (i_upwind == -1) THEN
+    dvp     = vperp(i+1) - vperp(i)
+    dvm     = vperp(i)   - vperp(i-1)
+    dv_loc  = MIN(dvp, dvm)
+    Pe_perp = 0.0_dp
+    IF (D_ij /= 0.0_dp) Pe_perp = ABS(B_ij) * dv_loc / ABS(D_ij)
+    IF (Pe_perp > 2.0_dp) THEN
+      wb(:) = 0.0_dp
+      IF (B_ij >= 0.0_dp) THEN        ! forward (upwind) difference
+        wb(mi)   = -1.0_dp / dvp
+        wb(mi+1) = +1.0_dp / dvp
+      ELSE                            ! backward (upwind) difference
+        wb(mi)   = +1.0_dp / dvm
+        wb(mi-1) = -1.0_dp / dvm
+      END IF
+    END IF
+  END IF
+
   !--- Accumulate PDE terms ----------------------------------------
   acc = 0.0_dp
 
@@ -128,9 +156,9 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
       IF (k == mi .AND. l == mj) &
         acc(k,l) = acc(k,l) + A_ij
 
-      ! B * df/dvp  (v⊥ 1st deriv, fixed j)
+      ! B * df/dvp  (v⊥ 1st deriv, fixed j; wb = central or upwind)
       IF (l == mj) &
-        acc(k,l) = acc(k,l) + B_ij * wi(k,1)
+        acc(k,l) = acc(k,l) + B_ij * wb(k)
 
       ! C * df/dvpa  (v∥ 1st deriv, fixed i)
       IF (k == mi) &

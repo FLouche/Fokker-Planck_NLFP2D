@@ -25,6 +25,8 @@ double precision, allocatable, dimension(:,:) :: sum_phi
 
 integer :: ising,nsing
 integer :: jmid,imid
+integer :: i_upwind = 0   ! -1: Peclet-hybrid upwinding of the v_perp drag (B) term
+                          !     in fd_stencil_2d (cells with |B|dv/D > 2); 0: central
 
 end module shared_grid
 
