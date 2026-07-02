@@ -100,7 +100,7 @@ integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
 integer :: idiag     = 0         ! 0: power balance only; -1: all balances (density+momentum+power)
 integer :: notxt     = 0         ! .txt output: 0=write all; 1=suppress all; 2=keep only the minimal test/diagnostic set
-integer :: i_ring_diag = 0       ! -1: write per-step CN-ringing diagnostics (NL solver): ring_diag.txt + ring_df_*.txt
+integer :: i_ring_diag = 0       ! -1: write per-step CN-ringing diagnostics + operator dump (L_matrix.txt, ring_df_*.txt) in both TD solvers; ring_diag.txt scalar trace is NL-only
 integer :: i_freeze_lnl = 0      ! -1 (test): freeze the Coulomb log at the initial Teff -> operator coeffs fixed (linear) for isc/=-1
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''
