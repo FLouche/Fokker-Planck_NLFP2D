@@ -81,7 +81,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
-  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
+  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp, teff_frozen
   REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=3 background)
   REAL(dp) :: fmin_axis, fmin_glob   ! near-axis / global min of f (negative-f detector)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
@@ -318,6 +318,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
    call time_energy(f_init, dens_tmp, teff=teff_tmp)
    write(*,*) 'Initial effective temperature is ',teff_tmp
+   teff_frozen = teff_tmp     ! reference Teff for the i_freeze_lnl test mode
 
    call time_Tn(f_init, dens_tmp, Tn)        ! initialise Tn (density-characteristic T)
    write(*,*) 'Initial density-characteristic temperature is ',Tn
@@ -349,7 +350,14 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END DO
       END DO
       CALL time_energy(f_init, dens_tmp, teff=teff)
-      ta_eV = teff * 1.0d3
+      ! Test mode (i_freeze_lnl=-1): freeze the Coulomb log at the initial Teff
+      ! so the operator coefficients no longer depend on f -- truly linear for
+      ! isc/=-1. Used to isolate the temperature-dependent-lnLambda nonlinearity.
+      IF (i_freeze_lnl == -1) THEN
+        ta_eV = teff_frozen * 1.0d3
+      ELSE
+        ta_eV = teff * 1.0d3
+      END IF
       CALL time_Tn(f_init, dens_tmp, Tn)        ! density-characteristic temperature
       Tn_eV = Tn * 1.0d3
       ! Coulomb-log clamp: keep the isc=3 background temperature positive and
@@ -404,6 +412,19 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END DO
       END DO
     END DO
+
+    ! Dump the operator L (COO) once on step 1 for off-line eigenvalue analysis
+    ! (i_ring_diag=-1). With i_freeze_lnl=-1 this is the frozen, linear operator.
+    IF (i_ring_diag == -1 .AND. itime_global == 1) THEN
+      OPEN(703, file='L_matrix.txt', status='unknown')
+      WRITE(703,'(2(1X,I9))') ndof, nnz_L
+      DO row = 1, ndof
+        DO ptr = ia_L(row), ia_L(row+1)-1
+          WRITE(703,'(2(1X,I8),1X,ES16.8)') row, ja_L(ptr), aa_L(ptr)
+        END DO
+      END DO
+      CLOSE(703)
+    END IF
 
     !--- Rebuild aa_lhs = I - theta*dt*L (with BC restoration) -----
     DO ptr = 1, nnz_L
@@ -466,6 +487,23 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         fout(iv,imu) = x_vec(ix)
       END DO
     END DO
+
+    ! Per-step delta-f snapshot for the (linear) instability chronology: step 1
+    ! and every 50 steps when i_ring_diag=-1.  df = f^{n+1} - f^{n} (fstart still
+    ! holds f^{n} here).  Same 5-column format as the NL solver (vperp vpar df
+    ! all20 all02) so the plotting tools are shared.
+    IF (i_ring_diag == -1 .AND. (MOD(itime_global,50) == 0 .OR. itime_global == 1)) THEN
+      WRITE(dynfname,'(A,I0,A)') 'ring_df_', itime_global, '.txt'
+      OPEN(702, file=TRIM(dynfname), status='unknown')
+      DO iv = 1, nperp
+        DO imu = 1, npar
+          WRITE(702,'(5(1X,ES15.7))') vperp(iv), vpar(imu), &
+                fout(iv,imu) - fstart(index_mat(iv,imu)), &
+                all20(iv,imu), all02(iv,imu)
+        END DO
+      END DO
+      CLOSE(702)
+    END IF
 
     !--- Diagnostics (identical to TimeFP3) -----------------------
     CALL time_density(fout, dens_tmp)
