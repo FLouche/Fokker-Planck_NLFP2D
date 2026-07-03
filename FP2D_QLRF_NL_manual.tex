@@ -335,7 +335,15 @@ increases steeply toward the outer boundary and can reach $\mathrm{Pe}_\perp \si
 Beyond $\mathrm{Pe}_\perp \gtrsim 2$ a central discretization of the advection
 term is no longer dissipative; at the outer Dirichlet wall, where the Fornberg
 stencil is one-sided, the effective perpendicular diffusion of the discrete
-operator can even become \emph{negative}.  The assembled operator $\Lcal$ then
+operator can even become \emph{negative}.  A modified-equation analysis of the
+Dirichlet-truncated wall row gives, in the uniform-spacing limit,
+\begin{equation}
+  D_{\mathrm{eff}} \;=\; \frac{223}{360}\,D \;-\; \frac{1}{12}\,|B|\,\Delta\vp ,
+\end{equation}
+i.e.\ the discrete diffusion turns negative exactly when the wall-cell P\'eclet
+number exceeds $223/30 \approx 7.4$ (the deleted wall node biases the drag stencil
+downwind; high order shrinks the classic two-point downwind coefficient from
+$\tfrac12$ to $\tfrac{1}{12}$ but cannot change its sign).  The assembled operator $\Lcal$ then
 acquires a small set of eigenvalues with positive real part, localized in a thin
 layer against the $\vp = \vpmax$ boundary.  Under Crank--Nicolson
 (\texttt{icn = -1}) these modes are amplified and the run eventually blows up,
@@ -347,7 +355,11 @@ Setting \texttt{i\_upwind = -1} cures this at the discretization level: in every
 cell with $\mathrm{Pe}_\perp > 2$ the drag term $B\,\partial f/\partial\vp$ is
 evaluated with a first-order \emph{upwind} one-sided difference (forward for
 $B>0$, backward for $B<0$, i.e.\ the side that makes the semi-discrete eigenvalue
-dissipative), while the diffusion term keeps its central Fornberg weights.  The
+dissipative), while the diffusion term keeps its central Fornberg weights.  In the
+modified equation the upwind drag moment $+|B|\,\Delta\vp/2$ replaces
+$-|B|\,\Delta\vp/12$, so $D_{\mathrm{eff}} > 0$ at \emph{any} P\'eclet number; the
+$\mathrm{Pe}_\perp > 2$ switching threshold is therefore conservative with respect
+to the $\approx 7.4$ instability threshold above.  The
 sparsity pattern is unchanged (the diffusion stencil already fills every
 same-column entry), so the phased-PARDISO machinery is untouched.  This removes
 all positive-real-part modes with a bulk-physics change of at most a few percent,
