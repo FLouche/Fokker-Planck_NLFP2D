@@ -484,23 +484,28 @@ $f^n$.
 \subsubsection{Phi-Distance Kernel Precomputation}
 
 Before entering the time loop, the phi-distance kernel
-$\Phi_{ij} = \phi(|\bm{v}_i - \bm{v}_j|)$ is either computed from scratch
-(Gauss--Legendre quadrature, $O(N_\mathrm{dof}^2)$) and saved to
-\texttt{sum\_phi.dat}, or loaded from a previous run:
+$\Phi_{ij} = \phi(|\bm{v}_i - \bm{v}_j|)$ (Gauss--Legendre quadrature,
+$O(N_\mathrm{dof}^2)$) is cached on disk in a per-case file
+\texttt{sum\_phi-CASENAME.dat} (or \texttt{sum\_phi.dat} when \texttt{casename}
+is empty). Since the kernel is grid-dependent, the file header stores a grid
+signature (\texttt{nperp}, \texttt{npar}, \texttt{vperp\_min/max},
+\texttt{vpar\_min/max}). Caching is fully self-managing --- no user flag is
+required:
 
 \begin{center}
 \begin{tabular}{ll}
 \toprule
-\texttt{new\_grid} & Action \\
+Cache file state & Action \\
 \midrule
-$-1$ & Compute kernel and save to \texttt{sum\_phi.dat} \\
-$0$  & Load kernel from \texttt{sum\_phi.dat} \\
+Missing                                  & Compute kernel and save \\
+Present, signature matches               & Load kernel (skip the quadrature) \\
+Present, signature differs or truncated  & Recompute and overwrite \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textit{Warning:} loading is only valid if the velocity grid is identical to
-the one used when the file was created.
+Because the signature is verified automatically, a stale kernel from a
+different velocity grid can never be silently reused.
 
 \subsubsection{Time-Stepping Scheme}
 \label{sec:nl_theta}
@@ -557,8 +562,6 @@ steps:
   \item Phase~$k$ runs \texttt{ntimes(k)} steps of duration \texttt{timestep(k)} seconds.
   \item Phases with \texttt{ntimes(k) = 0} are skipped.
   \item Phases 2 and 3 append to the output files (restart in time).
-  \item For NL runs (isc = -1), \texttt{new\_grid} is forced to 0 after phase 1
-        so the phi-distance kernel is loaded rather than recomputed.
 \end{itemize}
 Old single-phase input files (\texttt{ntimes = N, timestep = dt}) remain
 backward-compatible: the scalar value fills element~1 and elements 2--3
@@ -934,12 +937,6 @@ core\_frac & $3.8\!\times\!10^{-3}$ &
   cells with $f > \texttt{core\_frac}\cdot\max f$ enter the $\ln f$-vs-$v^2$ fit.
   Smaller values weight the cold bulk more heavily.  Ignored unless
   \texttt{isc = 3}; the appropriate value is scenario-dependent. \\[4pt]
-
-new\_grid & $-1$ &
-  Phi-distance kernel management (NL self-collisions only).
-  $-1$: compute and save to \texttt{sum\_phi.dat}.
-  $0$: load from existing \texttt{sum\_phi.dat}.
-  \textit{Warning:} loading is only valid for the same velocity grid. \\[4pt]
 
 i\_upwind & $0$ &
   Advection stabilization of the perpendicular drag term $B\,\partial f/\partial\vp$
