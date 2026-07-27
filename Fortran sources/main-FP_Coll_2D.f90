@@ -15,6 +15,11 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 2.3 - 3rd July 2026 (FL)
+    
+    ! Parameter i_upwind introduced to alleviate sign oscillations
+    ! of fout at vperp max
+    
     ! Version 2.2 - 23 June 2026 (FL)
 !
 !   New definiton of isc=3 
@@ -164,7 +169,6 @@ double precision start_time,end_time
 !  - istart = 3 -> initial solution is the steady-state solution of the linear time independent code, computed with a Maxwellian background for the self-collisions
 
 namelist /INPUT/ casename, &
-                 new_grid, &
                  nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
                 ising,nsing,vbound,&
                nbulk,t,aa,ab,za,zb,ne,xpart,xb, &
@@ -186,15 +190,6 @@ namelist /INPUT/ casename, &
 !core_frac = 3.8d-3
 
 read(5,INPUT)
-
-! Coherence check: restarting from a previous solution requires the same grid
-! (only relevant for NLSC runs where the sum_phi kernel is cached on disk)
-if (new_grid == -1 .and. iold == -1 .and. isc == -1) then
-    write(*,*) 'ERROR: new_grid=-1 (new grid) is incompatible with iold=-1 (restart).'
-    write(*,*) 'A restart uses the solution from a previous run, which requires the same grid.'
-    write(*,*) 'Set new_grid=0 to reuse the existing grid, or iold=0 to start fresh.'
-    stop
-endif
 
 ! isc=-1, isc=2 and isc=3 require a time-dependent run
 if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then

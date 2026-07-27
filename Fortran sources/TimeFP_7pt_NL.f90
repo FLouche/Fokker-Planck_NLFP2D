@@ -94,6 +94,12 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
+  !--- phi-distance kernel cache (sum_phi-CASENAME.dat) -------------
+  CHARACTER(len=256) :: kernel_file
+  LOGICAL            :: file_exists, need_compute
+  INTEGER            :: f_nperp, f_npar
+  REAL(dp)           :: f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max
+
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
   REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t
   REAL(dp) :: lnab_arr(nbulk)
@@ -131,30 +137,54 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ALLOCATE(rhs_vec(ndof), x_vec(ndof), Lf(ndof))
 
   !================================================================
-  ! 1.  phi-distance kernel (grid-dependent, expensive O(nbig^2))
-  !     new_grid=-1: compute via Gauss-Legendre and save to sum_phi.dat
-  !     new_grid= 0: load from sum_phi.dat (same grid as previous run)
+  ! 1.  phi-distance kernel (grid-dependent, expensive O(nbig^2)).
+  !     Cached per casename in sum_phi-CASENAME.dat, whose header stores
+  !     the grid signature (nperp, npar, vperp/vpar min/max).  The kernel
+  !     is loaded only when that file exists AND its signature matches the
+  !     current namelist; otherwise it is (re)computed and saved.  Fully
+  !     self-managing:
+  !       - file missing               -> compute + save
+  !       - file present, grid matches -> load
+  !       - file present, grid differs -> compute + save
   !================================================================
   ALLOCATE(sum_phi(nbig, nbig))
-  IF (new_grid == -1) THEN
+  kernel_file  = TRIM(outfile('sum_phi.dat'))
+  need_compute = .TRUE.
+  INQUIRE(file=kernel_file, exist=file_exists)
+  IF (file_exists) THEN
+    OPEN(55, file=kernel_file, status='old', form='unformatted', access='stream', iostat=error)
+    IF (error == 0) THEN
+      READ(55, iostat=error) f_nperp, f_npar, f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max
+      IF (error == 0 .AND. f_nperp == nperp .AND. f_npar == npar .AND. &
+          f_vperp_min == vperp_min .AND. f_vperp_max == vperp_max .AND. &
+          f_vpar_min  == vpar_min  .AND. f_vpar_max  == vpar_max) THEN
+        READ(55, iostat=error) sum_phi
+        IF (error == 0) THEN
+          need_compute = .FALSE.
+          WRITE(*,'(A)') '  phi-distance kernel loaded from '//TRIM(kernel_file)//' (grid matches).'
+        ELSE
+          WRITE(*,'(A)') '  '//TRIM(kernel_file)//' is truncated -- recomputing kernel.'
+        END IF
+      ELSE
+        WRITE(*,'(A)') '  grid signature in '//TRIM(kernel_file)//' differs -- recomputing kernel.'
+      END IF
+      CLOSE(55)
+    END IF
+  ELSE
+    WRITE(*,'(A)') '  '//TRIM(kernel_file)//' not found -- computing kernel.'
+  END IF
+
+  IF (need_compute) THEN
     WRITE(*,*) 'Computing phi-distance kernel for non-linear self-collisions...'
     CALL cpu_time(t_start)
     CALL distance_v_gauss_legendre
     CALL cpu_time(t_end)
     WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
-    OPEN(55, file='sum_phi.dat', status='replace', form='unformatted', access='stream')
+    OPEN(55, file=kernel_file, status='replace', form='unformatted', access='stream')
+    WRITE(55) nperp, npar, vperp_min, vperp_max, vpar_min, vpar_max
     WRITE(55) sum_phi
     CLOSE(55)
-    WRITE(*,*) '  sum_phi saved to sum_phi.dat'
-  ELSE
-    WRITE(*,*) 'Loading phi-distance kernel from sum_phi.dat...'
-    OPEN(55, file='sum_phi.dat', status='old', form='unformatted', access='stream', iostat=error)
-    IF (error /= 0) THEN
-      WRITE(*,*) 'timefp_7pt_nl: cannot open sum_phi.dat -- run with new_grid=-1 first'; STOP
-    END IF
-    READ(55) sum_phi
-    CLOSE(55)
-    WRITE(*,*) '  sum_phi loaded.'
+    WRITE(*,'(A)') '  phi-distance kernel saved to '//TRIM(kernel_file)
   END IF
 
   !================================================================

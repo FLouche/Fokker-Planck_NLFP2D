@@ -91,7 +91,6 @@ double precision, dimension(3) :: timestep = [0.0d0, 0.0d0, 0.0d0]
 integer :: ntimes_cur   = 0
 double precision :: timestep_cur = 0.0d0
 integer :: iold,icn,isc
-integer :: new_grid = -1    ! -1: new grid (compute+save sum_phi); 0: same grid (load sum_phi)
 integer :: i_ss_check  = 0       ! 0: disabled; -1: auto-stop when SS reached
 integer :: n_ss_window = 50      ! rolling window width (steps) for SS detection
 double precision :: ss_tol = 1.0d-3  ! SS convergence tolerance: max relative change PER SECOND (rate-based, dt-independent)
