@@ -115,6 +115,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ! CN-ringing diagnostics (i_ring_diag = -1)
   REAL(dp) :: chk, dfmax, dloc, fmn, fmx
   INTEGER  :: imn, jmn, idf, jdf, ip, jp
+  ! TEMPORARY: max cell-Peclet time trace (i_ring_diag = -1)
+  REAL(dp) :: pe_max, pe_loc, dvperp_loc
 
   REAL(dp), DIMENSION(nperp,npar) :: f_init
 
@@ -371,6 +373,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     jp = (69 * npar) / 100      ! (where the negative-f undershoot nucleates)
     OPEN(701, file='ring_diag.txt', status='unknown')
     WRITE(701,'(A)') '# step time teff lnaa chk fmin imin jmin fmax dfmax idf jdf sc00_at_df all00_at_df sc00_fix all00_fix'
+    ! TEMPORARY: max cell-Peclet Pe_perp = |B|dv/D vs time (diagnostic)
+    OPEN(516, file='peclet_max_vs_time.txt', status='unknown')
+    WRITE(516,'(A)') '# time  max_Pe_perp(=|B|dv/D)'
   END IF
 
   phase_loop: DO iphase = 1, 3
@@ -551,6 +556,18 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
             chk, fmn, REAL(imn,dp), REAL(jmn,dp), fmx, dfmax, &
             REAL(idf,dp), REAL(jdf,dp), sc00(idf,jdf), all00(idf,jdf), &
             sc00(ip,jp), all00(ip,jp)
+      ! TEMPORARY: maximum cell-Peclet of the vperp advection/diffusion balance
+      pe_max = 0.0_dp
+      DO iv = 2, nperp-1
+        dvperp_loc = MIN(vperp(iv+1)-vperp(iv), vperp(iv)-vperp(iv-1))
+        DO imu = 2, npar-1
+          IF (all20(iv,imu) /= 0.0_dp) THEN
+            pe_loc = ABS(all10(iv,imu)) * dvperp_loc / ABS(all20(iv,imu))
+            IF (pe_loc > pe_max) pe_max = pe_loc
+          END IF
+        END DO
+      END DO
+      WRITE(516,'(2(1X,ES15.7))') time, pe_max
       IF (MOD(itime_global, 50) == 0) THEN
         WRITE(dynfname,'(A,I0,A)') 'ring_df_', itime_global, '.txt'
         OPEN(702, file=TRIM(dynfname), status='unknown')
@@ -631,7 +648,10 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   END DO phase_loop
 
-  IF (i_ring_diag == -1) CLOSE(701)
+  IF (i_ring_diag == -1) THEN
+    CLOSE(701)
+    CLOSE(516)   ! TEMPORARY: peclet_max_vs_time.txt
+  END IF
 
   !================================================================
   ! 6.  Finalise

@@ -86,6 +86,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: fmin_axis, fmin_glob   ! near-axis / global min of f (negative-f detector)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
+  ! TEMPORARY: max cell-Peclet time trace (i_ring_diag = -1)
+  REAL(dp) :: pe_max, pe_loc, dvperp_loc
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, itime_global, iphase, iv, imu, ix
   REAL(dp) :: phase_offset
@@ -329,6 +331,12 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   phase_offset  = 0.0_dp
   itime_global  = 0
 
+  ! TEMPORARY: max cell-Peclet Pe_perp = |B|dv/D vs time (diagnostic)
+  IF (i_ring_diag == -1) THEN
+    OPEN(516, file='peclet_max_vs_time.txt', status='unknown')
+    WRITE(516,'(A)') '# time  max_Pe_perp(=|B|dv/D)'
+  END IF
+
   phase_loop: DO iphase = 1, 3
     IF (ntimes(iphase) == 0) CYCLE phase_loop
     timestep_cur = timestep(iphase)
@@ -505,6 +513,21 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       CLOSE(702)
     END IF
 
+    ! TEMPORARY: maximum cell-Peclet of the vperp advection/diffusion balance
+    IF (i_ring_diag == -1) THEN
+      pe_max = 0.0_dp
+      DO iv = 2, nperp-1
+        dvperp_loc = MIN(vperp(iv+1)-vperp(iv), vperp(iv)-vperp(iv-1))
+        DO imu = 2, npar-1
+          IF (all20(iv,imu) /= 0.0_dp) THEN
+            pe_loc = ABS(all10(iv,imu)) * dvperp_loc / ABS(all20(iv,imu))
+            IF (pe_loc > pe_max) pe_max = pe_loc
+          END IF
+        END DO
+      END DO
+      WRITE(516,'(2(1X,ES15.7))') time, pe_max
+    END IF
+
     !--- Diagnostics (identical to TimeFP3) -----------------------
     CALL time_density(fout, dens_tmp)
   !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
@@ -659,6 +682,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   IF (isc==1 .OR. isc==2 .OR. isc==3) CLOSE(506)
   CLOSE(507); CLOSE(514); CLOSE(515)
   CLOSE(47); CLOSE(46); CLOSE(45)
+  IF (i_ring_diag == -1) CLOSE(516)   ! TEMPORARY: peclet_max_vs_time.txt
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)
     IF (isource == -1) CLOSE(590)

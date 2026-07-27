@@ -156,6 +156,9 @@ FILE_META = {
     # Density-characteristic (log-slope) temperature
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
+    # TEMPORARY: maximum cell-Peclet number of the vperp advection/diffusion balance
+    "peclet_max_vs_time":           {"ptype": "ts",  "ylabel": "max cell-Péclet |B|Δv⊥/D",
+                                     "title":  "Maximum cell-Péclet number vs time"},
     # Minimum of f near the axis / over the grid (negative-f detector for isc=3)
     "fmin_axis_vs_time":            {"ptype": "ts2", "ylabel": "min f",
                                      "title":  "Minimum of f (near-axis / whole grid) vs time",
