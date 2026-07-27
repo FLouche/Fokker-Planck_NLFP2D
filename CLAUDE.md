@@ -23,10 +23,11 @@ Never batch unrelated changes into a single commit. Never commit build outputs, 
 
 **Build:** Open `FP2D_QLRF_NL/FP2D_QLRF_NL.sln` in Visual Studio and build the `Debug|x64` configuration. This uses the Intel `ifx` compiler with Intel MKL (sequential). The executable lands at `FP2D_QLRF_NL/x64/Debug/FP2D_QLRF_NL.exe`.
 
-**Run:** The program reads a Fortran namelist from stdin and writes output files to the working directory (i.e. `x64/Debug/` when launched from Visual Studio, or wherever the shell is):
+**Run:** The program reads a Fortran namelist (`&INPUT`) from stdin and writes output files to the working directory (i.e. `x64/Debug/` when launched from Visual Studio, or wherever the shell is):
 ```
-FP2D_QLRF_NL.exe < inputs/jet_RF_case1.dat
+FP2D_QLRF_NL.exe < <case>.dat
 ```
+No example namelists are checked into the repo; supply your own `&INPUT` file (see the `namelist /INPUT/` declaration in `main-FP_Coll_2D.f90` for the full parameter list).
 
 There is no test suite; correctness is verified by inspecting the output files (`density_vs_time.txt`, `energy_vs_time.txt`, `fout.txt`, etc.) and checking power/density balance diagnostics printed to stdout.
 
@@ -136,7 +137,7 @@ FP2D_QLRF_NL/                  ← project root; git repo lives here
     x64/
       Debug/    ← Debug build output; exe + all .txt run outputs land here
       Release/  ← Release build output
-  inputs/                       ← Fortran namelist input files (.dat)
+  inputs/                       ← Fortran namelist input files (.dat); not tracked in git
   Simulations/                  ← archived simulation results
 ```
 
@@ -204,6 +205,7 @@ New output files must use units not in this table:
 | 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2` |
 | 514 | Tn_vs_time | always |
 | 515 | fmin_axis_vs_time (near-axis & global min of f) | always |
+| 516 | peclet_max_vs_time (max cell-Péclet \|B\|Δv⊥/D⊥; also in `timefp_7pt_nl`) | `i_ring_diag=-1` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |
