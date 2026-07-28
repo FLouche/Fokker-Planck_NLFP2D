@@ -29,7 +29,8 @@ integer :: i_upwind = 0   ! v_perp convection-diffusion scheme in fd_stencil_2d:
                           !  0: central Fornberg drag + Fornberg diffusion (default)
                           ! -1: Peclet-hybrid first-order upwind of the drag (B) term
                           !     in cells with |B|dv/D > 2; central diffusion
-                          !  1: Patankar (1980) power-law convection-diffusion scheme
+                          !  1: Patankar (1980) power-law scheme, applied only in
+                          !     cells with |B|dv/D > 2 (Fornberg kept in the bulk)
 
 end module shared_grid
 

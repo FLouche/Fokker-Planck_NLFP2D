@@ -49,8 +49,9 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   REAL(dp) :: wi(7,0:2), wj(7,0:2)
   REAL(dp) :: acc(7,7)
   REAL(dp) :: wmax
-  REAL(dp) :: wb(7), wperp(7), dvp, dvm, dv_loc, Pe_perp
+  REAL(dp) :: wb(7), wperp(7), dvp, dvm, dv_loc
   REAL(dp) :: Pe_e, Pe_w, aE, aW
+  LOGICAL  :: use_powerlaw
 
   ! Initialise outputs
   rhs       = 0.0_dp
@@ -123,61 +124,60 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
 
   !--- v⊥ convection-diffusion weights wperp(k) = coefficient of
   !    f(Li+k-1, j) contributed by the (B df/dvp + D d2f/dvp2) operator.
-  !    Three discretisations, selected by the namelist flag i_upwind:
+  !    Selected by the namelist flag i_upwind:
   !       0 : central Fornberg drag + Fornberg 2nd-derivative (default)
   !      -1 : Peclet-hybrid first-order upwind of the drag where the
   !           cell-Peclet |B|dv/D > 2; central diffusion
-  !       1 : Patankar (1980) power-law convection-diffusion scheme
-  !    All three keep the same-column sparsity pattern (the D stencil
-  !    already fills every same-j column), so phased PARDISO is untouched.
+  !       1 : Peclet-hybrid Patankar (1980) power-law scheme where the
+  !           cell-Peclet > 2
+  !    Both stabilisations (+-1) act ONLY in advection-dominated cells, so
+  !    the smooth diffusion-dominated bulk keeps the accurate 7-point
+  !    Fornberg stencil.  All keep the same-column sparsity pattern (the D
+  !    stencil already fills every same-j column), so PARDISO is untouched.
   wperp(:) = 0.0_dp
-  IF (i_upwind == 1) THEN
-    !--- Power-law scheme (Patankar 1980; cf. FiPy power-law) ---------
-    !    Read B df/dvp + D d2f/dvp2 as convection (signal speed -B) plus
-    !    diffusion (Gamma = D >= 0) on the control volume around node i.
-    !    3-point stencil {i-1,i,i+1}.  The diffusion conductance D/h at
-    !    each face is scaled by A(|P|) = max(0, (1 - |P|/10)^5) of the
-    !    face cell-Peclet |P| = |B| h / D, and convection is added upwind
-    !    (aE gets max(B,0), aW gets max(-B,0)).  Limits: A->1 (central
-    !    diffusion) as P->0, A->0 (first-order upwind) as |P|->inf.  At
-    !    the wall-adjacent cell the east node is the Dirichlet f=0 node,
-    !    so the scheme stays dissipative there (unlike the truncated
-    !    central stencil that drives the CN edge instability).
-    dvp    = vperp(i+1) - vperp(i)            ! east face spacing h+
-    dvm    = vperp(i)   - vperp(i-1)          ! west face spacing h-
+  wb(:)    = wi(:,1)                          ! central Fornberg drag (default)
+  dvp = vperp(i+1) - vperp(i)                 ! east face spacing h+
+  dvm = vperp(i)   - vperp(i-1)               ! west face spacing h-
+
+  ! local face cell-Peclet |B| h / D (only needed by the +-1 hybrids)
+  Pe_e = 0.0_dp
+  Pe_w = 0.0_dp
+  IF (i_upwind /= 0 .AND. D_ij /= 0.0_dp) THEN
+    Pe_e = ABS(B_ij) * dvp / ABS(D_ij)
+    Pe_w = ABS(B_ij) * dvm / ABS(D_ij)
+  END IF
+  use_powerlaw = (i_upwind == 1) .AND. &
+                 (MAX(Pe_e, Pe_w) > 2.0_dp .OR. (D_ij == 0.0_dp .AND. B_ij /= 0.0_dp))
+
+  IF (use_powerlaw) THEN
+    !--- Power-law scheme (Patankar 1980; cf. FiPy) [advection cell] ---
+    !    3-point control volume on {i-1,i,i+1}: read B df/dvp + D d2f/dvp2
+    !    as convection (signal speed -B) + diffusion (Gamma = D >= 0). The
+    !    face diffusion conductance D/h is scaled by A(|P|) = max(0,(1 -
+    !    |P|/10)^5) of the face cell-Peclet, and convection is added upwind
+    !    (aE gets max(B,0), aW gets max(-B,0)).  Reduces to central
+    !    diffusion as P->0 and first-order upwind as |P|->inf.  At the
+    !    wall-adjacent cell the east node is the Dirichlet f=0 node, so the
+    !    stencil stays dissipative there (unlike the truncated central one).
     dv_loc = 0.5_dp * (dvp + dvm)             ! control-volume width
-    Pe_e = 0.0_dp
-    Pe_w = 0.0_dp
-    IF (D_ij /= 0.0_dp) THEN
-      Pe_e = ABS(B_ij) * dvp / ABS(D_ij)
-      Pe_w = ABS(B_ij) * dvm / ABS(D_ij)
-    END IF
     aE = MAX(D_ij,0.0_dp)/dvp * MAX(0.0_dp, 1.0_dp - 0.1_dp*Pe_e)**5 + MAX( B_ij, 0.0_dp)
     aW = MAX(D_ij,0.0_dp)/dvm * MAX(0.0_dp, 1.0_dp - 0.1_dp*Pe_w)**5 + MAX(-B_ij, 0.0_dp)
     wperp(mi+1) = aE / dv_loc
     wperp(mi-1) = aW / dv_loc
     wperp(mi)   = -(aE + aW) / dv_loc
   ELSE
-    !--- Central drag (i_upwind=0) or first-order upwind drag (=-1) ---
-    !    The upwind side is chosen so the semi-discrete eigenvalue has
-    !    Re<=0 (B>0 => signal speed -B<0 => forward difference, and vice
-    !    versa), restoring dissipativity of the high-v⊥ boundary layer.
-    wb(:) = wi(:,1)
-    IF (i_upwind == -1) THEN
-      dvp     = vperp(i+1) - vperp(i)
-      dvm     = vperp(i)   - vperp(i-1)
-      dv_loc  = MIN(dvp, dvm)
-      Pe_perp = 0.0_dp
-      IF (D_ij /= 0.0_dp) Pe_perp = ABS(B_ij) * dv_loc / ABS(D_ij)
-      IF (Pe_perp > 2.0_dp) THEN
-        wb(:) = 0.0_dp
-        IF (B_ij >= 0.0_dp) THEN        ! forward (upwind) difference
-          wb(mi)   = -1.0_dp / dvp
-          wb(mi+1) = +1.0_dp / dvp
-        ELSE                            ! backward (upwind) difference
-          wb(mi)   = +1.0_dp / dvm
-          wb(mi-1) = -1.0_dp / dvm
-        END IF
+    !--- Central Fornberg drag (i_upwind=0, and the low-Peclet bulk of the
+    !    i_upwind=1 hybrid) or first-order upwind drag (i_upwind=-1).  For
+    !    -1 the upwind side makes the semi-discrete eigenvalue Re<=0 (B>0
+    !    => signal speed -B<0 => forward difference, and vice versa).
+    IF (i_upwind == -1 .AND. MIN(Pe_e, Pe_w) > 2.0_dp) THEN
+      wb(:) = 0.0_dp
+      IF (B_ij >= 0.0_dp) THEN          ! forward (upwind) difference
+        wb(mi)   = -1.0_dp / dvp
+        wb(mi+1) = +1.0_dp / dvp
+      ELSE                              ! backward (upwind) difference
+        wb(mi)   = +1.0_dp / dvm
+        wb(mi-1) = -1.0_dp / dvm
       END IF
     END IF
     DO k = 1, 7
