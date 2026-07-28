@@ -49,7 +49,8 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   REAL(dp) :: wi(7,0:2), wj(7,0:2)
   REAL(dp) :: acc(7,7)
   REAL(dp) :: wmax
-  REAL(dp) :: wb(7), dvp, dvm, dv_loc, Pe_perp
+  REAL(dp) :: wb(7), wperp(7), dvp, dvm, dv_loc, Pe_perp
+  REAL(dp) :: Pe_e, Pe_w, aE, aW
 
   ! Initialise outputs
   rhs       = 0.0_dp
@@ -120,30 +121,68 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   mi = i - Li + 1
   mj = j - Lj + 1
 
-  !--- v⊥ drag (B) weights: central by default; Peclet-hybrid upwind
-  !    when i_upwind=-1 and the local cell-Peclet |B|dv/D > 2.  The
-  !    upwind side is chosen so the semi-discrete eigenvalue has Re<=0
-  !    (B>0 => advection speed -B<0 => forward difference, and vice
-  !    versa).  This restores dissipativity of the advection-dominated
-  !    high-v⊥ boundary layer without changing the sparsity pattern
-  !    (the D 2nd-derivative stencil already fills all same-j columns).
-  wb(:) = wi(:,1)
-  IF (i_upwind == -1) THEN
-    dvp     = vperp(i+1) - vperp(i)
-    dvm     = vperp(i)   - vperp(i-1)
-    dv_loc  = MIN(dvp, dvm)
-    Pe_perp = 0.0_dp
-    IF (D_ij /= 0.0_dp) Pe_perp = ABS(B_ij) * dv_loc / ABS(D_ij)
-    IF (Pe_perp > 2.0_dp) THEN
-      wb(:) = 0.0_dp
-      IF (B_ij >= 0.0_dp) THEN        ! forward (upwind) difference
-        wb(mi)   = -1.0_dp / dvp
-        wb(mi+1) = +1.0_dp / dvp
-      ELSE                            ! backward (upwind) difference
-        wb(mi)   = +1.0_dp / dvm
-        wb(mi-1) = -1.0_dp / dvm
+  !--- v⊥ convection-diffusion weights wperp(k) = coefficient of
+  !    f(Li+k-1, j) contributed by the (B df/dvp + D d2f/dvp2) operator.
+  !    Three discretisations, selected by the namelist flag i_upwind:
+  !       0 : central Fornberg drag + Fornberg 2nd-derivative (default)
+  !      -1 : Peclet-hybrid first-order upwind of the drag where the
+  !           cell-Peclet |B|dv/D > 2; central diffusion
+  !       1 : Patankar (1980) power-law convection-diffusion scheme
+  !    All three keep the same-column sparsity pattern (the D stencil
+  !    already fills every same-j column), so phased PARDISO is untouched.
+  wperp(:) = 0.0_dp
+  IF (i_upwind == 1) THEN
+    !--- Power-law scheme (Patankar 1980; cf. FiPy power-law) ---------
+    !    Read B df/dvp + D d2f/dvp2 as convection (signal speed -B) plus
+    !    diffusion (Gamma = D >= 0) on the control volume around node i.
+    !    3-point stencil {i-1,i,i+1}.  The diffusion conductance D/h at
+    !    each face is scaled by A(|P|) = max(0, (1 - |P|/10)^5) of the
+    !    face cell-Peclet |P| = |B| h / D, and convection is added upwind
+    !    (aE gets max(B,0), aW gets max(-B,0)).  Limits: A->1 (central
+    !    diffusion) as P->0, A->0 (first-order upwind) as |P|->inf.  At
+    !    the wall-adjacent cell the east node is the Dirichlet f=0 node,
+    !    so the scheme stays dissipative there (unlike the truncated
+    !    central stencil that drives the CN edge instability).
+    dvp    = vperp(i+1) - vperp(i)            ! east face spacing h+
+    dvm    = vperp(i)   - vperp(i-1)          ! west face spacing h-
+    dv_loc = 0.5_dp * (dvp + dvm)             ! control-volume width
+    Pe_e = 0.0_dp
+    Pe_w = 0.0_dp
+    IF (D_ij /= 0.0_dp) THEN
+      Pe_e = ABS(B_ij) * dvp / ABS(D_ij)
+      Pe_w = ABS(B_ij) * dvm / ABS(D_ij)
+    END IF
+    aE = MAX(D_ij,0.0_dp)/dvp * MAX(0.0_dp, 1.0_dp - 0.1_dp*Pe_e)**5 + MAX( B_ij, 0.0_dp)
+    aW = MAX(D_ij,0.0_dp)/dvm * MAX(0.0_dp, 1.0_dp - 0.1_dp*Pe_w)**5 + MAX(-B_ij, 0.0_dp)
+    wperp(mi+1) = aE / dv_loc
+    wperp(mi-1) = aW / dv_loc
+    wperp(mi)   = -(aE + aW) / dv_loc
+  ELSE
+    !--- Central drag (i_upwind=0) or first-order upwind drag (=-1) ---
+    !    The upwind side is chosen so the semi-discrete eigenvalue has
+    !    Re<=0 (B>0 => signal speed -B<0 => forward difference, and vice
+    !    versa), restoring dissipativity of the high-v⊥ boundary layer.
+    wb(:) = wi(:,1)
+    IF (i_upwind == -1) THEN
+      dvp     = vperp(i+1) - vperp(i)
+      dvm     = vperp(i)   - vperp(i-1)
+      dv_loc  = MIN(dvp, dvm)
+      Pe_perp = 0.0_dp
+      IF (D_ij /= 0.0_dp) Pe_perp = ABS(B_ij) * dv_loc / ABS(D_ij)
+      IF (Pe_perp > 2.0_dp) THEN
+        wb(:) = 0.0_dp
+        IF (B_ij >= 0.0_dp) THEN        ! forward (upwind) difference
+          wb(mi)   = -1.0_dp / dvp
+          wb(mi+1) = +1.0_dp / dvp
+        ELSE                            ! backward (upwind) difference
+          wb(mi)   = +1.0_dp / dvm
+          wb(mi-1) = -1.0_dp / dvm
+        END IF
       END IF
     END IF
+    DO k = 1, 7
+      wperp(k) = B_ij * wb(k) + D_ij * wi(k,2)
+    END DO
   END IF
 
   !--- Accumulate PDE terms ----------------------------------------
@@ -156,17 +195,14 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
       IF (k == mi .AND. l == mj) &
         acc(k,l) = acc(k,l) + A_ij
 
-      ! B * df/dvp  (v⊥ 1st deriv, fixed j; wb = central or upwind)
+      ! B df/dvp + D d2f/dvp2  (v⊥ convection-diffusion, fixed j;
+      ! wperp = central/upwind/power-law per i_upwind)
       IF (l == mj) &
-        acc(k,l) = acc(k,l) + B_ij * wb(k)
+        acc(k,l) = acc(k,l) + wperp(k)
 
       ! C * df/dvpa  (v∥ 1st deriv, fixed i)
       IF (k == mi) &
         acc(k,l) = acc(k,l) + C_ij * wj(l,1)
-
-      ! D * d2f/dvp2  (v⊥ 2nd deriv, fixed j)
-      IF (l == mj) &
-        acc(k,l) = acc(k,l) + D_ij * wi(k,2)
 
       ! E * d2f/dvp_dvpa  (outer product of 1st derivs)
       acc(k,l) = acc(k,l) + E_ij * wi(k,1) * wj(l,1)
