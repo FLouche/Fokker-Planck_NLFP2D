@@ -943,9 +943,15 @@ i\_upwind & $0$ &
   (Section~\ref{sec:upwind}).
   $0$: central Fornberg weights (default).
   $-1$: P\'eclet-hybrid upwinding --- in cells where the cell-P\'eclet number
-  $|B|\,\Delta\vp/D > 2$ the drag term uses a one-sided upwind difference,
-  restoring dissipativity of the advection-dominated outer boundary layer and
-  removing the Crank--Nicolson high-$\vp$ instability. \\[4pt]
+  $|B|\,\Delta\vp/D > 2$ the drag term uses a one-sided (first-order) upwind
+  difference, restoring dissipativity of the advection-dominated outer boundary
+  layer and removing the Crank--Nicolson high-$\vp$ instability.
+  $1$: P\'eclet-hybrid \emph{power-law} scheme (Patankar 1980) --- in the same
+  advection-dominated cells the combined drag$+$diffusion operator is
+  discretised with a 3-point control-volume power-law stencil, which removes the
+  instability with roughly half the tail numerical diffusion of the first-order
+  upwind ($-1$).  Both leave the high-order 7-point Fornberg stencil in the
+  smooth bulk. \\[4pt]
 
 i\_freeze\_lnl & $0$ &
   Test mode (linear solver \texttt{timefp\_7pt}, \texttt{isc} $\ne -1$).
