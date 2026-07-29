@@ -15,6 +15,10 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 2.4 - 28th July 2026 (FL)
+    
+    !  Patankar power-law convection–diffusion scheme, activated by i_upwind = 1
+    
     ! Version 2.3 - 3rd July 2026 (FL)
     
     ! Parameter i_upwind introduced to alleviate sign oscillations
