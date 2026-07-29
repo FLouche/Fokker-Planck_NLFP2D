@@ -200,39 +200,4 @@ CONTAINS
 
   END SUBROUTINE time_Tn
 
-  !***************************************************
-  !* Minimum of f near the axis and over the grid    *
-  !*   fmin_axis = min f for v_perp < axis_frac*vmax  *
-  !*   fmin_glob = min f over the whole grid          *
-  !* Small negative values near the axis are the      *
-  !* precursor of the isc=3 Tn sign-flip; tracking    *
-  !* them in time pins down when/where f goes < 0.    *
-  !*   06/2026: F. Louche                             *
-  !***************************************************
-
-  SUBROUTINE time_fmin_axis(f, fmin_axis, fmin_glob)
-
-    USE shared_grid
-
-    IMPLICIT NONE
-
-    DOUBLE PRECISION, INTENT(IN)  :: f(nperp, npar)
-    DOUBLE PRECISION, INTENT(OUT) :: fmin_axis, fmin_glob
-
-    DOUBLE PRECISION, PARAMETER :: axis_frac = 0.1d0  ! near-axis band: v_perp < 10% of v_perp,max
-    DOUBLE PRECISION :: vcut
-    INTEGER :: iv, ip
-
-    vcut      = axis_frac * vperp(nperp)
-    fmin_glob = f(1,1)
-    fmin_axis = f(1,1)
-    DO iv = 1, nperp
-      DO ip = 1, npar
-        IF (f(iv,ip) < fmin_glob) fmin_glob = f(iv,ip)
-        IF (vperp(iv) <= vcut .AND. f(iv,ip) < fmin_axis) fmin_axis = f(iv,ip)
-      END DO
-    END DO
-
-  END SUBROUTINE time_fmin_axis
-
 END MODULE time_comps_mod

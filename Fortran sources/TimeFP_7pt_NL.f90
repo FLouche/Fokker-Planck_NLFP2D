@@ -83,7 +83,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: theta
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff,teff_tmp
   REAL(dp) :: Tn          ! density-characteristic temperature (diagnostic)
-  REAL(dp) :: fmin_axis, fmin_glob   ! near-axis / global min of f (negative-f detector)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
   REAL(dp) :: t_start, t_end
@@ -107,16 +106,10 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: mRF_perp, mRF_par, msrc_perp, msrc_par
   REAL(dp) :: mloss_perp, mloss_par, mSC_perp, mSC_par
 
-  EXTERNAL :: time_power_7pt, time_momentum_7pt, sc_power_density_diag
+  EXTERNAL :: time_power_7pt, time_momentum_7pt
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
-
-  ! CN-ringing diagnostics (i_ring_diag = -1)
-  REAL(dp) :: chk, dfmax, dloc, fmn, fmx
-  INTEGER  :: imn, jmn, idf, jdf, ip, jp
-  ! TEMPORARY: max cell-Peclet time trace (i_ring_diag = -1)
-  REAL(dp) :: pe_max, pe_loc, dvperp_loc
 
   REAL(dp), DIMENSION(nperp,npar) :: f_init
 
@@ -278,7 +271,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                    OPEN(507, file=TRIM(outfile('Teff_vs_time.txt')),              status='unknown')
                    OPEN(514, file=TRIM(outfile('Tn_vs_time.txt')),                status='unknown')
-                   OPEN(515, file=TRIM(outfile('fmin_axis_vs_time.txt')),         status='unknown')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
       DO ib = 1, nbulk
@@ -317,7 +309,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown', position='append')
                    OPEN(507, file=TRIM(outfile('Teff_vs_time.txt')),              status='old',     access='append')
                    OPEN(514, file=TRIM(outfile('Tn_vs_time.txt')),                status='old',     access='append')
-                   OPEN(515, file=TRIM(outfile('fmin_axis_vs_time.txt')),         status='old',     access='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
@@ -367,16 +358,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   lnaa_t      = 0.0_dp
   phase_offset = 0.0_dp
   itime_global = 0
-
-  IF (i_ring_diag == -1) THEN
-    ip = nperp - 3              ! fixed probe: high-vperp / RF-resonance corner
-    jp = (69 * npar) / 100      ! (where the negative-f undershoot nucleates)
-    OPEN(701, file='ring_diag.txt', status='unknown')
-    WRITE(701,'(A)') '# step time teff lnaa chk fmin imin jmin fmax dfmax idf jdf sc00_at_df all00_at_df sc00_fix all00_fix'
-    ! TEMPORARY: max cell-Peclet Pe_perp = |B|dv/D vs time (diagnostic)
-    OPEN(516, file='peclet_max_vs_time.txt', status='unknown')
-    WRITE(516,'(A)') '# time  max_Pe_perp(=|B|dv/D)'
-  END IF
 
   phase_loop: DO iphase = 1, 3
     IF (ntimes(iphase) == 0) CYCLE phase_loop
@@ -527,73 +508,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     WRITE(507,*) time, teff
     CALL time_Tn(fout, dens_tmp, Tn)
     WRITE(514,*) time, Tn
-    CALL time_fmin_axis(fout, fmin_axis, fmin_glob)
-    WRITE(515,*) time, fmin_axis, fmin_glob
-
-    !--- CN-ringing diagnostics (per step) -------------------------
-    ! chk = checkerboard/Nyquist projection sum (-1)^(i+j) f_ij : the
-    ! highest-wavenumber mode that CN's g->-1 ringing lives in. We also
-    ! track the global min of f and the cell of largest step-to-step
-    ! change |f^{n+1}-f^n|, and the self-collision (sc00) and total
-    ! (all00) diagonal coefficients at that cell -- the "matrix term".
-    IF (i_ring_diag == -1) THEN
-      chk = 0.0_dp; dfmax = 0.0_dp
-      fmn = fout(1,1); fmx = fout(1,1); imn = 1; jmn = 1; idf = 1; jdf = 1
-      DO iv = 1, nperp
-        DO imu = 1, npar
-          chk = chk + REAL(1 - 2*MOD(iv+imu,2), dp) * fout(iv,imu)
-          IF (fout(iv,imu) < fmn) THEN
-            fmn = fout(iv,imu); imn = iv; jmn = imu
-          END IF
-          IF (fout(iv,imu) > fmx) fmx = fout(iv,imu)
-          dloc = ABS(fout(iv,imu) - fstart(index_mat(iv,imu)))
-          IF (dloc > dfmax) THEN
-            dfmax = dloc; idf = iv; jdf = imu
-          END IF
-        END DO
-      END DO
-      WRITE(701,'(I7,15(1X,ES15.7))') itime_global, time, teff, lnaa_t, &
-            chk, fmn, REAL(imn,dp), REAL(jmn,dp), fmx, dfmax, &
-            REAL(idf,dp), REAL(jdf,dp), sc00(idf,jdf), all00(idf,jdf), &
-            sc00(ip,jp), all00(ip,jp)
-      ! TEMPORARY: maximum cell-Peclet of the vperp advection/diffusion balance
-      pe_max = 0.0_dp
-      DO iv = 2, nperp-1
-        dvperp_loc = MIN(vperp(iv+1)-vperp(iv), vperp(iv)-vperp(iv-1))
-        DO imu = 2, npar-1
-          IF (all20(iv,imu) /= 0.0_dp) THEN
-            pe_loc = ABS(all10(iv,imu)) * dvperp_loc / ABS(all20(iv,imu))
-            IF (pe_loc > pe_max) pe_max = pe_loc
-          END IF
-        END DO
-      END DO
-      WRITE(516,'(2(1X,ES15.7))') time, pe_max
-      IF (MOD(itime_global, 50) == 0) THEN
-        WRITE(dynfname,'(A,I0,A)') 'ring_df_', itime_global, '.txt'
-        OPEN(702, file=TRIM(dynfname), status='unknown')
-        DO iv = 1, nperp
-          DO imu = 1, npar
-            ! columns: vperp  vpar  df  D_perp(all20)  D_par(all02)
-            WRITE(702,'(5(1X,ES15.7))') vperp(iv), vpar(imu), &
-                  fout(iv,imu) - fstart(index_mat(iv,imu)), &
-                  all20(iv,imu), all02(iv,imu)
-          END DO
-        END DO
-        CLOSE(702)
-        ! Dump the frozen operator L in COO form (overwritten each snapshot,
-        ! so the final L_matrix.txt is taken near steady state) for an
-        ! off-line eigenvalue (stiffness) analysis. Header: ndof nnz.
-        OPEN(703, file='L_matrix.txt', status='unknown')
-        WRITE(703,'(2(1X,I9))') ndof, nnz_L
-        DO row = 1, ndof
-          DO ptr = ia_L(row), ia_L(row+1)-1
-            WRITE(703,'(2(1X,I8),1X,ES16.8)') row, ja_L(ptr), aa_L(ptr)
-          END DO
-        END DO
-        CLOSE(703)
-      END IF
-    END IF
-
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
                         pcoll_self, pcoll_self_perp, pcoll_self_par)
@@ -648,21 +562,11 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   END DO phase_loop
 
-  IF (i_ring_diag == -1) THEN
-    CLOSE(701)
-    CLOSE(516)   ! TEMPORARY: peclet_max_vs_time.txt
-  END IF
-
   !================================================================
   ! 6.  Finalise
   !================================================================
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
-
-  !================================================================
-  ! SC power-density map dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
-  !================================================================
-  CALL sc_power_density_diag(x_vec, dens_tmp)
 
   DEALLOCATE(sum_phi)
 
@@ -675,7 +579,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END IF
   IF (nbulk > 1) CLOSE(505)
   IF (isc /= 0)  CLOSE(506)
-                 CLOSE(507); CLOSE(514); CLOSE(515)
+                 CLOSE(507); CLOSE(514)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)

@@ -81,13 +81,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
-  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp, teff_frozen
+  REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
   REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=3 background)
-  REAL(dp) :: fmin_axis, fmin_glob   ! near-axis / global min of f (negative-f detector)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
-  ! TEMPORARY: max cell-Peclet time trace (i_ring_diag = -1)
-  REAL(dp) :: pe_max, pe_loc, dvperp_loc
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, itime_global, iphase, iv, imu, ix
   REAL(dp) :: phase_offset
@@ -95,7 +92,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt, sc_power_density_diag
+  EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt
 
   logical  :: ss_converged
   real(dp) :: p_net_ss, p_drive_ss, anisotropy
@@ -224,7 +221,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='unknown')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='unknown')
-                     OPEN(515,file=TRIM(outfile('fmin_axis_vs_time.txt')),        status='unknown')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
       DO ib = 1, nbulk
@@ -263,7 +259,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='old', access='append')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='old', access='append')
-                     OPEN(515,file=TRIM(outfile('fmin_axis_vs_time.txt')),        status='old', access='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
@@ -320,7 +315,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
    call time_energy(f_init, dens_tmp, teff=teff_tmp)
    write(*,*) 'Initial effective temperature is ',teff_tmp
-   teff_frozen = teff_tmp     ! reference Teff for the i_freeze_lnl test mode
 
    call time_Tn(f_init, dens_tmp, Tn)        ! initialise Tn (density-characteristic T)
    write(*,*) 'Initial density-characteristic temperature is ',Tn
@@ -330,12 +324,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   phase_offset  = 0.0_dp
   itime_global  = 0
-
-  ! TEMPORARY: max cell-Peclet Pe_perp = |B|dv/D vs time (diagnostic)
-  IF (i_ring_diag == -1) THEN
-    OPEN(516, file='peclet_max_vs_time.txt', status='unknown')
-    WRITE(516,'(A)') '# time  max_Pe_perp(=|B|dv/D)'
-  END IF
 
   phase_loop: DO iphase = 1, 3
     IF (ntimes(iphase) == 0) CYCLE phase_loop
@@ -358,14 +346,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END DO
       END DO
       CALL time_energy(f_init, dens_tmp, teff=teff)
-      ! Test mode (i_freeze_lnl=-1): freeze the Coulomb log at the initial Teff
-      ! so the operator coefficients no longer depend on f -- truly linear for
-      ! isc/=-1. Used to isolate the temperature-dependent-lnLambda nonlinearity.
-      IF (i_freeze_lnl == -1) THEN
-        ta_eV = teff_frozen * 1.0d3
-      ELSE
-        ta_eV = teff * 1.0d3
-      END IF
+      ta_eV = teff * 1.0d3
       CALL time_Tn(f_init, dens_tmp, Tn)        ! density-characteristic temperature
       Tn_eV = Tn * 1.0d3
       ! Coulomb-log clamp: keep the isc=3 background temperature positive and
@@ -420,19 +401,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END DO
       END DO
     END DO
-
-    ! Dump the operator L (COO) once on step 1 for off-line eigenvalue analysis
-    ! (i_ring_diag=-1). With i_freeze_lnl=-1 this is the frozen, linear operator.
-    IF (i_ring_diag == -1 .AND. itime_global == 1) THEN
-      OPEN(703, file='L_matrix.txt', status='unknown')
-      WRITE(703,'(2(1X,I9))') ndof, nnz_L
-      DO row = 1, ndof
-        DO ptr = ia_L(row), ia_L(row+1)-1
-          WRITE(703,'(2(1X,I8),1X,ES16.8)') row, ja_L(ptr), aa_L(ptr)
-        END DO
-      END DO
-      CLOSE(703)
-    END IF
 
     !--- Rebuild aa_lhs = I - theta*dt*L (with BC restoration) -----
     DO ptr = 1, nnz_L
@@ -496,38 +464,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
     END DO
 
-    ! Per-step delta-f snapshot for the (linear) instability chronology: step 1
-    ! and every 50 steps when i_ring_diag=-1.  df = f^{n+1} - f^{n} (fstart still
-    ! holds f^{n} here).  Same 5-column format as the NL solver (vperp vpar df
-    ! all20 all02) so the plotting tools are shared.
-    IF (i_ring_diag == -1 .AND. (MOD(itime_global,50) == 0 .OR. itime_global == 1)) THEN
-      WRITE(dynfname,'(A,I0,A)') 'ring_df_', itime_global, '.txt'
-      OPEN(702, file=TRIM(dynfname), status='unknown')
-      DO iv = 1, nperp
-        DO imu = 1, npar
-          WRITE(702,'(5(1X,ES15.7))') vperp(iv), vpar(imu), &
-                fout(iv,imu) - fstart(index_mat(iv,imu)), &
-                all20(iv,imu), all02(iv,imu)
-        END DO
-      END DO
-      CLOSE(702)
-    END IF
-
-    ! TEMPORARY: maximum cell-Peclet of the vperp advection/diffusion balance
-    IF (i_ring_diag == -1) THEN
-      pe_max = 0.0_dp
-      DO iv = 2, nperp-1
-        dvperp_loc = MIN(vperp(iv+1)-vperp(iv), vperp(iv)-vperp(iv-1))
-        DO imu = 2, npar-1
-          IF (all20(iv,imu) /= 0.0_dp) THEN
-            pe_loc = ABS(all10(iv,imu)) * dvperp_loc / ABS(all20(iv,imu))
-            IF (pe_loc > pe_max) pe_max = pe_loc
-          END IF
-        END DO
-      END DO
-      WRITE(516,'(2(1X,ES15.7))') time, pe_max
-    END IF
-
     !--- Diagnostics (identical to TimeFP3) -----------------------
     CALL time_density(fout, dens_tmp)
   !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
@@ -540,8 +476,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     WRITE(507,*) time, teff
     CALL time_Tn(fout, dens_tmp, Tn)
     WRITE(514,*) time, Tn
-    CALL time_fmin_axis(fout, fmin_axis, fmin_glob)
-    WRITE(515,*) time, fmin_axis, fmin_glob
 
     !--- Refresh Teff-dependent coefficients from the just-solved f^{n} ------
     ! The operator used for the time step is built from the start-of-step
@@ -680,9 +614,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   END IF
   IF (nbulk   >   1) CLOSE(505)
   IF (isc==1 .OR. isc==2 .OR. isc==3) CLOSE(506)
-  CLOSE(507); CLOSE(514); CLOSE(515)
+  CLOSE(507); CLOSE(514)
   CLOSE(47); CLOSE(46); CLOSE(45)
-  IF (i_ring_diag == -1) CLOSE(516)   ! TEMPORARY: peclet_max_vs_time.txt
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)
     IF (isource == -1) CLOSE(590)
@@ -747,13 +680,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     ELSE
       WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Tn=', Tn, ' keV) written to fsc_maxw.txt'
     END IF
-  END IF
-
-  !================================================================
-  ! 10. SC power-density map  dP_SC/d3v = 1/2 m v^2 C_SC[f]  (2D + vpar=0)
-  !================================================================
-  IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
-    CALL sc_power_density_diag(x_vec, dens_tmp)
   END IF
 
   DEALLOCATE(ia_L, ja_L, aa_L, ia_lhs, ja_lhs, aa_lhs, rhs_vec, x_vec, Lf)

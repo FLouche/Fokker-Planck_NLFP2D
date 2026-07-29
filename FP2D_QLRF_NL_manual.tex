@@ -692,16 +692,6 @@ notxt & $0$ &
   Suppressed files are routed to the OS null device, so the run is otherwise
   unchanged (all stdout diagnostics still print). \\[4pt]
 
-i\_ring\_diag & $0$ &
-  Per-step ringing / operator diagnostics for the time-dependent solvers
-  (Section~\ref{sec:upwind}).
-  $0$: off.
-  $-1$: dump the assembled operator $\Lcal$ (\texttt{L\_matrix.txt}, COO format)
-  and $\delta f = f^{n+1}-f^n$ snapshots (\texttt{ring\_df\_*.txt}) for off-line
-  eigenvalue / stability analysis in \emph{both} time-dependent solvers; the NL
-  solver additionally writes a per-step scalar trace (\texttt{ring\_diag.txt}).
-  Diagnostic only; the solution is unaffected. \\[4pt]
-
 \end{longtable}
 
 % -------------------------------------------------------------------
@@ -953,14 +943,6 @@ i\_upwind & $0$ &
   upwind ($-1$).  Both leave the high-order 7-point Fornberg stencil in the
   smooth bulk. \\[4pt]
 
-i\_freeze\_lnl & $0$ &
-  Test mode (linear solver \texttt{timefp\_7pt}, \texttt{isc} $\ne -1$).
-  $0$: normal (the Coulomb logarithm and Maxwellian self-collision background
-  track the evolving $T_\mathrm{eff}(t)$).
-  $-1$: freeze the Coulomb logarithm at the initial $T_\mathrm{eff}$ so the
-  operator coefficients no longer depend on $f$ --- a truly linear operator ---
-  to isolate the temperature-dependent-$\ln\Lambda$ nonlinearity. \\[4pt]
-
 \end{longtable}
 
 % -------------------------------------------------------------------
@@ -1025,8 +1007,6 @@ Written at every time step during the simulation:
   \item[\texttt{Teff\_vs\_time.txt}] Columns: time, $T_\mathrm{eff}$ (keV).
   \item[\texttt{Tn\_vs\_time.txt}] Columns: time, $T_n$ (keV) -- density-characteristic
         (cold-bulk) temperature; written for all runs.
-  \item[\texttt{fmin\_axis\_vs\_time.txt}] Columns: time, near-axis min $f$,
-        whole-grid min $f$ -- negative-$f$ monitor.
   \item[\texttt{power\_coll\_tot\_vs\_time.txt}] Total collisional power density (MW/m$^3$).
   \item[\texttt{power\_coll\_e\_vs\_time.txt}] Electron collisional power density.
   \item[\texttt{power\_coll\_ion$N$\_vs\_time.txt}] Ion $N$ collisional power density.
@@ -1040,27 +1020,6 @@ Written at every time step during the simulation:
         (2 columns per file: $\perp$ and $\parallel$ components), written when
         \texttt{iplot\_mom = -1}.
 \end{description}
-
-\subsection{Ringing / Operator Diagnostics (\texttt{i\_ring\_diag})}
-
-When \texttt{i\_ring\_diag = -1}, the time-dependent solvers write additional
-files for off-line stability analysis (see Section~\ref{sec:upwind}):
-\begin{description}
-  \item[\texttt{L\_matrix.txt}] The assembled FP operator $\Lcal$ in coordinate
-        (COO) format: a header line \texttt{ndof nnz} followed by
-        \texttt{row col value} triples (1-based).  Written by both time-dependent
-        solvers --- the NL solver overwrites it every 50 steps (so the final file
-        is near steady state), the linear solver writes it once on step~1.
-  \item[\texttt{ring\_df\_$n$.txt}] $\delta f = f^{n+1}-f^n$ snapshots on step~1
-        and every 50 steps (columns: $\vp$, $\vpa$, $\delta f$, $D_\perp$,
-        $D_\parallel$).
-  \item[\texttt{ring\_diag.txt}] (NL solver only) Per-step scalar trace: step,
-        time, $T_\mathrm{eff}$, $\ln\Lambda_{aa}$, checkerboard/Nyquist projection
-        $\sum(-1)^{i+j}f$, min/max of $f$ and their cells, and the cell of largest
-        $|\delta f|$.
-\end{description}
-These files underpin the eigenvalue diagnosis of the high-$\vp$ Crank--Nicolson
-instability described in Section~\ref{sec:upwind}.
 
 \subsection{End-of-Run Balance Diagnostics (stdout)}
 
@@ -1140,9 +1099,7 @@ default (off) values.
   idiag     = -1,
   notxt     = 0,
 
-  ! Diagnostics / advanced numerics (default 0 = off)
-  i_ring_diag  = 0,
-  i_freeze_lnl = 0,
+  ! Advanced numerics (default 0 = off)
   i_upwind     = 0,
 /
 \end{lstlisting}

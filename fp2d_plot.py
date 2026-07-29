@@ -121,12 +121,6 @@ FILE_META = {
     "sc_phi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
                             "ylabel": "φ",
                             "title":  "Rosenbluth potential φ at v∥ = 0", "sci_y": True},
-    # SC power-density diagnostic  dP_SC/d³v = ½ m v² C_SC[f]  (signed) ----
-    "sc_power_density":   {"ptype": "2d",  "diverging": True, "sci_z": True,
-                            "title": "SC power density  dP_SC/d³v  (>0 source, <0 sink)"},
-    "sc_power_density_at_vpar0": {"ptype": "1d", "xlabel": "v⊥ (v_th)",
-                            "ylabel": "dP_SC/d³v at v∥=0", "sci_y": True,
-                            "title": "SC power density at v∥ = 0  (>0 source, <0 sink)"},
     # Simple time series -------------------------------------------------------
     "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
                                 "title": "Particle density vs time"},
@@ -156,13 +150,6 @@ FILE_META = {
     # Density-characteristic (log-slope) temperature
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
-    # TEMPORARY: maximum cell-Peclet number of the vperp advection/diffusion balance
-    "peclet_max_vs_time":           {"ptype": "ts",  "ylabel": "max cell-Péclet |B|Δv⊥/D",
-                                     "title":  "Maximum cell-Péclet number vs time"},
-    # Minimum of f near the axis / over the grid (negative-f detector for isc=3)
-    "fmin_axis_vs_time":            {"ptype": "ts2", "ylabel": "min f",
-                                     "title":  "Minimum of f (near-axis / whole grid) vs time",
-                                     "labels": ["near-axis (v⊥ < 0.1·v⊥,max)", "whole grid"]},
     # Coulomb logarithms (data files behind the coulomb_log_all_vs_time plot).
     # Listed here so 'compare' can overlay them; still skipped in plot mode
     # (the composite plot_coulomb_log handles them) via _SKIP_STEMS.
@@ -1249,7 +1236,7 @@ def _read_iplot_mom_from_namelist(input_file: Path) -> int:
 def _case_from_stem(stem: str, default: str = "") -> str:
     """Casename suffix of a single output-file stem, or *default* if none.
 
-    'fmin_axis_vs_time-JET-...-Grid3-test3' -> 'JET-...-Grid3-test3'.
+    'Teff_vs_time-JET-...-Grid3-test3' -> 'JET-...-Grid3-test3'.
     Lets each file carry its own casename when several cases are plotted
     together (e.g. via --files), so titles match the file they describe.
     """
