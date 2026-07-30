@@ -15,6 +15,11 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 2.5 - 30th July 2026 (FL)
+    
+    ! Convergence in time assessed with L2 norm:  we added a Jacobian-weighted convergence 
+    !      diagnostics module (mod_conv_diag) 
+    
     ! Version 2.4 - 28th July 2026 (FL)
     
     !  Patankar power-law convection–diffusion scheme, activated by i_upwind = 1
@@ -156,14 +161,19 @@ double precision start_time,end_time
 !
 ! Convergence for time-dependent simulation:
 !
-!1. Every n_ss_window steps, a line like [SS] step=50  dE/E= 1.23E-02  dn/n= 4.56E-03  dP/Pd= 7.89E-03 [tol= 1.00E-03]
-!should appear on stdout.
-!2. When all three criteria drop below ss_tol, the run stops early and prints [SS] CONVERGED at step NNN ....
+!1. With i_ss_check=-1 a line like
+!     [conv] t= 2.5E-02 s  eps= 3.1E-01 /s  epsT= 8.4E-01 /s  eps/nu= 3.1E-03 ...
+!   appears on stdout once every n_ss_window steps (mod_conv_diag).
+!2. When all five criteria are met (eps/nu < ss_tol_eps, epsT/nu < ss_tol_tail, and the
+!   three moment drifts < ss_tol_moment) the run stops early and prints a CONVERGED line.
 !3. After early exit, all output files (fout.txt, xout.dat, *_vs_time.txt) should be complete and the end-of-run plots
 !should still be produced.
 !
-!If ss_tol is too tight (run never converges) or too loose (stops too early), adjust it together with n_ss_window. A
-!wider window is more immune to short-term fluctuations.
+!The test is evaluated every n_ss_window steps; each rate is divided by the physical
+!duration that window spans, so the tolerances are independent of timestep. If they are too tight
+!(run never converges) or too loose (stops too early), adjust them together with n_ss_window; a
+!wider window is more immune to short-term fluctuations and proportionally cheaper, but coarsens
+!the time resolution of the diagnostic and delays the first verdict (which comes at step 2*n_ss_window).
 !
 ! Initial solution for time-dependent solver:
 !
@@ -181,7 +191,8 @@ namelist /INPUT/ casename, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, core_frac, &
-                i_ss_check, n_ss_window, ss_tol, &
+                i_ss_check, n_ss_window, &
+                ss_tol_eps, ss_tol_tail, ss_tol_moment, &
                 iplot_pow, iplot_mom, idiag, notxt, &
                 i_upwind
 

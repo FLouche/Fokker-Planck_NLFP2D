@@ -40,7 +40,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   USE shared_beam
   USE shared_RF
   USE func_index
-  USE mod_ss_check
+  USE mod_conv_diag
   USE time_comps_mod
   USE assemble_FP_lin
   USE coulomb_log_mod
@@ -94,8 +94,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt
 
-  logical  :: ss_converged
-  real(dp) :: p_net_ss, p_drive_ss, anisotropy
+  real(dp) :: anisotropy
+  type(conv_diag_t) :: cdiag        ! Jacobian-weighted convergence diagnostics
 
   real(dp), dimension(nperp,npar) :: f_init
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
@@ -324,6 +324,12 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   phase_offset  = 0.0_dp
   itime_global  = 0
+
+  ! Steady-state convergence test (i_ss_check=-1): weights depend only on the
+  ! grid, so they are built once here and reused for every step.
+  ! nu_ref = 1/tauie (ion-electron collision rate) renders eps dimensionless.
+  IF (i_ss_check == -1) &
+    CALL conv_diag_init(vteff, 1.0_dp/MAX(tauie, TINY(1.0_dp)), write_hist=.TRUE.)
 
   phase_loop: DO iphase = 1, 3
     IF (ntimes(iphase) == 0) CYCLE phase_loop
@@ -573,17 +579,12 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       IF (isc   /=  0) WRITE(600,*) time, mSC_perp, mSC_par
     END IF
 
-    !--- Steady-state convergence check (optional) ----------------
+    !--- Steady-state convergence test (single, Jacobian-weighted) --
+    ! Rolling window of n_ss_window steps; fout holds f^n.
     if (i_ss_check == -1) then
-      p_net_ss   = sum(pcoll(1:nbulk)) + pcoll_self + pRF + psource + plosses
-      p_drive_ss = max(abs(pRF), abs(pcoll_self), abs(psource))
-      do ib = 1, nbulk
-        p_drive_ss = max(p_drive_ss, abs(pcoll(ib)))
-      end do
-      p_drive_ss = max(p_drive_ss, 1.0_dp)
-      call ss_check(itime_global, time, tk, tkperp, pRF, p_net_ss, p_drive_ss, ss_converged)
-      if (ss_converged) then
-        write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (steady state reached).'
+      call conv_diag_step(itime_global, time, fout, cdiag)
+      if (conv_diag_converged(cdiag)) then
+        write(*,'(A,F12.5,A)') '  Stopping at t=', time, ' s (conv_diag criteria met).'
         exit phase_loop
       end if
     end if
@@ -600,6 +601,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   !================================================================
   ! 6.  Finalise
   !================================================================
+  IF (i_ss_check == -1) CALL conv_diag_finalize()
+
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
 

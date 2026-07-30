@@ -82,7 +82,7 @@
 			</File>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
 			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
-			<File RelativePath="..\Fortran sources\ss_check.f90"/>
+			<File RelativePath="..\Fortran sources\conv_diag.f90"/>
 			<File RelativePath="..\Fortran sources\steady_state.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\test_density_balance_7pt.f90"/>

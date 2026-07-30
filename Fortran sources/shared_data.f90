@@ -95,9 +95,17 @@ double precision, dimension(3) :: timestep = [0.0d0, 0.0d0, 0.0d0]
 integer :: ntimes_cur   = 0
 double precision :: timestep_cur = 0.0d0
 integer :: iold,icn,isc
-integer :: i_ss_check  = 0       ! 0: disabled; -1: auto-stop when SS reached
-integer :: n_ss_window = 50      ! rolling window width (steps) for SS detection
-double precision :: ss_tol = 1.0d-3  ! SS convergence tolerance: max relative change PER SECOND (rate-based, dt-independent)
+integer :: i_ss_check  = 0       ! 0: disabled; -1: auto-stop when SS reached, using the
+                                 !    Jacobian-weighted rolling-window test in mod_conv_diag
+integer :: n_ss_window = 50      ! SS test evaluated every n_ss_window steps; rates are
+                                 ! measured over that window (mod_conv_diag)
+! Steady-state tolerances (mod_conv_diag).  All are rates PER SECOND measured over the
+! window, so like the criterion they replace they are independent of the time step.
+! eps and eps_tail are compared after division by the reference rate nu_ref, so these are
+! dimensionless "fraction of the physical rate" thresholds.
+double precision :: ss_tol_eps    = 1.0d-3  ! tolerance on eps/nu_ref      (bulk L2 rate)
+double precision :: ss_tol_tail   = 1.0d-2  ! tolerance on eps_tail/nu_ref (tail-weighted)
+double precision :: ss_tol_moment = 1.0d-3  ! tolerance on the density/flow/energy drifts
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip

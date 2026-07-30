@@ -150,6 +150,15 @@ FILE_META = {
     # Density-characteristic (log-slope) temperature
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
+    # Convergence rate epsilon = ||f^n - f^(n-1)|| / (dt ||f^n||), Jacobian-weighted
+    # (mod_conv_diag).  Log y: epsilon decays over orders of magnitude as the run
+    # converges.  eps_tail uses the extra tail weight and is plotted alongside --
+    # the diagnostic failure mode is eps small while eps_tail is not.
+    "conv_eps_vs_time":             {"ptype": "ts2", "ylabel": "ε  (1/s)",
+                                     "title":  "Convergence rate ε vs time",
+                                     "labels": ["ε  (bulk, Jacobian-weighted)",
+                                                "ε_tail  (tail-weighted)"],
+                                     "logy": True},
     # Coulomb logarithms (data files behind the coulomb_log_all_vs_time plot).
     # Listed here so 'compare' can overlay them; still skipped in plot mode
     # (the composite plot_coulomb_log handles them) via _SKIP_STEMS.
@@ -527,6 +536,10 @@ def plot_ts2(data, meta, stem, save_dir, show, casename):
     ax.set_xlim(left=0)
     ax.legend()
     ax.grid(True, alpha=0.3)
+    # Opt-in log y-axis (e.g. the convergence rate, which decays over orders
+    # of magnitude).  Guarded: log scale needs at least one positive sample.
+    if meta.get("logy") and np.any(data[:, 1:] > 0):
+        ax.set_yscale("log")
     fig.tight_layout()
     _finish(fig, stem, save_dir, show)
 
