@@ -585,25 +585,73 @@ The initial distribution $f^0$ is selected by \texttt{istart}:
 \end{center}
 
 \subsection{Steady-State Convergence Detection}
+\label{sec:ssconv}
 
-When \texttt{i\_ss\_check = -1}, the code monitors the relative \emph{rate of
-change} of four indicators over a rolling window of \texttt{n\_ss\_window}
-steps: the total kinetic energy $\Delta E/E$, the perpendicular kinetic energy
-$\Delta E_\perp/E_\perp$ (which equilibrates last under RF drive and is the most
-discriminating), the RF power $\Delta P_\mathrm{RF}/P_\mathrm{drive}$, and the
-net power $\Delta P/P_\mathrm{drive}$.  Each relative change is divided by the
-\emph{physical duration} of the window ($t_\mathrm{now}-t_{\mathrm{now}-W}$), so
-the criterion measures a relative change \emph{per second}.  When all four rates
-fall below \texttt{ss\_tol}, the run stops early with a ``CONVERGED'' message.
+When \texttt{i\_ss\_check = -1} the run stops early once the solution stops
+changing.  A \emph{single} test decides this, implemented in
+\texttt{mod\_conv\_diag}.  It is evaluated once every $W =
+\texttt{n\_ss\_window}$ steps -- not at every step -- and measures rates of
+change over that window, exactly as the former scalar criterion did, but on the
+distribution function itself rather than on four integrated scalars.  At each
+evaluation the current state is compared with the state stored at the previous
+evaluation, so only \emph{one} snapshot of $f$ is retained regardless of $W$,
+and the full-grid norms are formed once per window rather than once per step.
 
-Because the window duration is taken from the simulation time rather than a step
-count, \texttt{ss\_tol} is \emph{independent of the time step}: two runs with
-different \texttt{timestep} that are equally close to steady state report the
-same rate, so the same \texttt{ss\_tol} enforces the same physical stringency
-(the duration is also measured correctly across phase boundaries where
-\texttt{timestep} changes).  \textbf{Units:} \texttt{ss\_tol} is a per-second
-relative rate; e.g.\ \texttt{ss\_tol = 3.d-4} stops the run when all four
-indicators change by less than $3\times10^{-4}$ per second of simulated time.
+\paragraph{Phase-space weighting.}  $f$ lives in cylindrical velocity space, so
+every norm and moment is integrated against $\mathrm{d}^3v = 2\pi\vp\,
+\mathrm{d}\vp\,\mathrm{d}\vpa$.  Composite-trapezoidal weights on the (possibly
+non-uniform) grids are folded with the Jacobian into $W_\perp(i) =
+2\pi v_{\perp,i}\, w_\perp(i)$ and $W_\parallel(j) = w_\parallel(j)$.  Ignoring
+the Jacobian would over-weight the near-axis region, which holds almost no
+particles.  As a check that both the Jacobian and the non-uniform weights are
+right, the code verifies the exact identity
+$\sum_i W_\perp(i) = \pi(v_{\perp,N}^2 - v_{\perp,1}^2)$ at startup.
+
+\paragraph{Criteria.}  Writing $f^\mathrm{now}$ for the state at the current
+evaluation and $f^\mathrm{prev}$ for the one at the previous evaluation, and
+with $\mathrm{d}t_\mathrm{win} = t_\mathrm{now} - t_\mathrm{prev}$ the physical
+duration of the window, the test computes
+\begin{align}
+  \varepsilon      &= \frac{\Vert f^\mathrm{now} - f^\mathrm{prev}\Vert_2}
+                           {\mathrm{d}t_\mathrm{win}\,\Vert f^\mathrm{now}\Vert_2}, &
+  \varepsilon_\mathrm{tail} &= \frac{\Vert f^\mathrm{now} - f^\mathrm{prev}\Vert_T}
+                           {\mathrm{d}t_\mathrm{win}\,\Vert f^\mathrm{now}\Vert_T},
+  \label{eq:epsconv}
+\end{align}
+where $\Vert\cdot\Vert_2$ uses the weights above and $\Vert\cdot\Vert_T$ adds the
+tail weight $T = (1 + v^2/v_\mathrm{th}^2)^{k}$ ($k=2$).  The Jacobian-weighted
+norm is dominated by the bulk, so $\varepsilon_\mathrm{tail}$ is reported
+\emph{separately}: the interesting failure mode is $\varepsilon$ small while
+$\varepsilon_\mathrm{tail}$ is not, i.e.\ a converged bulk over a still-evolving
+tail.  The relative drift rates of the density, parallel flow and energy are
+computed over the same window; norm convergence is necessary but not sufficient,
+and a moment still drifting while $\varepsilon$ is small points to a flux or
+boundary-condition error at $\vp=0$ or at the domain edges rather than to a
+convergence failure.
+
+The run stops when \emph{all five} conditions hold simultaneously:
+$\varepsilon/\nu_\mathrm{ref} < \texttt{ss\_tol\_eps}$,
+$\varepsilon_\mathrm{tail}/\nu_\mathrm{ref} < \texttt{ss\_tol\_tail}$, and each
+of the three moment drifts $< \texttt{ss\_tol\_moment}$.
+
+\paragraph{Units.}  $\varepsilon$ has dimensions of inverse time, so it is only
+meaningful against a physical rate; it is divided by a reference rate
+$\nu_\mathrm{ref}$ (the code passes $1/\tau_{ie}$) before comparison, and the
+tolerances are therefore dimensionless fractions of that rate.  Because the
+window duration is taken from the simulation clock rather than a step count, the
+tolerances are \emph{independent of the time step} and remain correct across
+phase boundaries where \texttt{timestep} changes.
+
+\paragraph{Cost.}  One snapshot of $f$ is retained
+($n_\perp n_\parallel \times 8$~bytes, independent of $W$; the figure is printed
+at startup), and one full-grid pass is performed per window, i.e.\ $1/W$ of the
+cost of testing at every step.
+
+Diagnostics are printed and written once per window -- to
+\texttt{conv\_eps\_vs\_time.txt} (time, $\varepsilon$,
+$\varepsilon_\mathrm{tail}$) and \texttt{conv\_diag\_vs\_time.csv}
+(everything).  The first evaluation only lays down the reference state, so the
+first verdict comes at step $2W$.
 
 \subsection{Diagnostics and Output}
 
@@ -957,18 +1005,33 @@ i\_upwind & $0$ &
 \endlastfoot
 
 i\_ss\_check & $0$ &
-  Enable automatic convergence detection.
+  Enable automatic convergence detection (Section~\ref{sec:ssconv}).
   $0$: disabled (run for the full \texttt{ntimes} steps).
-  $-1$: stop early when all convergence criteria are met. \\[4pt]
+  $-1$: stop early when all five criteria are met; also writes
+  \texttt{conv\_eps\_vs\_time.txt} and \texttt{conv\_diag\_vs\_time.csv}. \\[4pt]
 
 n\_ss\_window & $50$ &
-  Rolling window width (number of time steps) over which the
-  convergence indicators $\Delta E/E$, $\Delta n/n$, $\Delta P/P$ are
-  evaluated. \\[4pt]
+  Window width $W$ (number of time steps).  The convergence test is evaluated
+  once every $W$ steps, comparing the current state with the one stored at the
+  previous evaluation and dividing by the physical duration the window spans.  A
+  wider window is less sensitive to short-term fluctuation and proportionally
+  cheaper, but coarsens the time resolution of the diagnostic and delays the
+  first verdict (which comes at step $2W$).  $W = 1$ evaluates every step. \\[4pt]
 
-ss\_tol & $10^{-3}$ &
-  Relative convergence tolerance.  All three indicators must fall below
-  this value for the run to stop. \\[4pt]
+ss\_tol\_eps & $10^{-3}$ &
+  Tolerance on $\varepsilon/\nu_\mathrm{ref}$, the Jacobian-weighted bulk
+  convergence rate, Eq.~\eqref{eq:epsconv}.  Dimensionless (a fraction of the
+  reference rate) and independent of \texttt{timestep}. \\[4pt]
+
+ss\_tol\_tail & $10^{-2}$ &
+  Tolerance on $\varepsilon_\mathrm{tail}/\nu_\mathrm{ref}$, the tail-weighted
+  rate.  Looser than \texttt{ss\_tol\_eps} by default because the tail is the
+  noisier, least-populated part of the distribution; tighten it when the physics
+  of interest lives in the tail. \\[4pt]
+
+ss\_tol\_moment & $10^{-3}$ &
+  Tolerance on the relative drift rates of density, parallel flow and energy
+  over the window.  All three must be below this value. \\[4pt]
 
 \end{longtable}
 
@@ -998,7 +1061,8 @@ values of $f$ along the four boundary slices of the domain.
 
 \subsection{Time Traces}
 
-Written at every time step during the simulation:
+Written at every time step during the simulation (except the convergence files,
+which are written once per 	exttt{n\_ss\_window}-step window):
 
 \begin{description}
   \item[\texttt{density\_vs\_time.txt}] Columns: time (s), $n(t)$ (m$^{-3}$).
@@ -1089,9 +1153,11 @@ default (off) values.
   core_frac = 3.8d-3,
 
   ! Steady-state convergence detection
-  i_ss_check  = -1,
-  n_ss_window = 50,
-  ss_tol      = 1.d-4,
+  i_ss_check     = -1,
+  n_ss_window    = 50,
+  ss_tol_eps     = 1.d-3,
+  ss_tol_tail    = 1.d-2,
+  ss_tol_moment  = 1.d-3,
 
   ! Output
   iplot_pow = -1,
