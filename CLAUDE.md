@@ -128,34 +128,10 @@ The two main solver calls use different argument orders than each other. In `mai
 
 ## Directory Layout
 
-```
-FP2D_QLRF_NL/                  ← project root; git repo lives here
-  CLAUDE.md
-  fp2d_plot.py
-  Fortran sources/              ← ALL .f90 source files live here (not inside FP2D_QLRF_NL/)
-  FP2D_QLRF_NL/                 ← Visual Studio project subfolder (contains .sln, .vfproj)
-    x64/
-      Debug/    ← Debug build output; exe + all .txt run outputs land here
-      Release/  ← Release build output
-  inputs/                       ← Fortran namelist input files (.dat); not tracked in git
-  Simulations/                  ← archived simulation results
-```
-
-**Key source files in `Fortran sources/`:**
-
-| File | Purpose |
-|------|---------|
-| `main-FP_Coll_2D.f90` | Entry point: reads namelist, assembles FP terms, calls solvers, writes 1D slices |
-| `shared_data.f90` | All shared modules: `shared_grid`, `shared_plasma`, `shared_timer`, `shared_FPterms`, `shared_RF` |
-| `TimeFP_7pt.f90` | Time-dependent solver for `isc ≥ 0` (linear/Maxwellian-SC); Crank-Nicolson or implicit |
-| `TimeFP_7pt_NL.f90` | Time-dependent solver for `isc = -1` (nonlinear self-collisions) |
-| `self_coll_max.f90` | Computes SC FP coefficients `sc**` for a Maxwellian background via `cblin` |
-| `fd_stencil_2d.f90` | 7-point Fornberg stencil; central routine called by all solvers |
-| `time_comps_mod.f90` | `time_energy(f, dens, teff=…)` and `time_density(f, dens)` — moment integrals |
-| `analysis.f90` | Post-time-loop analysis and additional output |
-| `pardiso_solver (2).f90` | MKL PARDISO wrapper (phased factorisation) |
-| `consts.f90` | Physical constants, fstix Maxwellian, initialisation |
-| `assemble_FP_terms.f90` | Fills `all**` arrays from `colin**`, `rf**` |
+All `.f90` sources live in `Fortran sources/` at the **project root** — not inside the
+nested `FP2D_QLRF_NL/` Visual Studio project folder (which holds the `.sln`/`.vfproj` and
+the `x64/Debug`, `x64/Release` build outputs). Run outputs land in whichever `x64/*`
+directory the exe is launched from.
 
 ## Fortran Internals
 
