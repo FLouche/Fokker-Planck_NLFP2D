@@ -629,10 +629,47 @@ and a moment still drifting while $\varepsilon$ is small points to a flux or
 boundary-condition error at $\vp=0$ or at the domain edges rather than to a
 convergence failure.
 
-The run stops when \emph{all five} conditions hold simultaneously:
+With the default \texttt{i\_conv\_shape = 0} the run stops when \emph{all five}
+conditions hold simultaneously:
 $\varepsilon/\nu_\mathrm{ref} < \texttt{ss\_tol\_eps}$,
 $\varepsilon_\mathrm{tail}/\nu_\mathrm{ref} < \texttt{ss\_tol\_tail}$, and each
 of the three moment drifts $< \texttt{ss\_tol\_moment}$.
+
+\paragraph{Amplitude vs shape (\texttt{i\_conv\_shape}).}  The rates above measure
+the change of $f$ \emph{including its amplitude}, which is the right thing when the
+run really does reach a steady state.  In a \emph{sourceless} run it is not: particles
+absorbed at the Dirichlet boundaries are never replaced, so once the VDF shape has
+settled $f$ keeps decaying as $\phi(v)\,e^{-t/\tau}$ with the shape frozen.  Then
+\begin{equation}
+  \varepsilon \;\longrightarrow\; \frac{e^{\Delta t_\mathrm{win}/\tau}-1}
+                                       {\Delta t_\mathrm{win}} \;\approx\; \frac{1}{\tau},
+\end{equation}
+a floor that no tolerance below $1/\tau$ can ever clear, and $\varepsilon$,
+$\varepsilon_\mathrm{tail}$ and the density and energy drifts all collapse onto that
+same value (the tell-tale signature of a pure rescaling).
+
+Setting \texttt{i\_conv\_shape = -1} selects the \emph{shape} criterion: each field is
+normalised to unit norm before differencing,
+\begin{equation}
+  \varepsilon_\mathrm{shape} =
+    \frac{1}{\Delta t_\mathrm{win}}
+    \left\Vert \frac{f^\mathrm{now}}{\Vert f^\mathrm{now}\Vert}
+             - \frac{f^\mathrm{prev}}{\Vert f^\mathrm{prev}\Vert} \right\Vert ,
+  \label{eq:epsshape}
+\end{equation}
+so a uniform rescaling $f^\mathrm{now} = c\,f^\mathrm{prev}$ gives exactly zero.  The
+moment tests then switch to the \emph{intensive} moments --- the parallel flow
+$u_\parallel$ and the mean energy per particle $E/n$, both unchanged by a uniform
+drain --- and the density drift is dropped, being pure amplitude.  All four rates are
+always computed and reported; \texttt{i\_conv\_shape} only selects which family the
+tolerances are applied to, and the log line is tagged \texttt{[amplitude]} or
+\texttt{[shape]} accordingly.
+
+Verified 2026-07-30 on a 60$\times$41 \texttt{isc = 2} RF case: the amplitude rates
+flattened at $\varepsilon \approx 2\times10^{-3}$ (the drain rate, with the density
+drift pinned at $1.73\times10^{-3}$) and the run never stopped, while
+$\varepsilon_\mathrm{shape}$ kept falling exponentially and reached
+$8.7\times10^{-5}$ at $t = 12.5$~s, where the shape criterion stopped the run.
 
 \paragraph{Units.}  $\varepsilon$ has dimensions of inverse time, so it is only
 meaningful against a physical rate; it is divided by a reference rate
@@ -649,8 +686,10 @@ cost of testing at every step.
 
 Diagnostics are printed and written once per window -- to
 \texttt{conv\_eps\_vs\_time.txt} (time, $\varepsilon$,
-$\varepsilon_\mathrm{tail}$) and \texttt{conv\_diag\_vs\_time.csv}
-(everything).  The first evaluation only lays down the reference state, so the
+$\varepsilon_\mathrm{tail}$, $\varepsilon_\mathrm{shape}$,
+$\varepsilon_\mathrm{tail,shape}$) and \texttt{conv\_diag\_vs\_time.csv}
+(those four rates, their ratios to $\nu_\mathrm{ref}$, the moments and all the
+drift rates).  The first evaluation only lays down the reference state, so the
 first verdict comes at step $2W$.
 
 \subsection{Diagnostics and Output}
@@ -1030,10 +1069,39 @@ ss\_tol\_tail & $10^{-2}$ &
   of interest lives in the tail. \\[4pt]
 
 ss\_tol\_moment & $10^{-3}$ &
-  Tolerance on the relative drift rates of density, parallel flow and energy
-  over the window.  All three must be below this value. \\[4pt]
+  Tolerance on the relative moment drift rates over the window.  Which moments
+  are tested depends on \texttt{i\_conv\_shape}: with $0$ the density, parallel
+  flow and energy; with $-1$ the intensive moments only, i.e.\ the parallel flow
+  and the mean energy per particle $E/n$. \\[4pt]
+
+i\_conv\_shape & $0$ &
+  Selects \emph{which family of rates the tolerances are applied to}
+  (Section~\ref{sec:ssconv}).  Both families are always computed and written out;
+  this flag changes only which ones are tested.
+
+  $0$ --- \emph{amplitude}.  The criterion uses $\varepsilon$ and
+  $\varepsilon_\mathrm{tail}$, Eq.~\eqref{eq:epsconv}, together with the drift
+  rates of $n$, $u_\parallel$ and $E$.  Five conditions in all.  This is the
+  correct choice when the run reaches a genuine steady state, e.g.\ when a beam
+  source balances the boundary losses.
+
+  $-1$ --- \emph{shape}.  $f$ is normalised to unit norm before differencing,
+  Eq.~\eqref{eq:epsshape}, so the criterion uses $\varepsilon_\mathrm{shape}$ and
+  $\varepsilon_\mathrm{tail,shape}$ together with the drift rates of the
+  \emph{intensive} moments $u_\parallel$ and $E/n$; the density drift is dropped,
+  being pure amplitude.  Four conditions in all.  Required for a
+  \emph{sourceless} run: particles absorbed at the Dirichlet boundaries are never
+  replaced, so $f$ decays as a frozen shape with falling amplitude and the
+  amplitude rates floor at the drain rate, which no tolerance below that rate can
+  ever clear. \\[4pt]
 
 \end{longtable}
+
+Convergence requires \emph{all} the selected conditions to be satisfied
+simultaneously at one evaluation.  If a run never stops, compare
+$\varepsilon$ with $\varepsilon_\mathrm{shape}$ in
+\texttt{conv\_eps\_vs\_time.txt}: if the former has flattened while the latter is
+still falling, the run is draining and needs \texttt{i\_conv\_shape = -1}.
 
 
 % ============================================================
@@ -1062,7 +1130,7 @@ values of $f$ along the four boundary slices of the domain.
 \subsection{Time Traces}
 
 Written at every time step during the simulation (except the convergence files,
-which are written once per 	exttt{n\_ss\_window}-step window):
+which are written once per \texttt{n\_ss\_window}-step window):
 
 \begin{description}
   \item[\texttt{density\_vs\_time.txt}] Columns: time (s), $n(t)$ (m$^{-3}$).
@@ -1071,6 +1139,14 @@ which are written once per 	exttt{n\_ss\_window}-step window):
   \item[\texttt{Teff\_vs\_time.txt}] Columns: time, $T_\mathrm{eff}$ (keV).
   \item[\texttt{Tn\_vs\_time.txt}] Columns: time, $T_n$ (keV) -- density-characteristic
         (cold-bulk) temperature; written for all runs.
+  \item[\texttt{conv\_eps\_vs\_time.txt}] Columns: time, $\varepsilon$,
+        $\varepsilon_\mathrm{tail}$, $\varepsilon_\mathrm{shape}$,
+        $\varepsilon_\mathrm{tail,shape}$ (s$^{-1}$) -- the convergence rates,
+        Eqs.~\eqref{eq:epsconv} and~\eqref{eq:epsshape}.  Written when
+        \texttt{i\_ss\_check = -1}, one row per \texttt{n\_ss\_window}-step window.
+  \item[\texttt{conv\_diag\_vs\_time.csv}] Full convergence history: the four rates
+        above, their ratios to $\nu_\mathrm{ref}$, the moments $n$, $u_\parallel$,
+        $E$, $E/n$, all four drift rates and the unweighted axis-row rate.
   \item[\texttt{power\_coll\_tot\_vs\_time.txt}] Total collisional power density (MW/m$^3$).
   \item[\texttt{power\_coll\_e\_vs\_time.txt}] Electron collisional power density.
   \item[\texttt{power\_coll\_ion$N$\_vs\_time.txt}] Ion $N$ collisional power density.
@@ -1158,6 +1234,7 @@ default (off) values.
   ss_tol_eps     = 1.d-3,
   ss_tol_tail    = 1.d-2,
   ss_tol_moment  = 1.d-3,
+  i_conv_shape   = 0,
 
   ! Output
   iplot_pow = -1,
