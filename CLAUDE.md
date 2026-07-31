@@ -100,7 +100,15 @@ Implements Crank-Nicolson (`icn=-1`, θ=0.5) or fully implicit (`icn≠-1`, θ=1
 ```
 The LHS `(I - θ·dt·L)` is factorised once at the start. Each step only applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`), builds the RHS, and calls `pardiso_solve_step` (phase 33 only).
 
-A particle-conservation rescaling (`fout = fout * npart / dens_tmp`) is applied each step when `isource=0` to correct numerical drift.
+**No particle-conservation rescaling is applied.** A `fout = fout * npart / dens_tmp`
+renormalisation exists but is commented out (`fstart = x_vec!*npart/dens_tmp`,
+`TimeFP_7pt.f90`), and with `isource=0` the loss term is off too (`taum = 0`,
+`consts.f90`). Nothing therefore counteracts particles absorbed at the Dirichlet
+boundaries, so a sourceless RF run drains: once the VDF shape has converged, `f` decays
+as a fixed shape with slowly falling amplitude. Verified 2026-07-30 on a 60×41 `isc=2`
+RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen. This puts a
+**floor** under the amplitude-based convergence rate `eps`; use `i_conv_shape=-1`
+(shape criterion) for such cases, or set `ss_tol_eps` above the drain rate.
 
 ### Namelist Parameters (key physics flags)
 | Parameter | Values | Effect |

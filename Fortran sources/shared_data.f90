@@ -106,6 +106,17 @@ integer :: n_ss_window = 50      ! SS test evaluated every n_ss_window steps; ra
 double precision :: ss_tol_eps    = 1.0d-3  ! tolerance on eps/nu_ref      (bulk L2 rate)
 double precision :: ss_tol_tail   = 1.0d-2  ! tolerance on eps_tail/nu_ref (tail-weighted)
 double precision :: ss_tol_moment = 1.0d-3  ! tolerance on the density/flow/energy drifts
+integer :: i_conv_shape = 0      ! convergence criterion (mod_conv_diag):
+                                 !  0: amplitude -- eps, eps_tail and the density/flow/energy
+                                 !     drifts.  Correct when f reaches a true steady state.
+                                 ! -1: SHAPE -- f is normalised to unit norm before
+                                 !     differencing, so a uniformly draining solution reads as
+                                 !     converged once its shape stops changing.  Use for
+                                 !     sourceless runs, where particles absorbed at the
+                                 !     Dirichlet boundaries put a floor under the amplitude
+                                 !     rate that eps can never fall below.  The moment tests
+                                 !     then use the INTENSIVE moments (u_par, E/n); the
+                                 !     density drift is skipped, being pure amplitude.
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip

@@ -128,7 +128,7 @@
 module mod_conv_diag
 
   use shared_grid,  only: nperp, npar, vperp, vpar
-  use shared_timer, only: outfile, n_ss_window, &
+  use shared_timer, only: outfile, n_ss_window, i_conv_shape, &
                           ss_tol_eps, ss_tol_tail, ss_tol_moment
 
   implicit none
@@ -143,16 +143,22 @@ module mod_conv_diag
 
   !--- Results of one step -----------------------------------------
   type :: conv_diag_t
-    real(dp) :: eps            = 0.0_dp   ! normalised convergence rate   [1/s]
+    real(dp) :: eps            = 0.0_dp   ! amplitude convergence rate    [1/s]
     real(dp) :: eps_ratio      = 0.0_dp   ! eps / nu_ref                  [-]
-    real(dp) :: eps_tail       = 0.0_dp   ! tail-weighted rate            [1/s]
+    real(dp) :: eps_tail       = 0.0_dp   ! tail-weighted amplitude rate  [1/s]
     real(dp) :: eps_tail_ratio = 0.0_dp   ! eps_tail / nu_ref             [-]
+    real(dp) :: eps_shape      = 0.0_dp   ! SHAPE rate (f normalised)     [1/s]
+    real(dp) :: eps_shape_ratio = 0.0_dp  ! eps_shape / nu_ref            [-]
+    real(dp) :: eps_tail_shape = 0.0_dp   ! tail-weighted shape rate      [1/s]
+    real(dp) :: eps_tail_shape_ratio = 0.0_dp
     real(dp) :: dens           = 0.0_dp   ! density                       [m^-3]
     real(dp) :: upar           = 0.0_dp   ! parallel flow velocity        [m/s]
     real(dp) :: energy         = 0.0_dp   ! kinetic energy density        [keV m^-3]
+    real(dp) :: emean          = 0.0_dp   ! mean energy per particle      [keV]
     real(dp) :: drift_dens     = 0.0_dp   ! relative drift rates          [1/s]
     real(dp) :: drift_upar     = 0.0_dp
     real(dp) :: drift_energy   = 0.0_dp
+    real(dp) :: drift_emean    = 0.0_dp   ! intensive: used by the shape criterion
     real(dp) :: axis_rate      = 0.0_dp   ! unweighted max-norm rate on i=1 [1/s]
     real(dp) :: dt_win         = 0.0_dp   ! physical duration of the window [s]
     logical  :: valid          = .false.  ! .true. only on an evaluation step
@@ -182,6 +188,10 @@ module mod_conv_diag
   real(dp), allocatable :: fchk(:,:)
   real(dp)              :: t_chk = 0.0_dp
   real(dp)              :: dens_chk = 0.0_dp, upar_chk = 0.0_dp, ener_chk = 0.0_dp
+  real(dp)              :: emean_chk = 0.0_dp
+  ! Norms of the checkpoint field, kept so the shape difference can be formed
+  ! without a third pass over the grid.
+  real(dp)              :: nrm_chk = 0.0_dp, nrm_tail_chk = 0.0_dp
 
   !--- Output files ------------------------------------------------
   ! 519: conv_eps_vs_time.txt -- the epsilon time trace (time, eps, eps_tail),
@@ -345,12 +355,15 @@ contains
     if (present(write_hist)) then
       if (write_hist) then
         open(eps_unit, file=TRIM(outfile('conv_eps_vs_time.txt')), status='unknown')
-        write(eps_unit,'(A)') '# time[s]   eps[1/s]   eps_tail[1/s]'
+        write(eps_unit,'(A)') &
+          '# time[s]   eps[1/s]   eps_tail[1/s]   eps_shape[1/s]   eps_tail_shape[1/s]'
         eps_open = .true.
 
         open(hist_unit, file=TRIM(outfile('conv_diag_vs_time.csv')), status='unknown')
-        write(hist_unit,'(A)') 'time,dt,eps,eps_ratio,eps_tail,eps_tail_ratio,' // &
-                               'dens,upar,energy,drift_dens,drift_upar,drift_energy,axis_rate'
+        write(hist_unit,'(A)') 'time,dt_win,eps,eps_ratio,eps_tail,eps_tail_ratio,'      // &
+                               'eps_shape,eps_shape_ratio,eps_tail_shape,'                // &
+                               'eps_tail_shape_ratio,dens,upar,energy,emean,'             // &
+                               'drift_dens,drift_upar,drift_energy,drift_emean,axis_rate'
         hist_open = .true.
       end if
     end if
@@ -392,9 +405,10 @@ contains
     real(dp) :: s_dnorm, c_dnorm, s_fnorm, c_fnorm
     real(dp) :: s_dtail, c_dtail, s_ftail, c_ftail
     real(dp) :: s_dens,  c_dens,  s_mom,   c_mom,  s_ener, c_ener
+    real(dp) :: s_shape, c_shape, s_shp_t, c_shp_t, dg
     real(dp) :: nrm_df, nrm_f, nrm_df_t, nrm_f_t
-    real(dp) :: dens, upar, ener, amax_df, amax_f
-    real(dp) :: dens_old, upar_old, ener_old
+    real(dp) :: dens, upar, ener, emean, amax_df, amax_f
+    real(dp) :: dens_old, upar_old, ener_old, emean_old
 
     d = conv_diag_t()          ! default-initialised: valid = .false.
 
@@ -456,24 +470,68 @@ contains
     ! Energy density in keV m^-3, using the codebase convention
     ! (0.5 m_p A v^2 converted to keV; cf. time_energy in time_comps_mod).
     ener = 0.5_dp * pmass * aa_ref() * s_ener / kev_in_J
+    if (abs(dens) > 0.0_dp) then
+      emean = ener / dens            ! intensive: unchanged by a uniform rescaling
+    else
+      emean = 0.0_dp
+    end if
 
     d%dens   = dens
     d%upar   = upar
     d%energy = ener
+    d%emean  = emean
+
+    !--- Shape difference (second pass) ----------------------------
+    ! Normalising each field to unit norm before differencing removes any
+    ! uniform rescaling of f: if f_now = c*f_prev the two normalised
+    ! fields are identical and the rate is exactly zero.  That is the
+    ! point -- in a sourceless run, particles absorbed at the Dirichlet
+    ! boundaries make f decay as a fixed shape with falling amplitude, so
+    ! the amplitude rate eps has a floor at the drain rate and can never
+    ! reach a small tolerance, while the shape rate goes to zero.
+    !
+    ! The difference is formed DIRECTLY rather than via the algebraic
+    ! identity ||a-b||^2 = 2 - 2<a,b> (for unit vectors): near
+    ! convergence <a,b> -> 1 and that form loses all its significant
+    ! digits to cancellation, exactly where the answer matters most.
+    s_shape = 0.0_dp; c_shape = 0.0_dp
+    s_shp_t = 0.0_dp; c_shp_t = 0.0_dp
+    if (have_chk .and. nrm_f > 0.0_dp .and. nrm_chk > 0.0_dp) then
+      do i = 1, nperp
+        do j = 1, npar
+          w  = wperp(i) * wpar(j)
+          dg = f_new(i,j)/nrm_f - fchk(i,j)/nrm_chk
+          call kadd(s_shape, c_shape, w * dg * dg)
+        end do
+      end do
+    end if
+    if (have_chk .and. nrm_f_t > 0.0_dp .and. nrm_tail_chk > 0.0_dp) then
+      do i = 1, nperp
+        do j = 1, npar
+          w  = wperp(i) * wpar(j) * tailw(i,j)
+          dg = f_new(i,j)/nrm_f_t - fchk(i,j)/nrm_tail_chk
+          call kadd(s_shp_t, c_shp_t, w * dg * dg)
+        end do
+      end do
+    end if
 
     ! Read the previous checkpoint, then refresh it with the current
     ! state.  Order matters: the checkpoint is both the comparison state
     ! and this evaluation's destination.
-    dens_old = dens_chk
-    upar_old = upar_chk
-    ener_old = ener_chk
-    dt_win   = time - t_chk
+    dens_old  = dens_chk
+    upar_old  = upar_chk
+    ener_old  = ener_chk
+    emean_old = emean_chk
+    dt_win    = time - t_chk
 
-    fchk     = f_new
-    t_chk    = time
-    dens_chk = dens
-    upar_chk = upar
-    ener_chk = ener
+    fchk         = f_new
+    t_chk        = time
+    dens_chk     = dens
+    upar_chk     = upar
+    ener_chk     = ener
+    emean_chk    = emean
+    nrm_chk      = nrm_f
+    nrm_tail_chk = nrm_f_t
 
     d%dt_win = dt_win
 
@@ -491,6 +549,14 @@ contains
     d%eps_tail = nrm_df_t / (dt_win * (nrm_f_t + eps_abs_m))
     d%eps_ratio      = d%eps      / nu_ref_m
     d%eps_tail_ratio = d%eps_tail / nu_ref_m
+
+    ! The normalised fields have unit norm by construction, so the shape
+    ! difference needs no further division by ||f|| -- it is already a
+    ! pure rate.
+    d%eps_shape      = sqrt(max(s_shape, 0.0_dp)) / dt_win
+    d%eps_tail_shape = sqrt(max(s_shp_t, 0.0_dp)) / dt_win
+    d%eps_shape_ratio      = d%eps_shape      / nu_ref_m
+    d%eps_tail_shape_ratio = d%eps_tail_shape / nu_ref_m
 
     ! Density and energy are positive-definite and O(1) in their own units,
     ! so the bare eps_abs floor is enough for them.
@@ -510,6 +576,11 @@ contains
     d%drift_upar   = abs(upar - upar_old) &
                      / (dt_win * (abs(upar) + max(eps_abs_m, 1.0d-3 * vth_m)))
 
+    ! Mean energy per particle: intensive, so unaffected by a uniform
+    ! drain.  This is the energy test the shape criterion uses in place of
+    ! the extensive energy density.
+    d%drift_emean  = abs(emean - emean_old) / (dt_win * (abs(emean) + eps_abs_m))
+
     d%axis_rate = amax_df / (dt_win * (amax_f + eps_abs_m))
 
     d%valid = .true.
@@ -523,6 +594,18 @@ contains
   ! a function so the module's only compile-time coupling to the plasma
   ! data is this one line.
   !--------------------------------------------------------------------
+  !--------------------------------------------------------------------
+  ! crit_name — which criterion the tolerances are applied to, for logs.
+  !--------------------------------------------------------------------
+  function crit_name() result(s)
+    character(len=9) :: s
+    if (i_conv_shape == -1) then
+      s = 'shape'
+    else
+      s = 'amplitude'
+    end if
+  end function crit_name
+
   function aa_ref() result(a)
     use shared_plasma, only: aa
     real(dp) :: a
@@ -540,11 +623,25 @@ contains
     ok = .false.
     if (.not. d%valid) return
 
-    ok =       (d%eps_ratio      <  tol_m)        &
-         .and. (d%eps_tail_ratio <  tol_tail_m)   &
-         .and. (d%drift_dens     <  tol_moment_m) &
-         .and. (d%drift_upar     <  tol_moment_m) &
-         .and. (d%drift_energy   <  tol_moment_m)
+    if (i_conv_shape == -1) then
+      ! SHAPE criterion.  Every quantity tested here is invariant under a
+      ! uniform rescaling of f, so a solution draining through the
+      ! boundaries at a fixed shape reads as converged.  The density
+      ! drift is deliberately NOT tested: it is pure amplitude, and in a
+      ! sourceless run it never falls below the drain rate.
+      ok =       (d%eps_shape_ratio      <  tol_m)        &
+           .and. (d%eps_tail_shape_ratio <  tol_tail_m)   &
+           .and. (d%drift_upar           <  tol_moment_m) &
+           .and. (d%drift_emean          <  tol_moment_m)
+    else
+      ! AMPLITUDE criterion (default): correct when the run really does
+      ! reach a steady state, e.g. with a source balancing the losses.
+      ok =       (d%eps_ratio      <  tol_m)        &
+           .and. (d%eps_tail_ratio <  tol_tail_m)   &
+           .and. (d%drift_dens     <  tol_moment_m) &
+           .and. (d%drift_upar     <  tol_moment_m) &
+           .and. (d%drift_energy   <  tol_moment_m)
+    end if
 
   end function conv_diag_converged
 
@@ -561,16 +658,23 @@ contains
       ! eps and eps_tail are the raw rates [1/s]; the /nu columns are the
       ! same numbers made dimensionless against the reference rate, which
       ! is what the tolerances are actually applied to.
-      write(*,'(A,ES11.4,A,ES10.3,A,ES10.3,A,ES9.2,A,ES9.2,A,ES9.2,A,ES9.2,A,ES9.2,A,ES9.2)') &
+      ! Both families are always shown so the amplitude floor of a
+      ! draining run is visible next to the shape rate that ignores it;
+      ! the tag says which family the tolerances are actually applied to.
+      write(*,'(A,ES11.4,A,ES10.3,A,ES10.3,A,ES10.3,A,ES10.3,A)') &
         '  [conv] t=', time,                    &
-        ' s  eps=',         d%eps,              &
-        ' /s  epsT=',       d%eps_tail,         &
-        ' /s  eps/nu=',     d%eps_ratio,        &
-        '  epsT/nu=',       d%eps_tail_ratio,   &
-        '  dn=',            d%drift_dens,       &
+        ' s   eps=',        d%eps,              &
+        '  epsT=',          d%eps_tail,         &
+        '  epsS=',          d%eps_shape,        &
+        '  epsTS=',         d%eps_tail_shape,   &
+        ' /s'
+      write(*,'(A,ES9.2,A,ES9.2,A,ES9.2,A,ES9.2,A,ES9.2,A,A)') &
+        '         dn=',     d%drift_dens,       &
         '  du=',            d%drift_upar,       &
         '  dE=',            d%drift_energy,     &
-        '  axis=',          d%axis_rate
+        '  dEn=',           d%drift_emean,      &
+        '  axis=',          d%axis_rate,        &
+        '   [', trim(crit_name())//']'
     else
       write(*,'(A,ES11.4,A,I0,A)') &
         '  [conv] t=', time, ' s  (first checkpoint laid down; next ', &
@@ -581,14 +685,16 @@ contains
     ! the first VALID step: a leading eps=0 row would otherwise plot as a
     ! spurious dropout on the log axis fp2d_plot.py uses for it.
     if (eps_open .and. d%valid) then
-      write(eps_unit,'(3(1X,ES15.7))') time, d%eps, d%eps_tail
+      write(eps_unit,'(5(1X,ES15.7))') &
+        time, d%eps, d%eps_tail, d%eps_shape, d%eps_tail_shape
     end if
 
     if (hist_open) then
-      write(hist_unit,'(ES15.7,12(",",ES15.7))') &
+      write(hist_unit,'(ES15.7,18(",",ES15.7))') &
         time, d%dt_win, d%eps, d%eps_ratio, d%eps_tail, d%eps_tail_ratio, &
-        d%dens, d%upar, d%energy, &
-        d%drift_dens, d%drift_upar, d%drift_energy, d%axis_rate
+        d%eps_shape, d%eps_shape_ratio, d%eps_tail_shape, d%eps_tail_shape_ratio, &
+        d%dens, d%upar, d%energy, d%emean, &
+        d%drift_dens, d%drift_upar, d%drift_energy, d%drift_emean, d%axis_rate
     end if
 
   end subroutine conv_diag_log

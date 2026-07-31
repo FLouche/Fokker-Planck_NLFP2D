@@ -156,8 +156,10 @@ FILE_META = {
     # the diagnostic failure mode is eps small while eps_tail is not.
     "conv_eps_vs_time":             {"ptype": "ts2", "ylabel": "ε  (1/s)",
                                      "title":  "Convergence rate ε vs time",
-                                     "labels": ["ε  (bulk, Jacobian-weighted)",
-                                                "ε_tail  (tail-weighted)"],
+                                     "labels": ["ε  (amplitude, Jacobian-weighted)",
+                                                "ε_tail  (amplitude, tail-weighted)",
+                                                "ε_shape  (f normalised)",
+                                                "ε_tail,shape  (f normalised, tail)"],
                                      "logy": True},
     # Coulomb logarithms (data files behind the coulomb_log_all_vs_time plot).
     # Listed here so 'compare' can overlay them; still skipped in plot mode

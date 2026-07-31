@@ -192,7 +192,7 @@ namelist /INPUT/ casename, &
                 kpar,frek,delta_RF,b0,nharm, &
                 icn, ntimes, timestep, iold, istart, isc, core_frac, &
                 i_ss_check, n_ss_window, &
-                ss_tol_eps, ss_tol_tail, ss_tol_moment, &
+                ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, idiag, notxt, &
                 i_upwind
 

@@ -235,6 +235,22 @@ program test_conv_diag
   call window_run(f0, 10, 1.0d-3, 3.0d-2, nfail)
 
   !===================================================================
+  ! 7 — shape variant under a pure drain.
+  ! Reproduces the failure mode found in the sourceless RF run: f decays
+  ! as a FIXED shape with falling amplitude, f(t) = phi(v) exp(-t/tau).
+  ! The amplitude rate eps must then sit at the drain rate 1/tau and stay
+  ! there, while the shape rate eps_shape must be ~0 (machine epsilon),
+  ! since normalising removes the amplitude entirely.  Without this the
+  ! run could never satisfy a tolerance below 1/tau.
+  !===================================================================
+  call conv_diag_finalize()
+  n_ss_window = 5
+  call conv_diag_init(vth, nu_ref, k_tail=2, tol=1.0d-3, tol_tail=1.0d-2, &
+                      tol_moment=1.0d-3)
+  call maxwellian(f0, 1.0d19, vth)
+  call drain_run(f0, 5, 1.0d-2, 1.7393d-3, nfail)
+
+  !===================================================================
   write(*,'(A)') '======================================================'
   if (nfail == 0) then
     write(*,'(A)') ' ALL TESTS PASSED'
@@ -398,6 +414,51 @@ contains
       nf = nf + 1
     end if
   end subroutine window_run
+
+  ! Pure exponential drain at rate gam: f(t) = fbase exp(-gam t).  Shape
+  ! is constant, so eps -> gam and eps_shape -> 0.
+  subroutine drain_run(fbase, w, dt, gam, nf)
+    real(dp), intent(in)    :: fbase(nperp,npar), dt, gam
+    integer,  intent(in)    :: w
+    integer,  intent(inout) :: nf
+    real(dp) :: fn(nperp,npar)
+    type(conv_diag_t) :: dd
+    real(dp) :: t, worst_amp, worst_shape, expect
+    integer  :: n
+    worst_amp = 0.0_dp; worst_shape = 0.0_dp
+    write(*,'(A)') ''
+    write(*,'(A,ES9.2,A)') '  7  pure drain at rate ', gam, ' /s (fixed shape)'
+    do n = 1, 6*w
+      t  = n*dt
+      fn = fbase * exp(-gam*t)
+      call conv_diag_step(n, t, fn, dd)
+      if (dd%valid) then
+        ! amplitude rate: ||df||/(dt_win ||f_now||) with f_now the SMALLER
+        ! of the pair, so it reads (exp(gam*dt_win)-1)/dt_win
+        expect      = (exp(gam*w*dt) - 1.0_dp) / (w*dt)
+        worst_amp   = max(worst_amp, abs(dd%eps - expect)/expect)
+        worst_shape = max(worst_shape, dd%eps_shape)
+      end if
+    end do
+    if (worst_amp <= 1.0d-6) then
+      write(*,'(A,ES9.2,A)') '      PASS  eps sits at the drain rate (rel.err ', &
+                             worst_amp, ')'
+    else
+      write(*,'(A,ES9.2,A)') '      FAIL  eps not at the drain rate (rel.err ', &
+                             worst_amp, ')'
+      nf = nf + 1
+    end if
+    ! eps_shape should be at round-off, i.e. utterly negligible next to
+    ! the amplitude rate it has to see through.
+    if (worst_shape <= 1.0d-10 * gam) then
+      write(*,'(A,ES9.2,A)') '      PASS  eps_shape ~ 0 despite the drain (max ', &
+                             worst_shape, ' /s)'
+    else
+      write(*,'(A,ES9.2,A)') '      FAIL  eps_shape polluted by the drain (max ', &
+                             worst_shape, ' /s)'
+      nf = nf + 1
+    end if
+  end subroutine drain_run
 
   subroutine check(label, err, tol, nf)
     character(len=*), intent(in)    :: label
