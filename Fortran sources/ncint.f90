@@ -39,12 +39,40 @@ integer i,j
 s=0.d0
 
 ! Compute 2π ∫∫ f * vperp * dvperp * dvpar
- 
-DO i = 1, nperp-1
-    dvp_local = vperp(i+1) - vperp(i)   ! works for any grid
+!
+! v⊥ : trapezoidal rule on an arbitrary (possibly non-uniform) grid — each node
+!      carries half the span of its two adjacent intervals.
+!
+!      This replaces a left-endpoint RECTANGLE rule,
+!          do i = 1, nperp-1;  s = s + f(i,j)*(vperp(i+1)-vperp(i))*dvpar
+!      which is only 1st-order accurate when the v⊥ grid is non-uniform.  On a
+!      UNIFORM grid, with the integrand vanishing at both ends, the rectangle
+!      sum coincides with the trapezoidal sum, so the defect was invisible for
+!      ising=0 and appeared only for ising=±1.
+!
+!      It matters because time_density calls this routine and every solver
+!      renormalises its solution through it (fout = fout*npart/dens_tmp), so the
+!      quadrature error became a systematic AMPLITUDE bias on f: measured at
+!      3.8% (ising=1) and 5.9% (ising=-1) at nperp=31, falling only as O(h)
+!      (1.5% at nperp=121 on the two-domain grid).
+!
+! v∥ : uniform grid; the j=2..npar-1 sum already IS the trapezoidal rule,
+!      because f vanishes on the two Dirichlet boundaries j=1 and j=npar.
+
+DO i = 1, nperp
+
+    IF (i == 1) THEN
+        dvp_local = 0.5d0*(vperp(2) - vperp(1))
+    ELSE IF (i == nperp) THEN
+        dvp_local = 0.5d0*(vperp(nperp) - vperp(nperp-1))
+    ELSE
+        dvp_local = 0.5d0*(vperp(i+1) - vperp(i-1))
+    END IF
+
     DO j = 2, npar-1                                ! skip Dirichlet boundaries
         s = s + f(i,j) * dvp_local * dvpar
     END DO
+
 END DO
 
 !
