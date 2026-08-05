@@ -30,9 +30,27 @@ CONTAINS
     DOUBLE PRECISION :: dvp_local, pi, twopi
     INTEGER :: iv, imu
 
+    ! v⊥ trapezoidal rule on an arbitrary (possibly non-uniform) grid: each
+    ! node carries half the span of its two adjacent intervals.  This routine
+    ! duplicates the quadrature of ncint_2D rather than calling it, so the two
+    ! must be kept in step — both previously used a left-endpoint RECTANGLE
+    ! rule, which is only 1st-order accurate when the v⊥ grid is non-uniform.
+    !
+    ! This copy is the one that matters most: every solver renormalises its
+    ! solution through it (fout = fout*npart/dens_tmp), so its error was a
+    ! systematic AMPLITUDE bias on f for ising=±1.
+    !
+    ! v∥ needs no change: the imu=2..npar-1 sum already IS the trapezoidal rule,
+    ! because f vanishes on the Dirichlet boundaries imu=1 and imu=npar.
     dens = 0.d0
-    DO iv = 1, nperp-1
-      dvp_local = vperp(iv+1) - vperp(iv)
+    DO iv = 1, nperp
+      IF (iv == 1) THEN
+        dvp_local = 0.5d0*(vperp(2) - vperp(1))
+      ELSE IF (iv == nperp) THEN
+        dvp_local = 0.5d0*(vperp(nperp) - vperp(nperp-1))
+      ELSE
+        dvp_local = 0.5d0*(vperp(iv+1) - vperp(iv-1))
+      END IF
       DO imu = 2, npar-1
         dens = dens + twopi * f(iv,imu) * vperp(iv) &
                             * dvp_local * dvpar

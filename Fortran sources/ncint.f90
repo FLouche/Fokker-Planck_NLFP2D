@@ -50,11 +50,18 @@ s=0.d0
 !      sum coincides with the trapezoidal sum, so the defect was invisible for
 !      ising=0 and appeared only for ising=±1.
 !
-!      It matters because time_density calls this routine and every solver
-!      renormalises its solution through it (fout = fout*npart/dens_tmp), so the
-!      quadrature error became a systematic AMPLITUDE bias on f: measured at
-!      3.8% (ising=1) and 5.9% (ising=-1) at nperp=31, falling only as O(h)
-!      (1.5% at nperp=121 on the two-domain grid).
+!      NOTE: time_density (time_comps_mod.f90) does NOT call this routine — it
+!      carries its own copy of the same quadrature, and that copy is the one in
+!      the renormalisation path (fout = fout*npart/dens_tmp).  Both were fixed
+!      together and must be kept in step.
+!
+!      The bias this removes was measured against an accurate integration of
+!      the same fstix: 3.8% (ising=1) and 5.9% (ising=-1) at nperp=31, falling
+!      only as O(h) (1.5% at nperp=121 on the two-domain grid); ising=0 is
+!      unaffected at the 1e-6 level.
+!
+!      This routine feeds the analysis moments, the beam-source density, the
+!      fstix renormalisation in consts.f90, and the power/momentum diagnostics.
 !
 ! v∥ : uniform grid; the j=2..npar-1 sum already IS the trapezoidal rule,
 !      because f vanishes on the two Dirichlet boundaries j=1 and j=npar.
