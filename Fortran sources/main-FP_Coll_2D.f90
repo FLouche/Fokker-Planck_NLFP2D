@@ -15,10 +15,47 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 2.6 - 6th August 2026 (FL)
+
+    ! Quadrature and normalisation corrections.  RESULTS MOVE: ~0.1% for any case
+    !   with electron collisions, and up to ~6% in amplitude for ising=+-1 runs.
+    !   Uniform-grid (ising=0) results are unchanged by the quadrature work.
+    !
+    !  1) ncint_2D used a left-endpoint RECTANGLE rule in vperp.  On a uniform
+    !     grid, with the integrand vanishing at both ends, that coincides with
+    !     the trapezoidal rule, so the defect was invisible for ising=0 and only
+    !     appeared for ising=+-1, where it is 1st order.  It is now composite
+    !     SIMPSON (4th order) in both directions, on arbitrary grids.
+    !     time_density carried a second, independent copy of the same rule and
+    !     now calls ncint_2D, so the quadrature has one definition and one order.
+    !     This matters beyond diagnostics: every solver renormalises through it
+    !     (fout = fout*npart/dens_tmp), so the quadrature order caps the ABSOLUTE
+    !     accuracy of f.  Measured against an analytic Maxwellian at 241x241 the
+    !     amplitude error fell from 8.2e-5 to 1.4e-9.
+    !
+    !  2) vt(1) is now derived from the ion constant and the mass ratio.  The
+    !     literals 4.19d5, 9.79d3 and maonmb(1)=1836.2 were rounded
+    !     independently and implied (4.19d5/9.79d3)^2 = 1831.7 for the mass
+    !     ratio: a 0.243% inconsistency, which left the ELECTRON operator's
+    !     equilibrium a Maxwellian at a 0.24%-shifted temperature rather than at
+    !     Te.  vt(1) moves +0.122%; nothing else changes.
+    !
+    !  3) fstix.dat is written AFTER fstix is renormalised to npart on the grid.
+    !     It used to be written before, so the file held the continuum-normalised
+    !     Maxwellian while every computed solution is grid-normalised, and any
+    !     comparison against it inherited the quadrature error.
+    !
+    !  4) New end-of-run DOMAIN ADEQUACY CHECK (no namelist flag; always
+    !     printed).  Reports f(wall)/f(peak) = exp(-(V/vth)^2/2) for both
+    !     directions at the FINAL, heated temperature, and the |v|max needed for
+    !     a 1e-12 target.  A case can be well sized for its initial Maxwellian
+    !     and badly under-sized for the distribution it evolves into, and no
+    !     amount of grid refinement reduces that error.
+
     ! Version 2.5 - 30th July 2026 (FL)
-    
-    ! Convergence in time assessed with L2 norm:  we added a Jacobian-weighted convergence 
-    !      diagnostics module (mod_conv_diag) 
+
+    ! Convergence in time assessed with L2 norm:  we added a Jacobian-weighted convergence
+    !      diagnostics module (mod_conv_diag)
     
     ! Version 2.4 - 28th July 2026 (FL)
     
