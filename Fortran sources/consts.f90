@@ -66,7 +66,21 @@ do ib=1,nbulk
 
 	if(ib == 1) then
 
-		vt(ib)=4.19d5*dsqrt(t(ib))
+		! The linearised operator annihilates exp(-v^2/2 vth_a^2) only when
+		! vt(b)^2 / maonmb(b) == vth_a^2 = (9.79d3)^2 * T/aa.  On the ion
+		! branch below the same 9.79d3 appears on both sides and cancels
+		! identically.  On the electron branch it did not: the literal 4.19d5
+		! implies (4.19d5/9.79d3)^2 = 1831.7 for the mass ratio, while
+		! maonmb(1) uses 1836.2 -- a 0.243% inconsistency, which left the
+		! electron operator's equilibrium a Maxwellian at 0.24%-shifted
+		! temperature instead of Te (measured: continuous residual L*M/M ~ 2e-3
+		! for electrons, 1e-16 for deuterons).
+		!
+		! Deriving sqrt(e/me) from the ion constant and the mass ratio makes
+		! the identity exact by construction.  Numerically this is 4.19503d5
+		! against the previous 4.19d5, a +0.12% change to the electron thermal
+		! velocity only; every other use of 9.79d3 in the code is untouched.
+		vt(ib)=9.79d3*dsqrt(1.8362d3)*dsqrt(t(ib))
         
         call coulomb_log_ae(ne, za, t(1), lnae)
 
