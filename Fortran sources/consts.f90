@@ -174,21 +174,17 @@ write(77,81) teff*1.d-3
 
 cinit=npart/(2.d0*pi*vteff**2)**1.5d0
 
-open(40, file=TRIM(outfile('fstix.dat')),status='unknown')
 do i=1,nperp
     do j=1,npar
         arg=(vpar(j)**2+vperp(i)**2)/(2.d0*vteff**2)
         fstix(i,j)=cinit*dexp(-arg)
-        write(40,*) vperp(i),vpar(j),fstix(i,j)
     enddo
 enddo
-close(40)
 
 ! Renormalise fstix to exactly npart on the numerical grid.
 ! The analytical cinit gives the correct continuous integral, but the
-! discretised quadrature (non-uniform vperp grid + Simpson weights) may
-! differ by a small amount.  Rescaling here ensures time_density returns
-! exactly npart at t=0 for any grid configuration.
+! discretised quadrature may differ by a small amount.  Rescaling here ensures
+! time_density returns exactly npart at t=0 for any grid configuration.
 block
     double precision :: fstix_dens
     double precision :: fint_tmp(nperp,npar)
@@ -201,6 +197,21 @@ block
     call ncint_2d(fint_tmp, fstix_dens)
     if (fstix_dens > 0.d0) fstix = fstix * npart / fstix_dens
 end block
+
+! fstix.dat is written AFTER the renormalisation, so the file holds the same
+! array the solver uses.  It used to be written before, which meant the file
+! carried the continuum-normalised Maxwellian while every computed solution was
+! grid-normalised through fout = fout*npart/dens_tmp.  Any comparison against
+! the file therefore inherited the quadrature's own error as a spurious
+! amplitude offset -- measured at 8.2e-5 on a 241x241 uniform grid, and
+! converging only at the order of the quadrature rather than of the scheme.
+open(40, file=TRIM(outfile('fstix.dat')),status='unknown')
+do i=1,nperp
+    do j=1,npar
+        write(40,*) vperp(i),vpar(j),fstix(i,j)
+    enddo
+enddo
+close(40)
 !
 !===================================================================
 
