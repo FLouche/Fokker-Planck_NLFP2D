@@ -188,8 +188,9 @@ double precision start_time,end_time
 !           +2: Maxwellian background at varying Teff (energy-weighted; starts at Tstix)
 !           +3: Maxwellian SC background at the density-characteristic (cold-bulk)
 !          temperature Tn, from a log-slope fit of ln(f) vs v^2 over the thermal
-!          core (starts at Tstix). core_frac (namelist, default 3.8d-3) sets the
-!          core threshold f > core_frac*max(f); 3.8d-3 calibrates isc=3 to isc=-1.
+!          core (starts at Tstix). core_frac (namelist, default 4.0d-3) sets the
+!          core threshold f > core_frac*max(f); 4.0d-3 calibrates isc=3 to isc=-1
+!          on JET RF case5 (0.69% RMS in Teff). Tn > Teff signals it is too low.
 !  ising: homogeneity of the grid in vperp:
 !            0: homogeneous grid
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
@@ -238,9 +239,24 @@ namelist /INPUT/ casename, &
 !write(*,*) 'Read namelist'
 
 ! Default for the isc=3 Tn log-slope core fraction (overridable via namelist).
-! 3.8d-3 calibrates isc=3 to the rigorous isc=-1 reference (JET RF case5:
-! Teff ~43.8 keV, grid-independent); see SC_models_grid_convergence report.
-!core_frac = 3.8d-3
+! This assignment MUST stay above read(5,INPUT) so a namelist value overrides
+! it.  It was commented out, and core_frac has no initialiser in shared_data
+! either, so any isc=3 run whose namelist omitted core_frac read an undefined
+! value -- silently, since the variable is only ever used as a threshold.
+!
+! 4.0d-3 calibrates isc=3 to the rigorous isc=-1 reference on JET RF case5
+! (200x200, 50% H minority, N=2, 0.588 MW/m^3): Teff = 43.52 keV against the
+! reference 43.81 keV, i.e. 0.69% RMS over the trace and 0.67% on the final
+! value.  A 14-point scan over [0, 0.1] selects it on both measures; a parabola
+! through the minimum puts the true optimum at 4.16d-3.  The previous 3.8d-3
+! gives 1.93% / 2.34% on the same case.  See Benchmark/JET-RF/isc_report.
+!
+! The basin is narrow: only [3.8d-3, 4.0d-3] lies within 5% of the reference,
+! and +-25% in core_frac moves Teff by 10-30%.  The left flank is the steeper,
+! so err high rather than low.  Too low a value lets the RF tail into the
+! log-slope fit and Tn rises ABOVE Teff, which is the diagnostic that the model
+! is outside its regime -- worth checking in any isc=3 run.
+core_frac = 4.0d-3
 
 read(5,INPUT)
 

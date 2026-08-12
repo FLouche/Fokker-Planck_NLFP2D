@@ -142,7 +142,8 @@ CONTAINS
     DOUBLE PRECISION, INTENT(OUT) :: Tn          ! [keV]
 
     DOUBLE PRECISION, PARAMETER :: cvth = 9.79d3 ! sqrt(e/m_p) [m/s per sqrt(eV/amu)]
-    ! core_frac (namelist, default 1e-2): fit only the bulk core, f > core_frac*max(f)
+    ! core_frac (namelist, default 4.0d-3 set in main): fit only the bulk core,
+    ! f > core_frac*max(f)
     DOUBLE PRECISION :: fmax, fcore, w, x, y, vth2, slope
     DOUBLE PRECISION :: sw, swx, swy, swxx, swxy, xbar, ybar, denom
     INTEGER :: iv, ip
