@@ -10,8 +10,10 @@
 !*     added to all**_lin to form the total operator for that step. *
 !*   - aa_L and aa_lhs are rebuilt each step; phases 22+33 are     *
 !*     called every step via pardiso_solve_step(a_changed=.TRUE.).  *
-!*   - sum_phi (phi-distance kernel) is allocated and computed     *
-!*     once before the time loop via distance_v_gauss_legendre.    *
+!*   - the phi-distance kernel is computed once before the time    *
+!*     loop and applied in COMPRESSED form by mod_phi_kernel; it   *
+!*     used to be expanded into the dense sum_phi (11.9 GiB at     *
+!*     200x200, streamed from RAM on every step).                  *
 !*                                                                 *
 !*   Version 1.1 - F. Louche                                       *
 !*******************************************************************
@@ -43,6 +45,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   USE time_comps_mod
   USE assemble_FP_lin
   USE coulomb_log_mod
+  USE mod_phi_kernel
 
   IMPLICIT NONE
 
@@ -93,7 +96,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  !--- phi-distance kernel cache (sum_phi-CASENAME.dat) -------------
+  !--- phi-distance kernel cache (phi_kern-CASENAME.dat) ------------
   CHARACTER(len=256) :: kernel_file
   LOGICAL            :: file_exists, need_compute
   INTEGER            :: f_nperp, f_npar
@@ -133,7 +136,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   !================================================================
   ! 1.  phi-distance kernel (grid-dependent, expensive O(nbig^2)).
-  !     Cached per casename in sum_phi-CASENAME.dat, whose header stores
+  !     Cached per casename in phi_kern-CASENAME.dat, whose header stores
   !     the grid signature (nperp, npar, vperp/vpar min/max).  The kernel
   !     is loaded only when that file exists AND its signature matches the
   !     current namelist; otherwise it is (re)computed and saved.  Fully
@@ -142,8 +145,15 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !       - file present, grid matches -> load
   !       - file present, grid differs -> compute + save
   !================================================================
-  ALLOCATE(sum_phi(nbig, nbig))
-  kernel_file  = TRIM(outfile('sum_phi.dat'))
+  ! The cache file is named phi_kern.dat, NOT sum_phi.dat.  The old file holds
+  ! the dense matrix and carries the same grid signature as this one, so a
+  ! stale sum_phi.dat would pass the signature check and then be read as a
+  ! kernel -- silently, since the first npar*nperp^2 doubles of the dense
+  ! matrix are perfectly readable numbers.  Renaming makes old caches simply
+  ! not found.  Any leftover sum_phi-*.dat can be deleted; they are ~11.9 GiB
+  ! each at 200x200 and are no longer used.
+  ALLOCATE(phi_kern(0:npar-1, nperp, nperp))
+  kernel_file  = TRIM(outfile('phi_kern.dat'))
   need_compute = .TRUE.
   INQUIRE(file=kernel_file, exist=file_exists)
   IF (file_exists) THEN
@@ -153,7 +163,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       IF (error == 0 .AND. f_nperp == nperp .AND. f_npar == npar .AND. &
           f_vperp_min == vperp_min .AND. f_vperp_max == vperp_max .AND. &
           f_vpar_min  == vpar_min  .AND. f_vpar_max  == vpar_max) THEN
-        READ(55, iostat=error) sum_phi
+        READ(55, iostat=error) phi_kern
         IF (error == 0) THEN
           need_compute = .FALSE.
           WRITE(*,'(A)') '  phi-distance kernel loaded from '//TRIM(kernel_file)//' (grid matches).'
@@ -177,10 +187,24 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
     OPEN(55, file=kernel_file, status='replace', form='unformatted', access='stream')
     WRITE(55) nperp, npar, vperp_min, vperp_max, vpar_min, vpar_max
-    WRITE(55) sum_phi
+    WRITE(55) phi_kern
     CLOSE(55)
     WRITE(*,'(A)') '  phi-distance kernel saved to '//TRIM(kernel_file)
   END IF
+
+  ! Circulant transform of the kernel, used by the FFT matvec.  Cheap
+  ! (nperp^2 transforms of length phi_m) and done once, whether the kernel was
+  ! just computed or loaded from cache.
+  CALL cpu_time(t_start)
+  CALL phi_kernel_transform
+  CALL cpu_time(t_end)
+  WRITE(*,'(A,I0,A,F8.3,A)') '  phi kernel transformed (circulant length ', &
+       phi_m, '), CPU time = ', t_end - t_start, ' s'
+  WRITE(*,'(A,F10.1,A,F10.1,A)') '  kernel storage: ', &
+       DBLE(npar)*DBLE(nperp)**2*8.d0/1024.d0**2, ' MiB + ', &
+       DBLE(nperp)**2*DBLE(phi_nf)*8.d0/1024.d0**2, &
+       ' MiB transform  (dense sum_phi would be '// &
+       'nbig^2*8 B)'
 
   !================================================================
   ! 2.  Build sparsity pattern of L using linear coefficients.
@@ -571,7 +595,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
 
-  DEALLOCATE(sum_phi)
+  DEALLOCATE(phi_kern)
+  IF (ALLOCATED(phi_khat)) DEALLOCATE(phi_khat)
 
   IF (iplot_pow == -1) THEN
     IF (irf     == -1) CLOSE(480)

@@ -208,7 +208,7 @@ cte0=gamma0*lnaa*(za/aa)**2
 ! in cylindrical velocity-space (v⊥, v∥) with axisymmetry.
 !
 ! Replaces the original O(N^4) quadruple loop + per-point integrate_2d
-! call with a single MKL DGEMV: psi_vec = prefactor * sum_phi * g,
+! call with a single kernel apply: psi_vec = prefactor * (K g),
 ! where g(ix2) = f(ip,jp)*vperp(ip)*w_vperp(ip)*w_vpar(jp).
 ! Weights are the standard 2D trapezoidal rule, identical to integrate_2d.
 !=======================================================================
@@ -217,6 +217,7 @@ subroutine compute_psi(f_values, psi_values)
 
   use shared_grid
   use func_index
+  use mod_phi_kernel
 
   implicit none
 
@@ -229,8 +230,6 @@ subroutine compute_psi(f_values, psi_values)
   double precision :: g(nbig), psi_vec(nbig)
   double precision :: w_vperp(nperp), w_vpar(npar)
   integer :: i, j
-
-  external dgemv
 
   ! Trapezoidal weights for v⊥ (non-uniform grid)
   w_vperp(1) = 0.5_dp * (vperp(2) - vperp(1))
@@ -253,8 +252,15 @@ subroutine compute_psi(f_values, psi_values)
     end do
   end do
 
-  ! psi_vec = prefactor * sum_phi * g  ('N': column-major access, cache-friendly)
-  call dgemv('N', nbig, nbig, prefactor, sum_phi, nbig, g, 1, 0.0_dp, psi_vec, 1)
+  ! psi_vec = prefactor * sum_phi * g
+  !
+  ! This was a single DGEMV against the dense sum_phi, which had to stream the
+  ! whole matrix from RAM on every time step (11.9 GiB at 200x200).  The matrix
+  ! is block-Toeplitz with Toeplitz blocks, so the same product is obtained from
+  ! the compressed kernel by FFT, touching ~10^2 MiB instead.  Result identical
+  ! to round-off; see mod_phi_kernel.
+  call phi_kernel_matvec(g, psi_vec)
+  psi_vec = prefactor * psi_vec
 
   ! Unpack to 2D
   do i = 1, nperp

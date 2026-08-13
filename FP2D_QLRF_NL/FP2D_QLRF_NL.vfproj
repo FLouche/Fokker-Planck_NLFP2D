@@ -75,6 +75,7 @@
 			<File RelativePath="..\Fortran sources\ncint.f90"/>
 			<File RelativePath="..\Fortran sources\nlterm_test.f90"/>
 			<File RelativePath="..\Fortran sources\pardiso_solver (2).f90"/>
+			<File RelativePath="..\Fortran sources\phi_kernel.f90"/>
 			<File RelativePath="..\Fortran sources\qlrfterm.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\self_coll_max.f90"/>

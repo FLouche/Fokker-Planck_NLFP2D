@@ -155,9 +155,13 @@ subroutine distance_v_gauss_legendre
   !   kern(|j-jp|, i, ip) = ∫ sqrt(r(i)^2+r(ip)^2-2r(i)r(ip)cos(φ)+(dj*dvpar)^2) w dφ
   !
   ! Layout (dj, i, ip): dj is the first (fastest) index in Fortran column-major
-  ! storage, so kern(0:npar-1, i, ip) is contiguous.  This favours the filling
-  ! step where, for fixed (i,ip), we access elements at successive dj values.
-  real(dp), allocatable :: kern(:,:,:)      ! kern(0:npar-1, nperp, nperp)
+  ! storage, so kern(0:npar-1, i, ip) is contiguous.
+  !
+  ! This IS the kernel now: it is left in the module array phi_kern and applied
+  ! by mod_phi_kernel.  It used to be expanded afterwards into the dense
+  ! sum_phi(nbig,nbig) by an index lookup, which replicated every value npar
+  ! times (11.9 GiB against 61 MiB at 200x200) purely so the operator could be
+  ! applied with one DGEMV.  That expansion has been removed.
 
   call initialize_gauss_legendre(nphi, gauss_phi, gauss_weight)
 
@@ -166,7 +170,8 @@ subroutine distance_v_gauss_legendre
     cos_phi(kphi) = cos(gauss_phi(kphi))
   end do
 
-  allocate(kern(0:npar-1, nperp, nperp))
+  if (allocated(phi_kern)) deallocate(phi_kern)
+  allocate(phi_kern(0:npar-1, nperp, nperp))
 
   !=======================================================================
   ! Step 1 — evaluate the phi-integral for each distinct (i, ip, dj) triple.
@@ -197,32 +202,14 @@ subroutine distance_v_gauss_legendre
           s = s + sqrt(rr_base - rr_cross*cos_phi(kphi) + dz_sq) * gauss_weight(kphi)
         end do
 
-        kern(dj, i,  ip) = s
-        kern(dj, ip, i ) = s   ! r <-> r' symmetry
+        phi_kern(dj, i,  ip) = s
+        phi_kern(dj, ip, i ) = s   ! r <-> r' symmetry
       end do
     end do
   end do
 
-  !=======================================================================
-  ! Step 2 — fill sum_phi by lookup.
-  !   sum_phi(ix1, ix2) = kern(|j-jp|, i, ip)
-  !
-  !   Loop order: ix2 outermost, ix1 innermost.  For fixed ix2 the inner
-  !   loops write a complete column of sum_phi (contiguous in column-major).
-  !=======================================================================
-  do ip = 1, nperp
-    do jp = 1, npar
-      ix2 = index_mat(ip, jp)
-      do i = 1, nperp
-        do j = 1, npar
-          ix1 = index_mat(i, j)
-          sum_phi(ix1, ix2) = kern(abs(j - jp), i, ip)
-        end do
-      end do
-    end do
-  end do
-
-  deallocate(kern)
+  ! Step 2 (dense expansion into sum_phi) deleted: the kernel is applied
+  ! directly by mod_phi_kernel.  See the header note above.
 
 end subroutine distance_v_gauss_legendre
 

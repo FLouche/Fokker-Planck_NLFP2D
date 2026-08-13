@@ -21,7 +21,17 @@ double precision :: dv2, dmu2
 double precision, allocatable, dimension(:) :: vperp,vpar
 double precision, allocatable, dimension(:,:) :: jacob
 
-double precision, allocatable, dimension(:,:) :: sum_phi
+! phi-distance kernel for the non-linear self-collision term.
+!
+! This used to be the dense matrix sum_phi(nbig,nbig), which is
+! block-Toeplitz with Toeplitz blocks and therefore holds only
+! npar*nperp^2 distinct values in nperp^2*npar^2 slots (11.9 GiB against
+! 61 MiB at 200x200).  Only the compressed kernel is stored now, plus its
+! circulant transform used by the FFT matvec.  See mod_phi_kernel.
+double precision, allocatable, dimension(:,:,:) :: phi_kern   ! (0:npar-1, nperp, nperp)
+double precision, allocatable, dimension(:,:,:) :: phi_khat   ! (nperp, nperp, 0:phi_nf-1)
+integer :: phi_m = 0      ! circulant length (power of two, >= 2*npar-2)
+integer :: phi_nf = 0     ! independent frequencies, phi_m/2 + 1
 
 integer :: ising,nsing
 integer :: jmid,imid
