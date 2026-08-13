@@ -15,6 +15,41 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 2.7 - 13th August 2026 (FL)
+
+    ! Non-linear self-collisions (isc=-1) made much cheaper, and the isc=3
+    !   parameter fixed.  RESULTS UNCHANGED to round-off in both cases.
+    !
+    !  1) The phi-distance matrix sum_phi(nbig,nbig) is gone.  With
+    !     ix = (i-1)*npar + j the fill rule sum_phi(ix1,ix2) = kern(|j-jp|,i,ip)
+    !     is block-Toeplitz with Toeplitz blocks: it held only npar*nperp^2
+    !     distinct values in nperp^2*npar^2 slots (11.9 GiB of storage for
+    !     61 MiB of information at 200x200), and the one DGEMV per time step had
+    !     to stream all of it from RAM.  grid.f90 already built the compressed
+    !     kernel and then expanded it; that expansion is deleted and the operator
+    !     is applied from the kernel directly, each Toeplitz block by circulant
+    !     embedding and FFT (new module mod_phi_kernel, phi_kernel.f90).
+    !     Measured on JET RF case 5 at 200x200, serial: 1262.5 s -> 773.1 s
+    !     (1.63x) and 12.21 GB -> 0.43 GB (28.4x) peak memory; storage now grows
+    !     as N^3 instead of N^4, removing the ceiling that confined isc=-1 to
+    !     about 250x250 on a 32 GB machine.  All traces agree with the dense
+    !     result to <= 4.5e-8 over 1350 steps (2e-14 at step 1, growing through
+    !     the non-linear feedback).  Consequence: isc=-1 now costs within 1% per
+    !     step of isc=3, so the approximation has little left to offer.
+    !     NOTE: the kernel cache is renamed sum_phi.dat -> phi_kern.dat, because
+    !     a stale sum_phi.dat would pass the grid-signature check and be read as
+    !     a kernel in silence.  Old sum_phi-*.dat files are unused; delete them.
+    !     Details in Benchmark/JET-RF/kernel_report.
+    !
+    !  2) core_frac (isc=3) is now INITIALISED.  It was declared in shared_data
+    !     with no value and the default assignment here was commented out, so an
+    !     isc=3 run whose namelist omitted it read undefined memory -- silently,
+    !     since it is only used as a threshold.  The default is also recalibrated
+    !     from 3.8d-3 to 4.0d-3 against isc=-1 on JET RF case 5 (0.69% RMS in
+    !     Teff against 1.93%).  The basin is narrow: only [3.8d-3, 4.0d-3] lies
+    !     within 5% of the reference.  Tn > Teff during a run signals that the
+    !     value is too low for that case.  Details in Benchmark/JET-RF/isc_report.
+
     ! Version 2.6 - 6th August 2026 (FL)
 
     ! Quadrature and normalisation corrections.  RESULTS MOVE: ~0.1% for any case
