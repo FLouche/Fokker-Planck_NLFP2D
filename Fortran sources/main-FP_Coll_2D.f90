@@ -209,10 +209,21 @@ double precision start_time,end_time
 ! ------
 !
 ! Definition of some variables:
-!  icn: choice of time-differencing scheme:
-!           +1: Crank-Nicholson
-!            0: midpoint leap-frog (explicit)
-!           -1: implicit scheme
+!  icn: time-differencing weight theta in
+!         (I - theta*dt*L) f^{n+1} = (I + (1-theta)*dt*L) f^n + dt*S
+!           -1: theta = 0.50  Crank-Nicolson, 2nd order in time.  May be
+!                             unstable with the non-linear self-collision
+!                             operator (isc=-1); see the CN N=2 boundary mode.
+!           +1: theta = 0.75  intermediate.  Damps that mode, but is only
+!                             1st order in time.
+!    any other: theta = 1.00  fully implicit (backward Euler), 1st order.
+!                             icn=0 lands here; there is no explicit scheme.
+!
+!  This comment previously read "+1: Crank-Nicholson / 0: midpoint leap-frog
+!  (explicit) / -1: implicit scheme", which inverted +1 and -1 and described a
+!  leap-frog option that does not exist.  The values above are what
+!  TimeFP_7pt.f90 and TimeFP_7pt_NL.f90 actually do; icn is read by nothing
+!  else.  Steady states are unaffected by theta, transients are not.
 
 !  beam_ekin: beam kinetic energy in keV
 !
