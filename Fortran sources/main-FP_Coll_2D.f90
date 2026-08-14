@@ -219,12 +219,6 @@ double precision start_time,end_time
 !    any other: theta = 1.00  fully implicit (backward Euler), 1st order.
 !                             icn=0 lands here; there is no explicit scheme.
 !
-!  This comment previously read "+1: Crank-Nicholson / 0: midpoint leap-frog
-!  (explicit) / -1: implicit scheme", which inverted +1 and -1 and described a
-!  leap-frog option that does not exist.  The values above are what
-!  TimeFP_7pt.f90 and TimeFP_7pt_NL.f90 actually do; icn is read by nothing
-!  else.  Steady states are unaffected by theta, transients are not.
-
 !  beam_ekin: beam kinetic energy in keV
 !
 !  isc: treatment of self-collisions:
