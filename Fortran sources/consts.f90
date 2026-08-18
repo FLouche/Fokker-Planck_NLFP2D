@@ -32,6 +32,10 @@ double precision arg,dennod
 double PRECISION :: degtorad
 double precision :: vcr, ecr
 double precision :: lnae,lnab
+! characteristic collision times, evaluated after vteff below; named distinctly
+! from tauel/tauie above, which are the Wesson relaxation times
+double precision :: tcoll_ii, tcoll_ie, tcoll_ei
+double precision :: sum_nz2, lnaa
 
 integer i,j,ib
 
@@ -116,6 +120,9 @@ vcr=9.d-2*(z1/aa)**.33333333d0*vt(1)
 !  Vcr is the critical velocity where an equal amount of energy is transferred
 !   from heated ions to background ions and electrons 
 !     cfr Gaffey - JPP (1976) 16(2), pp. 146-169
+
+write(*,66) vcr
+66 format('Critical velocity = ',D12.5,' [m/s]')
 !
 !===================================================================
 !
@@ -135,7 +142,7 @@ tauie=maonmb(1)/2.d0*tauel
 !    +       ,tauie,'  [s]'
 spit=6.27d8*aa*t(1)**1.5/za**2/(ne*1.d-6)/15.d0
 
-write(77,77) spit
+write(*,77) spit
 77 format('Spitzer Slowing-down Time for resonating ion species = ', &
           D12.5,' [s]')
 
@@ -164,10 +171,71 @@ teff=t(1)*(1.d0+rj)/(1.d0+rjtj)
 !        --------------------------
 
 vteff=9.79d3*dsqrt(teff/aa)
-write(77,80) vteff
+write(*,80) vteff
 80     format('Effective thermal velocity of heated ions',D12.5)
-write(77,81) teff*1.d-3
+write(*,81) teff*1.d-3
 81 format('Effective Stix temperature of heated ions',D12.5,' keV')
+
+!===================================================================
+!
+! Characteristic Collision Times
+! ------------------------------
+!
+!  Placed here rather than in the relaxation-time section above because they
+!  use vteff, the thermal velocity at the Stix effective temperature at which
+!  the resonant species is initialised, which is only known at this point.
+!
+!  These are the standard Wesson (1997, p. 69) expressions evaluated at the
+!  initial state, with the code's own NRL Coulomb logarithms rather than the
+!  fixed values used by tauel/spit above.  They are reference timescales, not
+!  the instantaneous rates the operator applies: the Fokker-Planck coefficients
+!  scale as gammab/v**3, but that form is the fast-test-particle limit and is
+!  not valid for ions colliding on the much faster electrons, so it must not be
+!  used to build an ion-electron time.
+!
+!  "Ion" here is the resonant species, which is the one the code evolves.
+!  tauel and tauie above are deliberately left untouched: tauie sets the
+!  reference rate of the steady-state convergence diagnostic.
+
+!     -> Electron-ion: electron collision time
+!        -------------------------------------
+!  tau_e = 1.09d16 * Te[keV]**1.5 / ( sum_i n_i Z_i**2 * lnae ), the sum running
+!  over every ion species present, which is what the electrons collide against.
+sum_nz2=npart*za**2
+do ib=2,nbulk
+    sum_nz2=sum_nz2+nb(ib)*zb(ib-1)**2
+enddo
+if (sum_nz2 > 0.d0 .and. lnae > 0.d0) then
+    tcoll_ei=1.09d16*(t(1)*1.d-3)**1.5d0/(sum_nz2*lnae)
+else
+    tcoll_ei=0.d0
+endif
+
+!     -> Ion-ion: like-particle collisions of the resonant species
+!        ----------------------------------------------------------
+!  tau_i = 6.60d17 * sqrt(ma/mp) * Ti[keV]**1.5 / ( na * Za**4 * lnaa ),
+!  evaluated at the Stix effective temperature at which it is initialised.
+call coulomb_log_ab(za, aa, teff, npart, za, aa, teff, npart, lnaa)
+if (npart > 0.d0 .and. lnaa > 0.d0) then
+    tcoll_ii=6.60d17*dsqrt(aa)*(teff*1.d-3)**1.5d0/(npart*za**4*lnaa)
+else
+    tcoll_ii=0.d0
+endif
+
+!     -> Ion-electron: energy equipartition time
+!        ----------------------------------------
+!  tau_ie = (ma / 2 me) * tau_e
+tcoll_ie=maonmb(1)/2.d0*tcoll_ei
+
+write(*,82) tcoll_ii
+82 format('Collision time ion-ion      (resonant, like-particle) = ', &
+          D12.5,' [s]')
+write(*,83) tcoll_ie
+83 format('Collision time ion-electron (equipartition)           = ', &
+          D12.5,' [s]')
+write(*,84) tcoll_ei
+84 format('Collision time electron-ion (electron collision time) = ', &
+          D12.5,' [s]')
 
 !     -> Constant appearing in front of the exponential
 !        ----------------------------------------------
