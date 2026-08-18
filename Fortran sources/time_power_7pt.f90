@@ -17,7 +17,8 @@
     
 
 SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
-                           pcoll_self, pcoll_self_perp, pcoll_self_par)
+                           pcoll_self, pcoll_self_perp, pcoll_self_par, &
+                           tau_rf)
 
   USE shared_grid
   USE mod_ncint
@@ -39,6 +40,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   REAL(dp), INTENT(IN)  :: f(nbig), dens
   REAL(dp), INTENT(OUT) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp), INTENT(OUT) :: pcoll_self_perp, pcoll_self_par
+  REAL(dp), INTENT(OUT) :: tau_rf     ! RF tail formation time [s]
 
   !--- Local arrays ------------------------------------------------
   REAL(dp) :: ekin(nperp,npar)          ! kinetic energy at each node
@@ -165,6 +167,36 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
 
   ELSE
     pRF = 0.0_dp
+  END IF
+
+  !----------------------------------------------------------------
+  ! 3b. RF tail formation time:  tau_rf = npart * Teff / pRF
+  !----------------------------------------------------------------
+  ! The energy the RF has to supply to sustain the tail, divided by the rate
+  ! at which it supplies it.  Integrating ekin*f*jacob gives npart*<Ekin>,
+  ! because ekin already carries the normfac = npart/dens factor, and
+  ! Teff = (2/3)*<Ekin> is the same quantity written to Teff_vs_time (see
+  ! time_energy in time_comps_mod.f90), so
+  !
+  !     npart * Teff[J]  =  (2/3) * INT( ekin * f * jacob )
+  !
+  ! and no separate temperature evaluation is needed here.  Both numerator
+  ! and denominator are normalised to npart, so the ratio is independent of
+  ! the running density.
+  IF (pRF > 0.0_dp) THEN
+
+    DO iv = 1, nperp
+      DO imu = 1, npar
+        ix = index_mat(iv, imu)
+        fint(iv,imu) = ekin(iv,imu) * f(ix) * jacob(iv,imu)
+      END DO
+    END DO
+
+    CALL ncint_2d(fint, tau_rf)          ! tau_rf holds npart*<Ekin> [J/m^3]
+    tau_rf = (2.0_dp / 3.0_dp) * tau_rf / pRF
+
+  ELSE
+    tau_rf = 0.0_dp
   END IF
 
   !================================================================

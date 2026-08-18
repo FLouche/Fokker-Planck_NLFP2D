@@ -150,6 +150,11 @@ FILE_META = {
     # Density-characteristic (log-slope) temperature
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
+    # RF tail formation time, tau_RF = npart*Teff/P_RF (time_power_7pt): the
+    # energy stored in the tail divided by the rate the RF supplies it.  Written
+    # only when irf = -1; zero-filled otherwise, hence absent for non-RF runs.
+    "tau_rf_vs_time":               {"ptype": "ts",  "ylabel": "τ_RF (s)",
+                                     "title":  "RF tail formation time vs time"},
     # Convergence rate epsilon = ||f^n - f^(n-1)|| / (dt ||f^n||), Jacobian-weighted
     # (mod_conv_diag).  Log y: epsilon decays over orders of magnitude as the run
     # converges.  eps_tail uses the extra tail weight and is plotted alongside --

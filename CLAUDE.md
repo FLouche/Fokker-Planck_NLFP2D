@@ -188,6 +188,7 @@ New output files must use units not in this table:
 | 507 | Teff_vs_time | always |
 | 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2` |
 | 514 | Tn_vs_time | always |
+| 515 | tau_rf_vs_time (RF tail formation time) | RF |
 | 518 | conv_diag_vs_time.csv (full convergence history) | `i_ss_check=-1` |
 | 519 | conv_eps_vs_time (time, eps, eps_tail) | `i_ss_check=-1` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
