@@ -153,6 +153,8 @@ FILE_META = {
     # RF tail formation time, tau_RF = npart*Teff/P_RF (time_power_7pt): the
     # energy stored in the tail divided by the rate the RF supplies it.  Written
     # only when irf = -1; zero-filled otherwise, hence absent for non-RF runs.
+    # Kept in FILE_META so 'compare' can overlay them across cases; both are in
+    # _SKIP_STEMS because the composite plot_timescales draws them together.
     "tau_rf_vs_time":               {"ptype": "ts",  "ylabel": "τ_RF (s)",
                                      "title":  "RF tail formation time vs time"},
     # Effective collisional times at the running Teff, npart*Teff/|P_coll|
@@ -210,7 +212,8 @@ _SKIP_STEMS = {"RF_dirac", "fstix",
                "momentum_coll_e_vs_time", "momentum_coll_ion",
                "momentum_RF_vs_time", "momentum_coll_self_vs_time",
                "momentum_NBI_vs_time", "momentum_coll_tot_vs_time",
-               "coulomb_log_vs_time", "coulomb_log_self_vs_time"}
+               "coulomb_log_vs_time", "coulomb_log_self_vs_time",
+               "tau_coll_vs_time", "tau_rf_vs_time"}
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 
@@ -829,6 +832,57 @@ def plot_coulomb_log(outdir: Path, save_dir, show: bool, casename: str,
     _finish(fig, stem_out, save_dir, show)
 
 
+def plot_timescales(outdir: Path, save_dir, show: bool, casename: str) -> None:
+    """Characteristic timescales vs time, all on one axes.
+
+    tau_ii and tau_ie (tau_coll_vs_time) are the effective collisional times
+    npart*Teff/|P_coll| for the background-ion and electron channels; tau_RF
+    (tau_rf_vs_time) is npart*Teff/P_RF and exists only when irf = -1, so it is
+    added only if its file is present.
+
+    Log y: the three span decades while the tail forms.  At steady state
+    1/tau_RF = 1/tau_ii + 1/tau_ie, so tau_RF sits below both collisional
+    curves; where they cross tells which channel governs the balance.
+    """
+    coll = _outfile(outdir, "tau_coll_vs_time", casename)
+    rf   = _outfile(outdir, "tau_rf_vs_time", casename)
+    if not coll.exists() and not rf.exists():
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plotted = False
+
+    if coll.exists():
+        data = _load(coll)
+        if data is not None and data.shape[1] >= 3:
+            ax.plot(data[:, 0], data[:, 1], color=_PALETTE[0], linewidth=1.5,
+                    label="τ_ii  (to background ions)")
+            ax.plot(data[:, 0], data[:, 2], color=_PALETTE[1], linewidth=1.5,
+                    label="τ_ie  (to electrons)")
+            plotted = True
+
+    if rf.exists():
+        t, y = _ts_col(rf)
+        if t is not None:
+            ax.plot(t, y, color=_PALETTE[2], linewidth=1.8, linestyle="--",
+                    label="τ_RF  (tail formation)")
+            plotted = True
+
+    if not plotted:
+        plt.close(fig)
+        return
+    ax.set_yscale("log")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("τ (s)")
+    ax.set_title(_title({}, "Characteristic timescales vs time", casename))
+    ax.set_xlim(left=0)
+    ax.legend()
+    ax.grid(True, alpha=0.3, which="both")
+    fig.tight_layout()
+    stem_out = f"timescales_vs_time-{casename}" if casename else "timescales_vs_time"
+    _finish(fig, stem_out, save_dir, show)
+
+
 def plot_sc_power_split(outdir: Path, save_dir, show: bool, casename: str) -> None:
     """Self-collision power split: perpendicular and parallel components vs time.
 
@@ -1181,6 +1235,8 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                 plot_sc_power_split(outdir, save_dir, show, casename)
         print("  [cmp]  coulomb_log_all_vs_time")
         plot_coulomb_log(outdir, save_dir, show, casename, show_sc=show_sc)
+        print("  [cmp]  timescales_vs_time")
+        plot_timescales(outdir, save_dir, show, casename)
         if show_mom:
             print("  [cmp]  momentum_breakdown_vs_time")
             plot_momentum_breakdown(outdir, save_dir, show, casename, show_sc=show_sc)
