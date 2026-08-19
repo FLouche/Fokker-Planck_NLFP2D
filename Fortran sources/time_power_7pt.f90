@@ -18,7 +18,7 @@
 
 SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
                            pcoll_self, pcoll_self_perp, pcoll_self_par, &
-                           tau_rf)
+                           tau_rf, tau_ii, tau_ie)
 
   USE shared_grid
   USE mod_ncint
@@ -41,6 +41,8 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   REAL(dp), INTENT(OUT) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp), INTENT(OUT) :: pcoll_self_perp, pcoll_self_par
   REAL(dp), INTENT(OUT) :: tau_rf     ! RF tail formation time [s]
+  REAL(dp), INTENT(OUT) :: tau_ii     ! effective ion-ion time [s]
+  REAL(dp), INTENT(OUT) :: tau_ie     ! effective ion-electron time [s]
 
   !--- Local arrays ------------------------------------------------
   REAL(dp) :: ekin(nperp,npar)          ! kinetic energy at each node
@@ -50,6 +52,8 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
 
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: normfac
+  REAL(dp) :: ekin_dens          ! npart*Teff [J/m^3]
+  REAL(dp) :: pcoll_i            ! summed background-ion collisional power
   REAL(dp) :: taum_save          ! saved taum; restored on exit
   REAL(dp), PARAMETER :: pmass = 1.6726d-27   ! proton mass [kg]
 
@@ -170,33 +174,63 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   END IF
 
   !----------------------------------------------------------------
-  ! 3b. RF tail formation time:  tau_rf = npart * Teff / pRF
+  ! 3b. Effective timescales:  tau = npart * Teff / P
   !----------------------------------------------------------------
-  ! The energy the RF has to supply to sustain the tail, divided by the rate
-  ! at which it supplies it.  Integrating ekin*f*jacob gives npart*<Ekin>,
-  ! because ekin already carries the normfac = npart/dens factor, and
-  ! Teff = (2/3)*<Ekin> is the same quantity written to Teff_vs_time (see
+  ! The energy stored in the distribution divided by the rate at which a given
+  ! channel supplies or removes it.  Integrating ekin*f*jacob gives
+  ! npart*<Ekin>, because ekin already carries the normfac = npart/dens factor,
+  ! and Teff = (2/3)*<Ekin> is the same quantity written to Teff_vs_time (see
   ! time_energy in time_comps_mod.f90), so
   !
   !     npart * Teff[J]  =  (2/3) * INT( ekin * f * jacob )
   !
-  ! and no separate temperature evaluation is needed here.  Both numerator
-  ! and denominator are normalised to npart, so the ratio is independent of
+  ! and no separate temperature evaluation is needed here.  Numerator and
+  ! denominator are both normalised to npart, so the ratios do not depend on
   ! the running density.
-  IF (pRF > 0.0_dp) THEN
-
-    DO iv = 1, nperp
-      DO imu = 1, npar
-        ix = index_mat(iv, imu)
-        fint(iv,imu) = ekin(iv,imu) * f(ix) * jacob(iv,imu)
-      END DO
+  !
+  ! These are *effective* times built from the power actually flowing in each
+  ! channel at the current Teff, not textbook collision times at a nominal
+  ! temperature (those are printed once at startup by consts).  They therefore
+  ! follow both the heating of the tail and its change of shape.  At steady
+  ! state the RF input balances the collisional losses, so
+  !
+  !     1/tau_rf  =  1/tau_ii + 1/tau_ie  (+ self-collisions, which carry no
+  !                                        net energy, + any source/losses)
+  !
+  ! which is a useful check on the three traces.
+  DO iv = 1, nperp
+    DO imu = 1, npar
+      ix = index_mat(iv, imu)
+      fint(iv,imu) = ekin(iv,imu) * f(ix) * jacob(iv,imu)
     END DO
+  END DO
+  CALL ncint_2d(fint, ekin_dens)              ! npart*<Ekin>  [J/m^3]
+  ekin_dens = (2.0_dp / 3.0_dp) * ekin_dens   ! = npart*Teff  [J/m^3]
 
-    CALL ncint_2d(fint, tau_rf)          ! tau_rf holds npart*<Ekin> [J/m^3]
-    tau_rf = (2.0_dp / 3.0_dp) * tau_rf / pRF
-
+  !  -> RF tail formation time
+  IF (pRF > 0.0_dp) THEN
+    tau_rf = ekin_dens / pRF
   ELSE
     tau_rf = 0.0_dp
+  END IF
+
+  !  -> Effective ion-ion time: loss to the background ions.  pcoll is negative
+  !     (energy leaving the resonant species), hence the ABS.
+  pcoll_i = 0.0_dp
+  DO ib = 2, nbulk
+    pcoll_i = pcoll_i + pcoll(ib)
+  END DO
+  IF (ABS(pcoll_i) > 0.0_dp) THEN
+    tau_ii = ekin_dens / ABS(pcoll_i)
+  ELSE
+    tau_ii = 0.0_dp
+  END IF
+
+  !  -> Effective ion-electron time: loss to the electrons
+  IF (ABS(pcoll(1)) > 0.0_dp) THEN
+    tau_ie = ekin_dens / ABS(pcoll(1))
+  ELSE
+    tau_ie = 0.0_dp
   END IF
 
   !================================================================

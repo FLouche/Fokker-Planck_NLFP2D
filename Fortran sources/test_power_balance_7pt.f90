@@ -26,11 +26,11 @@ double precision, intent(in) :: fin(nbig)
 double precision, dimension(nbulk) :: pcoll
 integer  :: ib
 double precision :: plosses, psource, pRF, pSC, pSC_perp, pSC_par
-double precision :: tau_rf
+double precision :: tau_rf, tau_ii, tau_ie
 
 taum = 0.d0
 
-call time_power_7pt(fin, npart, pcoll, pRF, psource, plosses, pSC, pSC_perp, pSC_par, tau_rf)
+call time_power_7pt(fin, npart, pcoll, pRF, psource, plosses, pSC, pSC_perp, pSC_par, tau_rf, tau_ii, tau_ie)
 
 write(*,'(/,A)')    'POWER DENSITY BALANCE:'
 write(*,'(A)')      '----------------------'

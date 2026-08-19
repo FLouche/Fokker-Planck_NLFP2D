@@ -85,6 +85,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=3 background)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: tau_rf            ! RF tail formation time [s]
+  REAL(dp) :: tau_ii, tau_ie    ! effective collisional times [s]
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, itime_global, iphase, iv, imu, ix
@@ -235,6 +236,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='unknown')
       IF (irf   == -1) OPEN(515,file=TRIM(outfile('tau_rf_vs_time.txt')),          status='unknown')
+      OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='unknown')
       IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
       IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
     END IF
@@ -274,6 +276,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) OPEN(480,file=TRIM(outfile('power_RF_vs_time.txt')),        status='old', access='append')
       IF (irf   == -1) OPEN(515,file=TRIM(outfile('tau_rf_vs_time.txt')),          status='old', access='append')
+      OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='old', access='append')
       IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
       IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
     END IF
@@ -553,7 +556,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
                         pcoll_self, pcoll_self_perp, pcoll_self_par, &
-                        tau_rf)
+                        tau_rf, tau_ii, tau_ie)
 
     IF (iplot_pow == -1) THEN
       WRITE(470,*) time, (SUM(pcoll)+pcoll_self)/1.d6
@@ -562,6 +565,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) WRITE(480,*) time, pRF/1.d6
       IF (irf   == -1) WRITE(515,*) time, tau_rf
+      WRITE(516,*) time, tau_ii, tau_ie
       IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
       IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6, &
                                          pcoll_self_perp/1.d6, pcoll_self_par/1.d6
@@ -614,6 +618,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   IF (iplot_pow == -1) THEN
     IF (irf     == -1) CLOSE(480)
     IF (irf     == -1) CLOSE(515)
+    CLOSE(516)
     IF (isource == -1) CLOSE(490)
     IF (isc     /=  0) CLOSE(500)
     CLOSE(470)

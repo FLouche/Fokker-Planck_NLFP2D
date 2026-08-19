@@ -155,6 +155,14 @@ FILE_META = {
     # only when irf = -1; zero-filled otherwise, hence absent for non-RF runs.
     "tau_rf_vs_time":               {"ptype": "ts",  "ylabel": "τ_RF (s)",
                                      "title":  "RF tail formation time vs time"},
+    # Effective collisional times at the running Teff, npart*Teff/|P_coll|
+    # (time_power_7pt).  Log y: they span decades as the tail heats, and at
+    # steady state 1/tau_RF = 1/tau_ii + 1/tau_ie.
+    "tau_coll_vs_time":             {"ptype": "ts2", "ylabel": "τ (s)",
+                                     "title":  "Effective collision times vs time",
+                                     "labels": ["τ_ii  (to background ions)",
+                                                "τ_ie  (to electrons)"],
+                                     "logy": True},
     # Convergence rate epsilon = ||f^n - f^(n-1)|| / (dt ||f^n||), Jacobian-weighted
     # (mod_conv_diag).  Log y: epsilon decays over orders of magnitude as the run
     # converges.  eps_tail uses the extra tail weight and is plotted alongside --
