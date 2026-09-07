@@ -95,6 +95,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=256) :: dynfname
 
   EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt
+  EXTERNAL :: sc_components_maxw_diag
 
   real(dp) :: anisotropy
   type(conv_diag_t) :: cdiag        ! Jacobian-weighted convergence diagnostics
@@ -694,6 +695,16 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     ELSE
       WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Tn=', Tn, ' keV) written to fsc_maxw.txt'
     END IF
+  END IF
+
+  !================================================================
+  ! Diagnostic: SC friction/diffusion tensor and Rosenbluth
+  !     potentials at v_par=0  (isc=1, 2 or 3).  Analytic Maxwellian
+  !     background of thermal speed vteff_t (the last-step value:
+  !     isc=1 fixed Stix, isc=2 Teff, isc=3 Tn).
+  !================================================================
+  IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
+    CALL sc_components_maxw_diag(vteff_t)
   END IF
 
   DEALLOCATE(ia_L, ja_L, aa_L, ia_lhs, ja_lhs, aa_lhs, rhs_vec, x_vec, Lf)
