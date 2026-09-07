@@ -626,6 +626,7 @@ END SUBROUTINE regularise_axis_3
       double precision, dimension(nperp, npar) :: fout_loc, psi, phi
       double precision, dimension(nperp, npar) :: Lphi_radial, d2phidpe2
       double precision, dimension(nperp, npar) :: dphidpe, dphidpa
+      double precision, dimension(nperp, npar) :: phi_raw, dphidpe_raw, dphidpa_raw
       double precision, dimension(nperp, npar) :: d2psidpe2, d2psidpa2, d2psidpepa
 
       double precision, parameter :: gamma0_d = 2.390775d-1
@@ -653,6 +654,12 @@ END SUBROUTINE regularise_axis_3
       call laplacian_radial(psi, vperp, nperp, npar, Lphi_radial)
       phi = Lphi_radial + d2psidpa2
 
+      ! Unregularised branch: keep a copy of phi as computed, and its
+      ! derivatives, so the axis post-processor can be assessed against it.
+      phi_raw = phi
+      call deriv_x1(phi_raw, vperp, nperp, npar, dphidpe_raw)
+      call deriv_y1(phi_raw, nperp, npar, dvpar, dphidpa_raw)
+
       ! Regularise phi near the axis then take its derivatives
       call deriv_x2(phi, vperp, nperp, npar, d2phidpe2)
       call regularise_axis_3(phi, d2phidpe2, vperp, nperp, npar)
@@ -673,7 +680,13 @@ END SUBROUTINE regularise_axis_3
       call wr1d('sc_Fpa_at_vpar0.txt',   coef_d * dphidpa(:, jmid))
       call wr1d('sc_psi_at_vpar0.txt',   psi(:, jmid))
       call wr1d('sc_phi_at_vpar0.txt',   phi(:, jmid))
-      write(*,*) '  SC components at vpar=0 (D, F, psi, phi) written.'
+
+      ! Same three quantities without the axis regularisation
+      call wr1d('sc_Fpe_raw_at_vpar0.txt', coef_d * dphidpe_raw(:, jmid))
+      call wr1d('sc_Fpa_raw_at_vpar0.txt', coef_d * dphidpa_raw(:, jmid))
+      call wr1d('sc_phi_raw_at_vpar0.txt', phi_raw(:, jmid))
+      write(*,*) '  SC components at vpar=0 (D, F, psi, phi) written,'
+      write(*,*) '  with and without the axis regularisation.'
 
     contains
       subroutine wr1d(name, a)
