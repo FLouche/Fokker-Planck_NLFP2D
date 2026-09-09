@@ -296,18 +296,20 @@ SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
    double precision, PARAMETER :: thr_bad    = 0.00005d0! 0.005%: bad-point threshold
 
   INTEGER  :: i, j, i_seed, n_bad, info
-   double precision :: r1, r2, dev, ref_i, vp2i
+   double precision :: r1, r2, dev, ref_i
    double precision :: col(nperp)
 
   ! Detection: linear fit of d2phi in vp^2 (degree 1 sufficient for detection)
    double precision :: vp2_det(n_fit)
    double precision :: sum1, sumx, sumx2, sumy, sumxy, denom, c0_det, c1_det
 
-  ! Correction: degree-2 fit of phi in vp^2 via normal equations + dgesv
-   double precision :: A(n_fit, npoly), ATA(npoly,npoly), ATb(npoly,1)
-   double precision :: ATA_copy(npoly,npoly)
-   double precision :: vp2_fit(n_fit)
-  INTEGER  :: ipiv(npoly)
+  ! Correction: degree-2 fit of phi in u^2, u = vp/vscale, solved by QR.
+  ! Scaling keeps the basis {1,u^2,u^4} O(1) -- unscaled, vp^4 ~ 1e20 makes
+  ! A^T A span some forty orders and overflow the condition number -- and
+  ! dgels (QR on A) avoids the further squaring that forming A^T A costs.
+  INTEGER,  PARAMETER :: lwork = 128
+   double precision :: A(n_fit, npoly), A_copy(n_fit, npoly), rhs(n_fit, 1)
+   double precision :: wrk(lwork), vscale, u2
 
   !--------------------------------------------------------------------
   ! Step 1: find i_seed — first index where d2phi is locally smooth
@@ -365,28 +367,33 @@ SUBROUTINE regularise_axis_3(phi, d2phi_raw, vperp, nperp, npar)
   IF (n_bad < 1) RETURN
 
   !--------------------------------------------------------------------
-  ! Step 4: fit phi = a0 + a1*vp^2 + a2*vp^4 from n_bad+1:n_bad+n_fit
-  !         Solve normal equations ATA*x = ATb via dgesv, for all j
+  ! Step 4: fit phi = b0 + b1*u^2 + b2*u^4, u = vp/vscale, from the n_fit
+  !         nodes above the last bad one.  Least squares by QR (dgels), for
+  !         all j.  The scaling and the QR are what keep this conditioned;
+  !         see the declaration comment.
   !--------------------------------------------------------------------
+  vscale = vperp(n_bad + n_fit)          ! outermost node of the fit window
+  IF (vscale <= 0.d0) RETURN
+
   DO i = 1, n_fit
-    vp2_fit(i)  = vperp(n_bad + i)**2
-    A(i, 1)     = 1.d0
-    A(i, 2)     = vp2_fit(i)
-    A(i, 3)     = vp2_fit(i)**2
+    u2       = (vperp(n_bad + i) / vscale)**2
+    A(i, 1)  = 1.d0
+    A(i, 2)  = u2
+    A(i, 3)  = u2*u2
   END DO
-  ATA = MATMUL(TRANSPOSE(A), A)   ! 3x3, same for all j
 
   DO j = 1, npar
-    ATb(:, 1) = MATMUL(TRANSPOSE(A), phi(n_bad+1 : n_bad+n_fit, j))
-    ATA_copy  = ATA                ! dgesv overwrites its A argument
-    CALL dgesv(npoly, 1, ATA_copy, npoly, ipiv, ATb, npoly, info)
+    A_copy     = A                       ! dgels overwrites both A and rhs
+    rhs(:, 1)  = phi(n_bad+1 : n_bad+n_fit, j)
+    CALL dgels('N', n_fit, npoly, 1, A_copy, n_fit, rhs, n_fit, &
+               wrk, lwork, info)
     IF (info /= 0) THEN
-      WRITE(*,*) 'regularise_axis: dgesv failed, info=', info, ' j=', j
+      WRITE(*,*) 'regularise_axis: dgels failed, info=', info, ' j=', j
       CYCLE
     END IF
     DO i = 1, n_bad
-      vp2i      = vperp(i)**2
-      phi(i, j) = ATb(1,1) + ATb(2,1)*vp2i + ATb(3,1)*vp2i**2
+      u2        = (vperp(i) / vscale)**2
+      phi(i, j) = rhs(1,1) + rhs(2,1)*u2 + rhs(3,1)*u2*u2
     END DO
   END DO
 
