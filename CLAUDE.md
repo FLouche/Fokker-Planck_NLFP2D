@@ -82,8 +82,8 @@ The steady-state solver is always `FP_steady_state` ← `fd_stencil_2d` (in `mod
 ### Sparse Matrix and PARDISO
 All sparse matrices are stored in 1-based CSR format. The `pardiso_solver` module (`pardiso_solver (2).f90`) wraps Intel MKL PARDISO with four entry points that exploit phased factorisation:
 - `pardiso_solve_steady` — phases 11+22+33 then release (used by steady-state solver)
-- `pardiso_solve_init` — phases 11+22 once (called once before the time loop in `timefp_7pt`)
-- `pardiso_solve_step` — phase 33 only (called each time step; the LHS matrix is constant)
+- `pardiso_solve_init` — phases 11+22 once (called once before the time loop in `timefp_7pt`; the symbolic analysis is reused for the whole run because the sparsity pattern never changes)
+- `pardiso_solve_step` — phase 33, preceded by phase 22 when `a_changed=.TRUE.`. Both `timefp_7pt` and `timefp_7pt_nl` always pass `.TRUE.`, so every time step does a numerical refactorisation
 - `pardiso_solve_finalize` — releases PARDISO memory
 
 Matrix type `mtype=11` (real non-symmetric general) is used throughout.
@@ -98,7 +98,9 @@ Implements Crank-Nicolson (`icn=-1`, θ=0.5) or fully implicit (`icn≠-1`, θ=1
 ```
 (I - θ·dt·L)·f^{n+1} = (I + (1-θ)·dt·L)·f^n + dt·S
 ```
-The LHS `(I - θ·dt·L)` is factorised once at the start. Each step only applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`), builds the RHS, and calls `pardiso_solve_step` (phase 33 only).
+**The operator is rebuilt and refactorised every step; it is not constant.** Each step recomputes `Teff` (and `Tn`) from `f^n`, updates the Coulomb logarithms, reassembles the coefficient arrays (`assemble_FP_terms`, plus the `sc**` self-collision terms when `isc=1,2,3`), refills the values of `aa_L` and of the LHS `(I - θ·dt·L)` on the fixed CSR pattern, applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`) to build the RHS, and calls `pardiso_solve_step` with `a_changed=.TRUE.` (phases 22+33). This holds for every case, including RF-off/SC-off ones. The only exception is the NBI fill-up (`isource=-1`, `iold=0`, density below 5% of `npart`): there the Coulomb-log update is skipped and the precomputed `all**_lin` arrays are used, but the matrix is still refilled and refactorised.
+
+Consequence (stencil study, 2026-09-16): self-collisions (`isc=2`) add no matrix work. They cost only the `self_coll_max` evaluation and six extra N² arrays: +3–13% run time and about +1 MB at 161×161 for the JET RF case.
 
 **No particle-conservation rescaling is applied.** A `fout = fout * npart / dens_tmp`
 renormalisation exists but is commented out (`fstart = x_vec!*npart/dens_tmp`,
