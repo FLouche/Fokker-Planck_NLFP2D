@@ -605,13 +605,17 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   WRITE(*,*) 'Solve completed.'
 
   !================================================================
-  ! Diagnostic: SC friction/diffusion tensor and Rosenbluth potentials
-  ! at v_par~0 (isc=-1), from the computed potentials: Dperperp,
-  ! Dparpar, Dperpar, Fperp, Fpar, psi, phi.
-  ! MUST come BEFORE the DEALLOCATE below -- compute_psi applies the
-  ! phi kernel through phi_kernel_matvec.
+  ! Diagnostic (DISABLED): SC friction/diffusion tensor and Rosenbluth
+  ! potentials at v_par~0 (isc=-1), from the computed potentials:
+  ! Dperperp, Dparpar, Dperpar, Fperp, Fpar, psi, phi (plus the
+  ! un-regularised phi/Fperp/Fpar).  Writes sc_*_at_vpar0.txt, which
+  ! fp2d_plot.py then turns into one figure each.
+  !
+  ! To re-enable, uncomment the CALL below.  It MUST stay BEFORE the
+  ! DEALLOCATE that follows -- compute_psi applies the phi kernel
+  ! through phi_kernel_matvec -- and it costs one extra kernel apply.
   !================================================================
-  CALL sc_components_diag(x_vec, teff)
+! CALL sc_components_diag(x_vec, teff)
 
   DEALLOCATE(phi_kern)
   IF (ALLOCATED(phi_khat)) DEALLOCATE(phi_khat)
