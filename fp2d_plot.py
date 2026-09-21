@@ -98,29 +98,34 @@ FILE_META = {
     # 1-D slices of SC Maxwellian ------------------------------------------
     "fsc_maxw_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)", "ylabel": "f_M",
                            "title": "SC Maxwellian at v∥ = 0  (final T_eff)", "sci_y": True},
-    # SC coefficient diagnostics (written by isc=1,2 via TimeFP_7pt
-    #                              and isc=-1 via TimeFP_7pt_NL) --------
-    "sc_Dpepe_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "D⊥⊥ (m² s⁻³)",
-                            "title":  "SC diffusion D⊥⊥ at v∥ = 0", "sci_y": True},
-    "sc_Dpapa_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "D∥∥ (m² s⁻³)",
-                            "title":  "SC diffusion D∥∥ at v∥ = 0", "sci_y": True},
-    "sc_Dpepa_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "D⊥∥ (m² s⁻³)",
-                            "title":  "SC cross diffusion D⊥∥ at v∥ = 0", "sci_y": True},
-    "sc_Fpe_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "F⊥ (m s⁻²)",
-                            "title":  "SC friction F⊥ at v∥ = 0",   "sci_y": True},
-    "sc_Fpa_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "F∥ (m s⁻²)",
-                            "title":  "SC friction F∥ at v∥ = 0",   "sci_y": True},
-    "sc_psi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "ψ",
-                            "title":  "Rosenbluth potential ψ at v∥ = 0", "sci_y": True},
-    "sc_phi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
-                            "ylabel": "φ",
-                            "title":  "Rosenbluth potential φ at v∥ = 0", "sci_y": True},
+    # SC coefficient diagnostics (DISABLED) --------------------------------
+    # The solver no longer writes sc_*_at_vpar0.txt: the two calls that
+    # produced them are commented out in TimeFP_7pt.f90 (isc=1,2,3) and
+    # TimeFP_7pt_NL.f90 (isc=-1).  These entries are commented out with
+    # them so that an old run directory that still holds the files does not
+    # plot them either.  Uncomment both sides to get the diagnostic back;
+    # the plot functions themselves need no change.
+    # "sc_Dpepe_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "D⊥⊥ (m² s⁻³)",
+    #                         "title":  "SC diffusion D⊥⊥ at v∥ = 0", "sci_y": True},
+    # "sc_Dpapa_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "D∥∥ (m² s⁻³)",
+    #                         "title":  "SC diffusion D∥∥ at v∥ = 0", "sci_y": True},
+    # "sc_Dpepa_at_vpar0":  {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "D⊥∥ (m² s⁻³)",
+    #                         "title":  "SC cross diffusion D⊥∥ at v∥ = 0", "sci_y": True},
+    # "sc_Fpe_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "F⊥ (m s⁻²)",
+    #                         "title":  "SC friction F⊥ at v∥ = 0",   "sci_y": True},
+    # "sc_Fpa_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "F∥ (m s⁻²)",
+    #                         "title":  "SC friction F∥ at v∥ = 0",   "sci_y": True},
+    # "sc_psi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "ψ",
+    #                         "title":  "Rosenbluth potential ψ at v∥ = 0", "sci_y": True},
+    # "sc_phi_at_vpar0":    {"ptype": "1d",  "xlabel": "v⊥ (v_th)",
+    #                         "ylabel": "φ",
+    #                         "title":  "Rosenbluth potential φ at v∥ = 0", "sci_y": True},
     # Simple time series -------------------------------------------------------
     "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
                                 "title": "Particle density vs time"},
@@ -214,6 +219,21 @@ _SKIP_STEMS = {"RF_dirac", "fstix",
                "momentum_NBI_vs_time", "momentum_coll_tot_vs_time",
                "coulomb_log_vs_time", "coulomb_log_self_vs_time",
                "tau_coll_vs_time", "tau_rf_vs_time"}
+
+# SC coefficient / Rosenbluth-potential diagnostics, switched off.  The solver
+# no longer writes them (the two calls are commented out in TimeFP_7pt.f90 and
+# TimeFP_7pt_NL.f90), but older run directories still hold the files, and an
+# unknown stem would otherwise be auto-detected and plotted with default
+# labels.  To re-enable the diagnostic: uncomment the calls in the solver, the
+# FILE_META entries above, and this update().
+_SKIP_STEMS.update({"sc_Dpepe_at_vpar0", "sc_Dpapa_at_vpar0", "sc_Dpepa_at_vpar0",
+                    "sc_Fpe_at_vpar0", "sc_Fpa_at_vpar0",
+                    "sc_psi_at_vpar0", "sc_phi_at_vpar0",
+                    "sc_phi_raw_at_vpar0", "sc_Fpe_raw_at_vpar0",
+                    "sc_Fpa_raw_at_vpar0",
+                    # No writer left in the sources for these two; they survive
+                    # only in run directories from before that writer was removed.
+                    "sc_power_density", "sc_power_density_at_vpar0"})
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 
