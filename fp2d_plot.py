@@ -424,6 +424,46 @@ def _matches_casename(path: Path, casename: str) -> bool:
     return "-" not in stem
 
 
+def _canon_stem(s: str) -> str:
+    """Canonical form of a stem for --files matching.
+
+    The per-background-species files carry a space in the stem, e.g.
+    'power_coll_ion 1_vs_time-<case>.txt' (the Fortran builds the name from the
+    species index).  A shell splits an unquoted argument at that space, so every
+    plausible spelling -- with the space, with an underscore, or with nothing at
+    all -- has to match the same file.  Case is ignored too.
+    """
+    if s.endswith(".txt"):
+        s = s[:-4]
+    return s.replace(" ", "").replace("_", "").lower()
+
+
+def _rejoin_split_stems(pats, keys) -> list:
+    """Undo the shell's splitting of a stem that contains a space.
+
+    '--files power_coll_ion 1_vs_time' reaches argparse as two entries.  Where
+    two adjacent entries rejoin into a stem that actually exists, treat them as
+    the single name the user meant; everything else passes through untouched.
+    """
+    canon = {_canon_stem(k) for k in keys}
+
+    def known(p: str) -> bool:
+        # keys may be bare stems or whole filenames carrying a '-<case>' suffix
+        c = _canon_stem(p)
+        return c in canon or any(k.startswith(c + "-") for k in canon)
+
+    out, i = [], 0
+    while i < len(pats):
+        if i + 1 < len(pats) and not known(pats[i]) \
+                and known(pats[i] + pats[i + 1]):
+            out.append(f"{pats[i]} {pats[i + 1]}")
+            i += 2
+        else:
+            out.append(pats[i])
+            i += 1
+    return out
+
+
 def _restrict_match(name: str, pat: str) -> bool:
     """True if output filename *name* matches a --files entry *pat*.
 
@@ -431,13 +471,17 @@ def _restrict_match(name: str, pat: str) -> bool:
     filename ending in .txt, matched exactly; or (c) a bare stem key such as
     'Teff_vs_time', which matches both the base file 'Teff_vs_time.txt' and any
     case-named 'Teff_vs_time-<case>.txt' (so plot mode now behaves like compare).
+    Stems also match canonically, so spaces and underscores need not line up.
     """
     if any(c in pat for c in "*?["):
         return fnmatch.fnmatch(name, pat)
     if pat.endswith(".txt"):
         return name == pat
     stem = name[:-4] if name.endswith(".txt") else name
-    return stem == pat or stem.startswith(pat + "-")
+    if stem == pat or stem.startswith(pat + "-"):
+        return True
+    cpat, cstem = _canon_stem(pat), _canon_stem(stem)
+    return cstem == cpat or cstem.startswith(cpat + "-")
 
 
 # ---------------------------------------------------------------------------
@@ -1188,7 +1232,10 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
     txt_files = sorted(outdir.glob("*.txt"))
     if restrict:
         # Each entry may be a glob, a full filename, or a bare stem key
-        # (e.g. 'Teff_vs_time' matches 'Teff_vs_time-<case>.txt').
+        # (e.g. 'Teff_vs_time' matches 'Teff_vs_time-<case>.txt').  Stems that
+        # contain a space, such as 'power_coll_ion 1_vs_time', arrive split
+        # unless the user quoted them, so rejoin those first.
+        restrict = _rejoin_split_stems(restrict, [f.stem for f in txt_files])
         txt_files = [f for f in txt_files
                      if any(_restrict_match(f.name, pat) for pat in restrict)]
     else:
@@ -1209,7 +1256,11 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
 
     for path in txt_files:
         stem = path.stem
-        if any(stem.startswith(s) for s in _SKIP_STEMS):
+        # _SKIP_STEMS lists files a composite function draws instead, so the
+        # per-file loop does not duplicate them.  Those composites only run
+        # when the plot set is unrestricted, so a file named explicitly through
+        # --files must be drawn here or it is drawn by nobody.
+        if restrict is None and any(stem.startswith(s) for s in _SKIP_STEMS):
             continue
 
         data = _load(path)
@@ -1425,33 +1476,80 @@ _COMPARE_ALIASES = {
 }
 
 
+def _species_file_meta(outdir: Path, cases: list) -> dict:
+    """Metadata for the per-background-species files, discovered from disk.
+
+    The Fortran writes one power and one momentum file per bulk species, with
+    the species index built into the stem: 'power_coll_ion 1_vs_time'.  They are
+    therefore not static FILE_META keys, and in plot mode a composite function
+    draws them.  Compare mode has no such composite, so without this they were
+    invisible to it however they were spelled on the command line.
+
+    Both the spaced and the unspaced spelling are probed, mirroring
+    plot_power_coll, and only stems that exist are registered.
+    """
+    meta = {}
+    for kind, ylabel, what in (("power",    "Power density (MW·m⁻³)",
+                                "collisional power density"),
+                               ("momentum", "Momentum transfer rate (N·m⁻³)",
+                                "momentum transfer")):
+        for ib in range(1, 10):
+            for stem in (f"{kind}_coll_ion {ib}_vs_time",
+                         f"{kind}_coll_ion{ib}_vs_time"):
+                if any(_outfile(outdir, stem, c).exists() for c in cases):
+                    meta[stem] = {"ptype": "ts", "ylabel": ylabel,
+                                  "title": f"Ion species {ib} {what}"}
+                    break
+    return meta
+
+
 def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
                       log: bool, restrict=None) -> None:
     """Overlay same-type output files from multiple casenames on shared axes.
 
-    For each FILE_META stem that has at least one matching file, one figure is
+    For each known stem that has at least one matching file, one figure is
     produced with one curve per case (ts/ts2) or one profile per case (1d).
     2D distribution files are skipped — they are not meaningful to superpose.
     """
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
+    # FILE_META plus the per-species files, which carry their index in the stem
+    all_meta = {**FILE_META, **_species_file_meta(outdir, cases)}
+
     if restrict:
         restrict = [_COMPARE_ALIASES.get(r, r) for r in restrict]
+        restrict = _rejoin_split_stems(restrict, all_meta)
 
-    # Collect (case, data) pairs for every FILE_META stem key
+    # Collect (case, data) pairs for every known stem key
     stem_cases: dict = {}
+    matched_names: set = set()
     for case in cases:
-        for key in FILE_META:
+        for key in all_meta:
             path = _outfile(outdir, key, case)
             if not path.exists():
                 continue
-            if restrict and key not in restrict and path.name not in restrict:
+            # same matching as plot mode: globs, full filenames, or bare stems
+            if restrict and not any(_restrict_match(path.name, pat)
+                                    for pat in restrict):
                 continue
             data = _load_auto(path)
             if data is None or data.shape[0] < 2:
                 continue
+            matched_names.add(path.name)
             stem_cases.setdefault(key, []).append((case, data))
+
+    # Say so when an entry matched nothing, rather than silently plotting less
+    # than was asked for.
+    if restrict:
+        missed = [r for r in restrict
+                  if not any(_restrict_match(n, r) for n in matched_names)]
+        if missed:
+            known = ", ".join(sorted(k for k in all_meta
+                                     if k not in _SKIP_STEMS)[:6])
+            print(f"  Warning: no files matched {', '.join(repr(m) for m in missed)}"
+                  f"\n           for case(s) {', '.join(cases)}."
+                  f"\n           Known stems include: {known}, ...")
 
     if not stem_cases:
         print("  (no matching files found for the given casenames)")
@@ -1462,7 +1560,7 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
 
     for key in sorted(stem_cases):
         entries = stem_cases[key]
-        meta   = FILE_META[key]
+        meta   = all_meta[key]
         ptype  = meta.get("ptype", "")
         if ptype not in ("ts", "ts2", "1d"):
             continue
