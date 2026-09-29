@@ -1225,7 +1225,8 @@ def plot_fout_vs_maxw_at_vpar0(outdir: Path, save_dir, show: bool, log: bool,
 def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                    casename: str, restrict=None, steady_state: bool = False,
                    show_sc: bool = True, show_pow: bool = True,
-                   show_mom: bool = True, plot3d: bool = False) -> None:
+                   show_mom: bool = True, plot3d: bool = False,
+                   strict_case: bool = False) -> None:
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -1238,6 +1239,12 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
         restrict = _rejoin_split_stems(restrict, [f.stem for f in txt_files])
         txt_files = [f for f in txt_files
                      if any(_restrict_match(f.name, pat) for pat in restrict)]
+        # --files selects WHICH quantities; an explicit --casename still selects
+        # WHICH case.  Without this, '--files fout --casename X' plotted the
+        # fout of every case in the directory.  An auto-detected casename does
+        # not filter, so a multi-case folder can still be plotted across cases.
+        if strict_case and casename:
+            txt_files = [f for f in txt_files if _matches_casename(f, casename)]
     else:
         txt_files = [f for f in txt_files if _matches_casename(f, casename)]
 
@@ -1451,9 +1458,11 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--log",         action="store_true",
                    help="logarithmic scale for distribution functions")
     p.add_argument("--casename",    default="", metavar="STR",
-                   help="case label for plot titles")
+                   help="case to plot: selects the files and labels them "
+                        "(auto-detected if omitted)")
     p.add_argument("--files",       nargs="+", default=None, metavar="F",
-                   help="plot only these filenames (basenames)")
+                   help="plot only these file types (stem key, glob or full "
+                        "filename); still restricted to --casename when given")
     p.add_argument("--steady-state", action="store_true", dest="steady_state",
                    help="skip time-trace plots (for ntimes=0 runs)")
     p.add_argument("--no-sc",        action="store_true", dest="no_sc",
@@ -1735,6 +1744,9 @@ def main(argv=None):
     if not outdir.is_dir():
         sys.exit(f"Error: output directory not found: {outdir}")
 
+    # A casename the user typed restricts which files are plotted; one we
+    # guessed only labels them (see plot_directory).
+    strict_case = bool(args.casename)
     if not args.casename:
         # Auto-detect the casename from the output filenames. With --files, search
         # only those names; otherwise scan the whole directory, so a plain
@@ -1754,6 +1766,7 @@ def main(argv=None):
         log=args.log,
         casename=args.casename,
         restrict=args.files,
+        strict_case=strict_case,
         steady_state=args.steady_state,
         show_sc=not args.no_sc,
         show_pow=not args.no_pow,
