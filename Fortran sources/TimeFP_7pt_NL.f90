@@ -87,6 +87,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff,teff_tmp
   REAL(dp) :: Tn          ! density-characteristic temperature (diagnostic)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
+  REAL(dp) :: ncoll_d(nbulk), nsc_d, nRF_d, nsrc_d, nloss_d   ! dn/dt per operator term
   REAL(dp) :: tau_rf            ! RF tail formation time [s]
   REAL(dp) :: tau_ii, tau_ie    ! effective collisional times [s]
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
@@ -111,7 +112,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: mRF_perp, mRF_par, msrc_perp, msrc_par
   REAL(dp) :: mloss_perp, mloss_par, mSC_perp, mSC_par
 
-  EXTERNAL :: time_power_7pt, time_momentum_7pt
+  EXTERNAL :: time_power_7pt, time_momentum_7pt, time_density_terms_7pt
 
   real(dp) :: anisotropy
   type(conv_diag_t) :: cdiag        ! Jacobian-weighted convergence diagnostics
@@ -313,6 +314,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='unknown')
       IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
       IF (isc /= 0)     OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
+      OPEN(520,file=TRIM(outfile('density_terms_vs_time.txt')),   status='unknown')
+      WRITE(520,'(A)') '# time  total  coll(1:nbulk; 1=e)  self-coll  RF  source  losses   [m^-3 s^-1]'
     END IF
     IF (iplot_mom == -1) THEN
       OPEN(570,file=TRIM(outfile('momentum_coll_tot_vs_time.txt')), status='unknown')
@@ -353,6 +356,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='old', access='append')
       IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
       IF (isc /= 0)     OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
+      OPEN(520,file=TRIM(outfile('density_terms_vs_time.txt')),   status='old', access='append')
     END IF
     IF (iplot_mom == -1) THEN
       OPEN(570,file=TRIM(outfile('momentum_coll_tot_vs_time.txt')), status='old', access='append')
@@ -560,6 +564,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
       IF (isc /= 0)     WRITE(500,*) time, pcoll_self/1.d6, &
                                          pcoll_self_perp/1.d6, pcoll_self_par/1.d6
+      CALL time_density_terms_7pt(x_vec, ncoll_d, nsc_d, nRF_d, nsrc_d, nloss_d)
+      WRITE(520,'(ES16.8,*(ES16.7))') time, SUM(ncoll_d)+nsc_d+nRF_d+nsrc_d+nloss_d, &
+                                     ncoll_d, nsc_d, nRF_d, nsrc_d, nloss_d
     END IF
     IF (nbulk > 1)  WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
     IF (isc /= 0)   WRITE(506,*) time, lnaa_t
@@ -626,6 +633,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     CLOSE(516)
     IF (isource == -1) CLOSE(490)
     IF (isc /= 0)      CLOSE(500)
+    CLOSE(520)
     CLOSE(470)
     DO ib = 1, nbulk; CLOSE(470+ib); END DO
   END IF

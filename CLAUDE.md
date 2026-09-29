@@ -194,6 +194,7 @@ New output files must use units not in this table:
 | 516 | tau_coll_vs_time (effective tau_ii, tau_ie) | always |
 | 518 | conv_diag_vs_time.csv (full convergence history) | `i_ss_check=-1` |
 | 519 | conv_eps_vs_time (time, eps, eps_tail) | `i_ss_check=-1` |
+| 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | `iplot_pow=-1` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |
