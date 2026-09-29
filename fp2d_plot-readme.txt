@@ -130,6 +130,14 @@ EXAMPLES
   # A time trace over several decades, both axes logarithmic
   python fp2d_plot.py plot x64/Release --files energy_vs_time --logx --logy --show
 
+  # Fix both axes: the first second, energies up to 400 keV
+  python fp2d_plot.py plot x64/Release --files energy_vs_time ^
+      --xrange 0:1 --yrange 0:400 --show
+
+  # The VDF tail, six decades below the peak
+  python fp2d_plot.py plot x64/Release --files fout_at_vpar0 ^
+      --logy --yrange 1e-6:10 --show
+
   # Skip momentum plots (e.g. they were not written)
   python fp2d_plot.py plot x64/Release --no-mom --show
 
@@ -270,6 +278,24 @@ COMMON OPTIONS  (all three sub-commands)
                     and requires xmin < xmax.  If the window contains no data a
                     warning is printed (the plot would otherwise be blank).
                     Example: --xrange 0:5e6
+
+  --yrange ymin:ymax
+                    (plot and compare only)  The same for the y-axis: bounds in
+                    the file's own units, a ':' or ',' separator, ymin < ymax,
+                    and a warning when the window holds no data.
+                    Example: --yrange 1e-6:10
+
+                    Note the interaction with --xrange.  Given alone, --xrange
+                    rescales the y-axis to the data inside the x-window, which
+                    is usually what you want when zooming a trace.  Giving
+                    --yrange suppresses that rescale and uses the bounds you
+                    asked for, so the two can be combined to fix both axes:
+                      --xrange 0:1 --yrange 0:400
+
+                    It is applied after --logy, so it also sets the limits of a
+                    logarithmic axis:
+                      --files fout_at_vpar0 --logy --yrange 1e-6:10
+                    plots the VDF tail down to six decades below the peak.
 
   --cases CASE ...  (plot and compare)  Case(s) to work on.  In plot mode each
                     case gets its own set of figures and the name also selects

@@ -34,6 +34,9 @@ plot / compare only
                    the case is auto-detected from the filenames.
   --xrange xmin:xmax   Zoom the x-axis of every plot to [xmin, xmax]
                        (e.g. --xrange 0:5e6). Accepts ':' or ',' separators.
+  --yrange ymin:ymax   The same for the y-axis. Given alone, --xrange rescales
+                       y to the data in the window; --yrange suppresses that
+                       and uses the bounds asked for.
 
 run only
 --------
@@ -258,9 +261,12 @@ _SKIP_STEMS.update({"sc_Dpepe_at_vpar0", "sc_Dpapa_at_vpar0", "sc_Dpepa_at_vpar0
 
 _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 
-# x-axis zoom for the 'plot' and 'compare' subcommands; (xmin, xmax) or None.
-# Set in main() from --xrange and applied to every figure in _finish().
+# Axis zoom for the 'plot' and 'compare' subcommands; (lo, hi) or None.
+# Set in main() from --xrange / --yrange and applied to every figure in
+# _finish().  An explicit _YRANGE also suppresses the automatic y-rescale that
+# _XRANGE would otherwise perform, so the two can be combined.
 _XRANGE = None
+_YRANGE = None
 
 # Logarithmic AXES, set in main() from --logx/--logy and applied to every
 # figure in _finish().  The third log option, --logf, scales the plotted
@@ -271,20 +277,26 @@ _LOGX = False
 _LOGY = False
 
 
-def _parse_xrange(s: str):
-    """Parse '--xrange' value 'xmin:xmax' (or 'xmin,xmax') into (xmin, xmax)."""
+def _parse_range(s: str, opt: str = "--xrange"):
+    """Parse a 'lo:hi' (or 'lo,hi') bound pair, as given to --xrange/--yrange."""
     txt = s.strip().lstrip("[").rstrip("]")
     sep = ":" if ":" in txt else ","
     parts = txt.split(sep)
+    a, b = ("xmin", "xmax") if opt == "--xrange" else ("ymin", "ymax")
     if len(parts) != 2:
-        sys.exit(f"Error: --xrange expects 'xmin:xmax', got '{s}'")
+        sys.exit(f"Error: {opt} expects '{a}:{b}', got '{s}'")
     try:
         lo, hi = float(parts[0]), float(parts[1])
     except ValueError:
-        sys.exit(f"Error: --xrange bounds must be numbers, got '{s}'")
+        sys.exit(f"Error: {opt} bounds must be numbers, got '{s}'")
     if hi <= lo:
-        sys.exit(f"Error: --xrange requires xmin < xmax, got '{s}'")
+        sys.exit(f"Error: {opt} requires {a} < {b}, got '{s}'")
     return (lo, hi)
+
+
+def _parse_xrange(s: str):
+    """Kept for callers and tests that use the original name."""
+    return _parse_range(s, "--xrange")
 
 
 def _get_meta(stem: str) -> dict:
@@ -484,23 +496,26 @@ def _apply_log_axes(fig, stem: str) -> None:
                       f"not shown on the {which}-axis of {stem})")
 
 
-def _warn_if_xrange_empty(fig, stem: str) -> None:
-    """Warn when --xrange selects no line data (otherwise the plot is blank
-    with no hint why — usually a units mismatch, e.g. 0:1 on an m/s axis)."""
-    xmin, xmax = _XRANGE
-    xs, in_window = [], False
+def _warn_if_range_empty(fig, stem: str, rng, which: str) -> None:
+    """Warn when --xrange/--yrange selects no line data (otherwise the plot is
+    blank with no hint why — usually a units mismatch, e.g. 0:1 on an m/s
+    axis)."""
+    lo, hi = rng
+    vals, in_window = [], False
     for ax in fig.axes:
         for line in ax.get_lines():
-            xd = np.asarray(line.get_xdata(), dtype=float)
-            if xd.size <= 2:                   # skip reference lines
+            d = np.asarray(line.get_xdata() if which == "x" else line.get_ydata(),
+                           dtype=float)
+            if d.size <= 2:                    # skip reference lines
                 continue
-            xs.append(xd)
-            if np.any((xd >= xmin) & (xd <= xmax)):
+            vals.append(d)
+            if np.any((d >= lo) & (d <= hi)):
                 in_window = True
-    if xs and not in_window:
-        allx = np.concatenate(xs)
-        print(f"    WARNING: --xrange [{xmin:g}, {xmax:g}] selects no data for "
-              f"'{stem}' (x spans [{allx.min():g}, {allx.max():g}]); plot is empty.")
+    if vals and not in_window:
+        allv = np.concatenate(vals)
+        print(f"    WARNING: --{which}range [{lo:g}, {hi:g}] selects no data for "
+              f"'{stem}' ({which} spans [{allv.min():g}, {allv.max():g}]); "
+              f"plot is empty.")
 
 
 def _finish(fig, stem: str, save_dir, show: bool) -> None:
@@ -509,11 +524,21 @@ def _finish(fig, stem: str, save_dir, show: bool) -> None:
         # colorbars are appended afterwards, and every multi-panel figure is
         # built with sharex=True, so a single set_xlim propagates to all panels.
         fig.axes[0].set_xlim(_XRANGE)
-        # Rescale y to the data now visible in the x-window (line plots only).
-        for ax in fig.axes:
-            _autoscale_y_to_xrange(ax, _XRANGE)
-        _warn_if_xrange_empty(fig, stem)
+        # Rescale y to the data now visible in the x-window (line plots only),
+        # unless the user has asked for a y-window of their own.
+        if _YRANGE is None:
+            for ax in fig.axes:
+                _autoscale_y_to_xrange(ax, _XRANGE)
+        _warn_if_range_empty(fig, stem, _XRANGE, "x")
     _apply_log_axes(fig, stem)
+    if _YRANGE is not None:
+        # After _apply_log_axes, which may have set its own limits.  Applied to
+        # every data axes rather than just the first: multi-panel figures share
+        # x but not y, so each panel needs it.
+        for ax in fig.axes:
+            if ax.get_label() != "<colorbar>":
+                ax.set_ylim(_YRANGE)
+        _warn_if_range_empty(fig, stem, _YRANGE, "y")
     if save_dir is not None:
         out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
@@ -1790,6 +1815,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(plot_p, multi=True)
     plot_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
                         help="zoom the x-axis of every plot to [xmin, xmax]")
+    plot_p.add_argument("--yrange", default=None, metavar="ymin:ymax",
+                        help="zoom the y-axis of every plot to [ymin, ymax] "
+                             "(suppresses the automatic y-rescale that "
+                             "--xrange performs)")
 
     cmp_p = sub.add_parser("compare",
                             help="overlay same-type outputs from multiple cases")
@@ -1813,21 +1842,25 @@ def build_parser() -> argparse.ArgumentParser:
                             " or full filenames")
     cmp_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
                        help="zoom the x-axis of every plot to [xmin, xmax]")
+    cmp_p.add_argument("--yrange", default=None, metavar="ymin:ymax",
+                       help="zoom the y-axis of every plot to [ymin, ymax]")
 
     return p
 
 
 def main(argv=None):
-    global _XRANGE, _LOGX, _LOGY
+    global _XRANGE, _YRANGE, _LOGX, _LOGY
     args = build_parser().parse_args(argv)
 
     # Default to interactive display when no save directory is given
     if not args.show and args.save_dir is None:
         args.show = True
 
-    # x-axis zoom (plot / compare only; run never defines --xrange)
+    # axis zoom (plot / compare only; run defines neither)
     if getattr(args, "xrange", None):
-        _XRANGE = _parse_xrange(args.xrange)
+        _XRANGE = _parse_range(args.xrange, "--xrange")
+    if getattr(args, "yrange", None):
+        _YRANGE = _parse_range(args.yrange, "--yrange")
 
     # logarithmic axes; --logf travels separately as the `log` argument
     _LOGX = bool(getattr(args, "logx", False))

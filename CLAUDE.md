@@ -278,3 +278,24 @@ to an arbitrary decade, and the dropped points are counted in a note.
 `_positive_span` finds the range from line data where there is any, and from
 `ax.dataLim` otherwise — which is what makes `--logy` work on the `v_perp` axis
 of a 2D contour map.
+
+### Axis zoom (`--xrange`, `--yrange`)
+
+Both are `plot`/`compare` only, parsed by `_parse_range` and held in the
+`_XRANGE` / `_YRANGE` globals, applied in `_finish` like the log scales.
+`_warn_if_range_empty` reports a window that selects no data, since the plot
+would otherwise be blank with no hint why (usually a units mismatch — the
+velocity grid spans ~0 to a few 10⁷ m/s, so `0:1` selects nothing).
+
+Two ordering constraints, both load-bearing:
+
+- `--xrange` alone rescales y to the data inside the window
+  (`_autoscale_y_to_xrange`), which is what you want when zooming a trace. That
+  rescale is **skipped** when `_YRANGE` is set, or it would immediately undo
+  the bounds the user asked for.
+- `_YRANGE` is applied **after** `_apply_log_axes`, which sets limits of its
+  own when it pins a log axis to the smallest positive sample. So
+  `--logy --yrange 1e-6:10` gives the requested decades.
+
+`--xrange` sets `fig.axes[0]` only (multi-panel figures are built `sharex=True`);
+`--yrange` sets every non-colorbar axes, since y is not shared.
