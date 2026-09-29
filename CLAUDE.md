@@ -248,3 +248,33 @@ An explicitly named file is drawn even when its stem is in `_SKIP_STEMS`: the
 composite that would otherwise draw it only runs when the plot set is
 unrestricted. A `--files` entry that matches nothing prints a warning rather
 than silently plotting less than was asked for.
+
+### Logarithmic scales
+
+Three independent options, available to `plot` and `compare`:
+
+| Option | Scales | Mechanism |
+|--------|--------|-----------|
+| `--logf` (alias `--log`) | the plotted **quantity** — colour scale of a 2D map, z of a 3D surface, y of a 1D profile | the `log` argument threaded through each plot function |
+| `--logx` | the x-axis | `_LOGX` global, applied in `_finish` |
+| `--logy` | the y-axis | `_LOGY` global, applied in `_finish` |
+
+`--logf` has to be built in at plot time (it changes contour levels and the
+colour norm), so it stays a parameter. The two axis scales are a post-hoc
+property of the axes, so they follow the `_XRANGE` pattern: a module global set
+in `main`, applied to every figure in `_finish` via `_apply_log_axes`. Adding a
+plot function therefore needs no work to support them.
+
+**The zero-crossing rule** (`_hides_data`, used by `_positive_span`): an axis
+whose negative excursion exceeds `_LOG_NEG_TOL = 1e-6` of its positive range is
+left linear and prints why — `v_par` is signed, and so is a power that changes
+sign, and a log scale there drops half the data with no visible indication.
+Anything smaller is round-off: the far tail of a VDF dips a few 1e-9 of its
+peak below zero, and refusing a log axis over that would block the commonest
+use of `--logy`. In that case the axis is drawn logarithmically, the lower
+limit is pinned to the smallest positive sample so matplotlib does not pad down
+to an arbitrary decade, and the dropped points are counted in a note.
+
+`_positive_span` finds the range from line data where there is any, and from
+`ax.dataLim` otherwise — which is what makes `--logy` work on the `v_perp` axis
+of a 2D contour map.

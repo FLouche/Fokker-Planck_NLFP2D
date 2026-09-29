@@ -69,7 +69,7 @@ EXAMPLES
 
   # Run, save PNGs, logarithmic scale for distribution functions
   python fp2d_plot.py run FP2D_QLRF_NL.exe jet_beam_case7.txt ^
-      --outdir x64/Release --save plots/beam7 --log
+      --outdir x64/Release --save plots/beam7 --logf
 
   # Redirect solver output to a log file
   python fp2d_plot.py run FP2D_QLRF_NL.exe jet_beam_case7.txt ^
@@ -212,6 +212,11 @@ EXAMPLES
       --cases JET-beam7-TD0-Lin JET-beam7-TD0-NLSC ^
       --save plots/Lin_vs_NLSC
 
+  # Overlay the VDF tails on a logarithmic y-axis
+  python fp2d_plot.py compare x64/Release ^
+      --cases JET-beam7-TD0-Lin JET-beam7-TD0-NLSC ^
+      --files fout_at_vpar0 --logy --show
+
   # Compare 1D profiles, zoomed to the perpendicular tail
   python fp2d_plot.py compare x64/Release ^
       --cases ITER-RF1-TD1-NLMax1 ITER-RF1-TD1-NLSC ^
@@ -241,12 +246,17 @@ COMMON OPTIONS  (all three sub-commands)
                     gives a 2D map with a log v_perp axis and a log colour
                     scale.
 
-                    An axis that CROSSES zero is left linear and a note is
-                    printed: v_par is signed, and so is a power that changes
-                    sign, so a log scale would silently discard half the data.
-                    An axis that merely STARTS at zero -- v_perp, or a time
-                    trace at t = 0 -- is drawn logarithmically, losing only
-                    that one end point.
+                    An axis that genuinely CROSSES zero is left linear and a
+                    note is printed: v_par is signed, and so is a power that
+                    changes sign, so a log scale would discard half the data
+                    with nothing on the figure to say so.
+
+                    An axis that merely STARTS at zero (v_perp, or a time trace
+                    at t = 0), or that dips below it only by round-off (the far
+                    tail of a VDF, a few 1e-9 of the peak), is drawn
+                    logarithmically; the points that cannot be shown are
+                    counted in a note.  The threshold between the two is a
+                    negative excursion of 1e-6 of the positive range.
 
   --xrange xmin:xmax
                     (plot and compare only)  Zoom the x-axis of every figure

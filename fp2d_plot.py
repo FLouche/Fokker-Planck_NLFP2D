@@ -17,9 +17,11 @@ Options (both subcommands)
                   (--log is an accepted alias.)
   --logx          Logarithmic x-axis.
   --logy          Logarithmic y-axis (on a 1D profile, same as --logf).
-                  An axis that crosses zero -- v_par, or a power that changes
-                  sign -- is left linear, with a note saying so; one that
-                  merely starts at zero (v_perp, t=0) is drawn logarithmically.
+                  An axis that genuinely crosses zero -- v_par, or a power that
+                  changes sign -- is left linear, with a note saying so.  One
+                  that starts at zero (v_perp, t=0) or dips below it only by
+                  round-off (a VDF tail) is drawn logarithmically, and the
+                  points not shown are counted in a note.
   --3d            Add 3D surface plots for 2D distribution files.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
 
@@ -392,14 +394,22 @@ def _autoscale_y_to_xrange(ax, xrange) -> None:
         ax.set_ylim(ylo - pad, yhi + pad)
 
 
+# A negative excursion smaller than this fraction of the positive range is
+# round-off, not signal: the far tail of a VDF dips a few 1e-9 of its peak
+# below zero, and refusing a log axis over that would block the commonest use
+# of --logy there.  Anything larger is real structure that a log scale would
+# hide, so the axis is left linear instead.
+_LOG_NEG_TOL = 1e-6
+
+
 def _positive_span(ax, which: str):
-    """(smallest positive, largest) of the data on one axis of *ax*.
+    """(smallest positive, largest, n_dropped) of the data on one axis of *ax*.
 
     Line data is preferred, ignoring the 2-point reference lines drawn by
     axhline/axvline.  Where there are no lines -- a contour map -- the axes'
     own data limits are used instead, so a log scale still works on the
-    v_perp axis of a 2D plot.  Returns None when nothing on the axis is
-    positive, which is the signal to leave it linear.
+    v_perp axis of a 2D plot.  Returns None when a log scale would hide real
+    data, which is the signal to leave the axis linear.
     """
     vals = []
     for line in ax.get_lines():
@@ -413,27 +423,30 @@ def _positive_span(ax, which: str):
     if vals:
         allv = np.concatenate(vals)
         lo, hi = float(allv.min()), float(allv.max())
-        if hi <= 0 or _is_signed(lo, hi):
+        if hi <= 0 or _hides_data(lo, hi):
             return None
         pos = allv[allv > 0]
-        return (float(pos.min()) if pos.size else hi * 1e-4), hi
+        if not pos.size:
+            return None
+        return float(pos.min()), hi, int((allv <= 0).sum())
 
     box = ax.dataLim
     lo, hi = (box.x0, box.x1) if which == "x" else (box.y0, box.y1)
-    if not np.isfinite([lo, hi]).all() or hi <= 0 or _is_signed(lo, hi):
+    if not np.isfinite([lo, hi]).all() or hi <= 0 or _hides_data(lo, hi):
         return None
-    return (lo if lo > 0 else hi * 1e-4), float(hi)
+    return (lo if lo > 0 else hi * 1e-4), float(hi), 0
 
 
-def _is_signed(lo: float, hi: float) -> bool:
-    """True if the range genuinely crosses zero.
+def _hides_data(lo: float, hi: float) -> bool:
+    """True if a log scale on this range would conceal real data.
 
-    An axis that merely STARTS at zero (v_perp, or t=0 on a time trace) is fine
-    to draw logarithmically: only the single end point is lost.  One that is
-    SIGNED (v_par) is not -- half the data would silently disappear, which is a
-    worse outcome than no log scale at all.
+    An axis that merely STARTS at zero (v_perp, t=0 on a time trace) is fine:
+    one end point is lost.  So is one whose negative excursion is round-off,
+    like the far tail of a VDF.  One that is genuinely SIGNED (v_par, or a
+    power that changes sign) is not -- half the data would vanish with nothing
+    on the figure to say so, which is worse than no log scale at all.
     """
-    return lo < -1e-12 * abs(hi)
+    return lo < -_LOG_NEG_TOL * abs(hi)
 
 
 def _apply_log_axes(fig, stem: str) -> None:
@@ -441,11 +454,11 @@ def _apply_log_axes(fig, stem: str) -> None:
 
     A log axis needs positive data, and several of these axes legitimately
     reach or cross zero: v_par is signed, and every time trace starts at t=0.
-    Where nothing on the axis is positive the scale is left linear and the
-    reason is printed -- a blank plot with no explanation is worse than a
-    linear one.  Where only part of the range is positive the axis is set to
-    log and its lower limit pinned to the smallest positive sample, which
-    stops matplotlib from padding down to an arbitrary decade.
+    Where a log scale would hide real data the axis is left linear and the
+    reason is printed -- a half-empty plot with no explanation is worse than a
+    linear one.  Otherwise the axis is set to log and its lower limit pinned to
+    the smallest positive sample, which stops matplotlib from padding down to
+    an arbitrary decade; any non-positive points dropped are reported.
     """
     if not (_LOGX or _LOGY):
         return
@@ -458,14 +471,17 @@ def _apply_log_axes(fig, stem: str) -> None:
             span = _positive_span(ax, which)
             if span is None:
                 # e.g. --logx on a v_par axis, which crosses zero
-                print(f"    (--log{which}: the {which}-axis of {stem} reaches "
-                      f"below zero, left linear)")
+                print(f"    (--log{which}: the {which}-axis of {stem} crosses "
+                      f"zero, left linear)")
                 continue
+            lo, hi, dropped = span
             getattr(ax, f"set_{which}scale")("log")
-            lo, hi = span
             lim = getattr(ax, f"get_{which}lim")()
             if lim[0] <= 0:
                 getattr(ax, f"set_{which}lim")(lo * 0.9, max(hi * 1.1, lim[1]))
+            if dropped:
+                print(f"    (--log{which}: {dropped} non-positive point(s) "
+                      f"not shown on the {which}-axis of {stem})")
 
 
 def _warn_if_xrange_empty(fig, stem: str) -> None:
