@@ -381,6 +381,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   REAL(dp), ALLOCATABLE :: rf00(:,:)
   REAL(dp) :: taum_save
   INTEGER  :: iv, ip, ib
+  LOGICAL, SAVE :: sc_map_done = .FALSE.
 
   ! apply_operator reads taum through fd_stencil_2d: keep the loss term out
   ! of the operator terms and restore it for the caller (see time_power_7pt).
@@ -401,6 +402,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   IF (isc /= 0) THEN
     CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
     CALL integrate_Lf(Lf, nsc)
+    IF (idiag == -1 .AND. .NOT. sc_map_done) CALL write_sc_map()
   ELSE
     nsc = 0.0_dp
   END IF
@@ -447,5 +449,34 @@ CONTAINS
     END DO
     CALL ncint_2d(fint, res)
   END SUBROUTINE integrate_Lf
+
+  ! Where in velocity space does the SC particle source sit, and which
+  ! derivative term carries it?  Written once (first call, idiag=-1) to
+  ! sc_density_map.txt: vperp, vpar, f, L_sc f, then the six single-coefficient
+  ! parts of L_sc f (sc00, sc10, sc01, sc20, sc11, sc02), which add up to L_sc f
+  ! exactly since fd_stencil_2d is linear in its coefficients.  The node
+  ! contribution to dn/dt is (L_sc f)*jacob times the Simpson weights of ncint_2d.
+  SUBROUTINE write_sc_map()
+    REAL(dp), ALLOCATABLE :: z(:,:), part(:,:)
+    ALLOCATE(z(nperp,npar), part(nbig,6))
+    z = 0.0_dp
+    CALL apply_operator(z, z, z, z, z, sc00, f, part(:,1))
+    CALL apply_operator(z, z, z, sc10, z, z, f, part(:,2))
+    CALL apply_operator(z, z, z, z, sc01, z, f, part(:,3))
+    CALL apply_operator(sc20, z, z, z, z, z, f, part(:,4))
+    CALL apply_operator(z, z, sc11, z, z, z, f, part(:,5))
+    CALL apply_operator(z, sc02, z, z, z, z, f, part(:,6))
+    OPEN(522, file=TRIM(outfile('sc_density_map.txt')), status='unknown')
+    WRITE(522,'(A)') '# vperp vpar f L_sc_f  parts: sc00 sc10 sc01 sc20 sc11 sc02'
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        WRITE(522,'(10ES17.8)') vperp(iv), vpar(ip), f(index_mat(iv,ip)), &
+                                Lf(index_mat(iv,ip)), part(index_mat(iv,ip),:)
+      END DO
+    END DO
+    CLOSE(522)
+    DEALLOCATE(z, part)
+    sc_map_done = .TRUE.
+  END SUBROUTINE write_sc_map
 
 END SUBROUTINE time_density_terms_7pt

@@ -195,6 +195,7 @@ New output files must use units not in this table:
 | 518 | conv_diag_vs_time.csv (full convergence history) | `i_ss_check=-1` |
 | 519 | conv_eps_vs_time (time, eps, eps_tail) | `i_ss_check=-1` |
 | 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | `iplot_pow=-1` |
+| 522 | sc_density_map (vperp, vpar, f, L_sc f, and its six single-coefficient parts; first step only) | `idiag=-1`, `isc≠0` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |
