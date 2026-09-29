@@ -83,7 +83,12 @@ else non_uniform_grid
                                endif left                          
 else quadratic
     
-    vperp(i) = vperp_min + vperp_max * (real(i-0.5d0, dp)/real(nperp-1, dp))**2!-0.5
+    ! p_grid=2 keeps the integer power so the original grid is reproduced to the bit
+    if (p_grid == 2.d0) then
+        vperp(i) = vperp_min + vperp_max * (real(i-0.5d0, dp)/real(nperp-1, dp))**2
+    else
+        vperp(i) = vperp_min + vperp_max * (real(i-0.5d0, dp)/real(nperp-1, dp))**p_grid
+    end if
     
 endif quadratic
 		         

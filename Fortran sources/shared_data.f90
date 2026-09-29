@@ -34,6 +34,10 @@ integer :: phi_m = 0      ! circulant length (power of two, >= 2*npar-2)
 integer :: phi_nf = 0     ! independent frequencies, phi_m/2 + 1
 
 integer :: ising,nsing
+double precision :: p_grid = 2.d0  ! ising=+1: vperp(i) = vperp_min + vperp_max*((i-1/2)/(nperp-1))**p_grid
+                                   ! p_grid=2 is the original quadratic grid; a larger p_grid puts
+                                   ! more points in the thermal bulk at the cost of a coarser outer
+                                   ! (tail) region, the spacing still vanishing at the axis for p_grid>1.
 integer :: jmid,imid
 integer :: i_upwind = 0   ! v_perp convection-diffusion scheme in fd_stencil_2d:
                           !  0: central Fornberg drag + Fornberg diffusion (default)

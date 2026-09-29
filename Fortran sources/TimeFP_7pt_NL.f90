@@ -104,6 +104,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   LOGICAL            :: file_exists, need_compute
   INTEGER            :: f_nperp, f_npar
   REAL(dp)           :: f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max
+  REAL(dp)           :: f_vperp_sum      ! SUM(vperp): catches ising/nsing/vbound/p_grid
 
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
   REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t
@@ -162,10 +163,16 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   IF (file_exists) THEN
     OPEN(55, file=kernel_file, status='old', form='unformatted', access='stream', iostat=error)
     IF (error == 0) THEN
-      READ(55, iostat=error) f_nperp, f_npar, f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max
+      ! SUM(vperp) closes a hole in the signature: nperp and the box limits do
+      ! not change with ising, nsing, vbound or p_grid, so a kernel for another
+      ! v_perp grid used to load as 'matching'.  An older cache has a kernel
+      ! value where the sum now sits, fails the test and is simply recomputed.
+      READ(55, iostat=error) f_nperp, f_npar, f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max, &
+                             f_vperp_sum
       IF (error == 0 .AND. f_nperp == nperp .AND. f_npar == npar .AND. &
           f_vperp_min == vperp_min .AND. f_vperp_max == vperp_max .AND. &
-          f_vpar_min  == vpar_min  .AND. f_vpar_max  == vpar_max) THEN
+          f_vpar_min  == vpar_min  .AND. f_vpar_max  == vpar_max  .AND. &
+          f_vperp_sum == SUM(vperp)) THEN
         READ(55, iostat=error) phi_kern
         IF (error == 0) THEN
           need_compute = .FALSE.
@@ -189,7 +196,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     CALL cpu_time(t_end)
     WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
     OPEN(55, file=kernel_file, status='replace', form='unformatted', access='stream')
-    WRITE(55) nperp, npar, vperp_min, vperp_max, vpar_min, vpar_max
+    WRITE(55) nperp, npar, vperp_min, vperp_max, vpar_min, vpar_max, SUM(vperp)
     WRITE(55) phi_kern
     CLOSE(55)
     WRITE(*,'(A)') '  phi-distance kernel saved to '//TRIM(kernel_file)

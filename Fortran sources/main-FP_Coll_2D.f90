@@ -236,6 +236,10 @@ double precision start_time,end_time
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
 !                      for vperp <= vbound: nsing points (increase the density for small vperp)
 !           +1: Quadratic spacing for higher resolution near vperp=0 (or vperp_min)
+!               p_grid (default 2) sets the power: vperp ~ ((i-1/2)/(nperp-1))**p_grid.
+!               A larger p_grid moves points from the tail into the thermal bulk.
+!               Keep ising=+1 for nonlinear self-collisions: grids uniform near the
+!               axis (ising=0,-1) give a ~250x larger SC particle error.
 !               
 !
 ! Convergence for time-dependent simulation:
@@ -263,7 +267,7 @@ double precision start_time,end_time
 
 namelist /INPUT/ casename, &
                  nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
-                ising,nsing,vbound,&
+                ising,nsing,vbound,p_grid,&
                nbulk,t,aa,ab,za,zb,ne,xpart,xb, &
                 isource,beam_ekin,beam_angle_deg, & 
                 beam_dvperp, beam_dvpar, taus, &
