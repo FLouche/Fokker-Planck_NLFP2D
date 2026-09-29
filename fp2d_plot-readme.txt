@@ -124,6 +124,12 @@ EXAMPLES
       --cases ITER_EDA-RF-NLSC_2 ITER_EDA-RF-NLSC_2-Grid_1 ^
       --files fout --show
 
+  # Log scales: the VDF on a log colour scale over a log v_perp axis
+  python fp2d_plot.py plot x64/Release --files fout --logf --logy --show
+
+  # A time trace over several decades, both axes logarithmic
+  python fp2d_plot.py plot x64/Release --files energy_vs_time --logx --logy --show
+
   # Skip momentum plots (e.g. they were not written)
   python fp2d_plot.py plot x64/Release --no-mom --show
 
@@ -221,8 +227,26 @@ COMMON OPTIONS  (all three sub-commands)
   --save DIR        Save each figure as a PNG file in DIR (created if absent).
                     Can be combined with --show.
 
-  --log             Use logarithmic y-scale for 1D profiles, or logarithmic
-                    colour scale for 2D contour maps (distribution functions).
+  --logf            Logarithmic scale for the plotted QUANTITY: the colour
+                    scale of a 2D contour map, the z of a 3D surface, the y of
+                    a 1D profile.  --log is an accepted alias.
+
+  --logx            Logarithmic x-axis.
+
+  --logy            Logarithmic y-axis.  On a 1D profile the y-axis IS the
+                    function, so --logy and --logf coincide there.
+
+                    The three combine freely, e.g.
+                      --files fout --logy --logf
+                    gives a 2D map with a log v_perp axis and a log colour
+                    scale.
+
+                    An axis that CROSSES zero is left linear and a note is
+                    printed: v_par is signed, and so is a power that changes
+                    sign, so a log scale would silently discard half the data.
+                    An axis that merely STARTS at zero -- v_perp, or a time
+                    trace at t = 0 -- is drawn logarithmically, losing only
+                    that one end point.
 
   --xrange xmin:xmax
                     (plot and compare only)  Zoom the x-axis of every figure

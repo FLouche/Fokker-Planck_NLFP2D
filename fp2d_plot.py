@@ -12,7 +12,14 @@ Options (both subcommands)
   --save DIR      Write PNG files to DIR (created if absent).
   --show          Open interactive matplotlib windows
                   (default when --save is not given).
-  --log           Logarithmic colour/y-scale for distribution functions.
+  --logf          Logarithmic scale for the plotted QUANTITY: the colour scale
+                  of a 2D map, the z of a 3D surface, the y of a 1D profile.
+                  (--log is an accepted alias.)
+  --logx          Logarithmic x-axis.
+  --logy          Logarithmic y-axis (on a 1D profile, same as --logf).
+                  An axis that crosses zero -- v_par, or a power that changes
+                  sign -- is left linear, with a note saying so; one that
+                  merely starts at zero (v_perp, t=0) is drawn logarithmically.
   --3d            Add 3D surface plots for 2D distribution files.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
 
@@ -253,6 +260,14 @@ _PALETTE = ["#8B1A1A", "#1A1A8B", "#1A8B1A", "#8B8B1A", "#8B1A8B", "#1A8B8B"]
 # Set in main() from --xrange and applied to every figure in _finish().
 _XRANGE = None
 
+# Logarithmic AXES, set in main() from --logx/--logy and applied to every
+# figure in _finish().  The third log option, --logf, scales the plotted
+# QUANTITY (the colour scale of a 2D map, the z of a surface, the y of a 1D
+# profile); that cannot be a post-hoc axis change, so it stays the `log`
+# argument threaded through the individual plot functions.
+_LOGX = False
+_LOGY = False
+
 
 def _parse_xrange(s: str):
     """Parse '--xrange' value 'xmin:xmax' (or 'xmin,xmax') into (xmin, xmax)."""
@@ -377,6 +392,82 @@ def _autoscale_y_to_xrange(ax, xrange) -> None:
         ax.set_ylim(ylo - pad, yhi + pad)
 
 
+def _positive_span(ax, which: str):
+    """(smallest positive, largest) of the data on one axis of *ax*.
+
+    Line data is preferred, ignoring the 2-point reference lines drawn by
+    axhline/axvline.  Where there are no lines -- a contour map -- the axes'
+    own data limits are used instead, so a log scale still works on the
+    v_perp axis of a 2D plot.  Returns None when nothing on the axis is
+    positive, which is the signal to leave it linear.
+    """
+    vals = []
+    for line in ax.get_lines():
+        d = np.asarray(line.get_xdata() if which == "x" else line.get_ydata(),
+                       dtype=float)
+        if d.size <= 2:
+            continue
+        d = d[np.isfinite(d)]
+        if d.size:
+            vals.append(d)
+    if vals:
+        allv = np.concatenate(vals)
+        lo, hi = float(allv.min()), float(allv.max())
+        if hi <= 0 or _is_signed(lo, hi):
+            return None
+        pos = allv[allv > 0]
+        return (float(pos.min()) if pos.size else hi * 1e-4), hi
+
+    box = ax.dataLim
+    lo, hi = (box.x0, box.x1) if which == "x" else (box.y0, box.y1)
+    if not np.isfinite([lo, hi]).all() or hi <= 0 or _is_signed(lo, hi):
+        return None
+    return (lo if lo > 0 else hi * 1e-4), float(hi)
+
+
+def _is_signed(lo: float, hi: float) -> bool:
+    """True if the range genuinely crosses zero.
+
+    An axis that merely STARTS at zero (v_perp, or t=0 on a time trace) is fine
+    to draw logarithmically: only the single end point is lost.  One that is
+    SIGNED (v_par) is not -- half the data would silently disappear, which is a
+    worse outcome than no log scale at all.
+    """
+    return lo < -1e-12 * abs(hi)
+
+
+def _apply_log_axes(fig, stem: str) -> None:
+    """Apply --logx / --logy to the data axes of a figure.
+
+    A log axis needs positive data, and several of these axes legitimately
+    reach or cross zero: v_par is signed, and every time trace starts at t=0.
+    Where nothing on the axis is positive the scale is left linear and the
+    reason is printed -- a blank plot with no explanation is worse than a
+    linear one.  Where only part of the range is positive the axis is set to
+    log and its lower limit pinned to the smallest positive sample, which
+    stops matplotlib from padding down to an arbitrary decade.
+    """
+    if not (_LOGX or _LOGY):
+        return
+    for ax in fig.axes:
+        if ax.get_label() == "<colorbar>":
+            continue
+        for which, want in (("x", _LOGX), ("y", _LOGY)):
+            if not want:
+                continue
+            span = _positive_span(ax, which)
+            if span is None:
+                # e.g. --logx on a v_par axis, which crosses zero
+                print(f"    (--log{which}: the {which}-axis of {stem} reaches "
+                      f"below zero, left linear)")
+                continue
+            getattr(ax, f"set_{which}scale")("log")
+            lo, hi = span
+            lim = getattr(ax, f"get_{which}lim")()
+            if lim[0] <= 0:
+                getattr(ax, f"set_{which}lim")(lo * 0.9, max(hi * 1.1, lim[1]))
+
+
 def _warn_if_xrange_empty(fig, stem: str) -> None:
     """Warn when --xrange selects no line data (otherwise the plot is blank
     with no hint why — usually a units mismatch, e.g. 0:1 on an m/s axis)."""
@@ -406,6 +497,7 @@ def _finish(fig, stem: str, save_dir, show: bool) -> None:
         for ax in fig.axes:
             _autoscale_y_to_xrange(ax, _XRANGE)
         _warn_if_xrange_empty(fig, stem)
+    _apply_log_axes(fig, stem)
     if save_dir is not None:
         out = Path(save_dir).resolve() / f"{stem}.png"
         fig.savefig(out, dpi=150, bbox_inches="tight")
@@ -1470,8 +1562,16 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
                    help="save PNG files to DIR")
     p.add_argument("--show",        action="store_true",
                    help="display plots interactively")
-    p.add_argument("--log",         action="store_true",
-                   help="logarithmic scale for distribution functions")
+    p.add_argument("--logf", "--log", action="store_true", dest="log",
+                   help="logarithmic scale for the plotted QUANTITY: the "
+                        "colour scale of a 2D map, the z of a 3D surface, the "
+                        "y of a 1D profile.  --log is an accepted alias")
+    p.add_argument("--logx",        action="store_true",
+                   help="logarithmic x-axis (left linear where the data reach "
+                        "zero, e.g. v_par or a trace starting at t=0)")
+    p.add_argument("--logy",        action="store_true",
+                   help="logarithmic y-axis; on a 1D profile this is the same "
+                        "as --logf")
     if multi:
         # --cases matches the spelling used by the compare subcommand.
         # --casename is kept as an alias: it appears in existing scripts.
@@ -1685,8 +1785,13 @@ def build_parser() -> argparse.ArgumentParser:
                        metavar="DIR", help="save PNG files to DIR")
     cmp_p.add_argument("--show",  action="store_true",
                        help="display plots interactively")
-    cmp_p.add_argument("--log",   action="store_true",
-                       help="logarithmic y-scale for 1D profile plots")
+    cmp_p.add_argument("--logf", "--log", action="store_true", dest="log",
+                       help="logarithmic y-scale for 1D profile plots "
+                            "(--log is an accepted alias)")
+    cmp_p.add_argument("--logx",  action="store_true",
+                       help="logarithmic x-axis")
+    cmp_p.add_argument("--logy",  action="store_true",
+                       help="logarithmic y-axis")
     cmp_p.add_argument("--files", nargs="+", default=None, metavar="F",
                        help="restrict to these file types (stem key, e.g. anisotropy_vs_time)"
                             " or full filenames")
@@ -1697,7 +1802,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None):
-    global _XRANGE
+    global _XRANGE, _LOGX, _LOGY
     args = build_parser().parse_args(argv)
 
     # Default to interactive display when no save directory is given
@@ -1707,6 +1812,10 @@ def main(argv=None):
     # x-axis zoom (plot / compare only; run never defines --xrange)
     if getattr(args, "xrange", None):
         _XRANGE = _parse_xrange(args.xrange)
+
+    # logarithmic axes; --logf travels separately as the `log` argument
+    _LOGX = bool(getattr(args, "logx", False))
+    _LOGY = bool(getattr(args, "logy", False))
 
     # ----------------------------------------------------------------
     # compare command — handled entirely here, then return
