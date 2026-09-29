@@ -14,13 +14,22 @@ Options (both subcommands)
                   (default when --save is not given).
   --log           Logarithmic colour/y-scale for distribution functions.
   --3d            Add 3D surface plots for 2D distribution files.
-  --casename STR  Case label appended to every plot title.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
 
 plot / compare only
 -------------------
+  --cases CASE ... Cases to plot (plot) or overlay (compare).  In plot mode
+                   each case gets its own set of figures, and the case also
+                   selects which files are read, not merely how they are
+                   labelled; --casename is accepted as an alias.  Omit it and
+                   the case is auto-detected from the filenames.
   --xrange xmin:xmax   Zoom the x-axis of every plot to [xmin, xmax]
                        (e.g. --xrange 0:5e6). Accepts ':' or ',' separators.
+
+run only
+--------
+  --casename STR  Case label for the output filenames and plot titles
+                  (read from the namelist if omitted).
 
 run-only options
 ----------------
@@ -41,6 +50,9 @@ Examples
 
   # Plot specific files only
   python fp2d_plot.py plot x64/Release --files fout.txt energy_vs_time.txt --show
+
+  # Same files for two cases, one set of windows each
+  python fp2d_plot.py plot . --cases RF-NLSC_2 RF-NLSC_2-Grid_1 --files fout --show
 """
 
 import argparse
@@ -1226,7 +1238,7 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                    casename: str, restrict=None, steady_state: bool = False,
                    show_sc: bool = True, show_pow: bool = True,
                    show_mom: bool = True, plot3d: bool = False,
-                   strict_case: bool = False) -> None:
+                   strict_case: bool = False, defer_show: bool = False) -> None:
     if save_dir is not None:
         Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -1327,8 +1339,11 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
             print("  [cmp]  fout_vs_maxw_at_vpar0")
             plot_fout_vs_maxw_at_vpar0(outdir, save_dir, show, log, casename)
 
-    if show:
-        plt.show()  # single blocking call — all windows open simultaneously
+    # One blocking call opens every window at once.  When several cases are
+    # being plotted the caller defers it to the end, so the windows of all of
+    # them appear together instead of case n+1 waiting on case n being closed.
+    if show and not defer_show:
+        plt.show()
 
 
 # ---------------------------------------------------------------------------
@@ -1450,19 +1465,28 @@ def run_solver(exe: Path, input_file: Path, run_dir: Path,
 # CLI
 # ---------------------------------------------------------------------------
 
-def _add_common(p: argparse.ArgumentParser) -> None:
+def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
     p.add_argument("--save",        type=Path, default=None, dest="save_dir", metavar="DIR",
                    help="save PNG files to DIR")
     p.add_argument("--show",        action="store_true",
                    help="display plots interactively")
     p.add_argument("--log",         action="store_true",
                    help="logarithmic scale for distribution functions")
-    p.add_argument("--casename",    default="", metavar="STR",
-                   help="case to plot: selects the files and labels them "
-                        "(auto-detected if omitted)")
+    if multi:
+        # --cases matches the spelling used by the compare subcommand.
+        # --casename is kept as an alias: it appears in existing scripts.
+        p.add_argument("--cases", "--casename", nargs="+", default=None,
+                       dest="cases", metavar="CASE",
+                       help="case(s) to plot, one set of figures each; selects "
+                            "the files and labels them (auto-detected if "
+                            "omitted).  --casename is an accepted alias")
+    else:
+        p.add_argument("--casename", default="", metavar="STR",
+                       help="case label for the output filenames and titles "
+                            "(read from the namelist if omitted)")
     p.add_argument("--files",       nargs="+", default=None, metavar="F",
                    help="plot only these file types (stem key, glob or full "
-                        "filename); still restricted to --casename when given")
+                        "filename); still restricted to the case(s) when given")
     p.add_argument("--steady-state", action="store_true", dest="steady_state",
                    help="skip time-trace plots (for ntimes=0 runs)")
     p.add_argument("--no-sc",        action="store_true", dest="no_sc",
@@ -1647,7 +1671,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     plot_p = sub.add_parser("plot", help="plot from an existing output directory")
     plot_p.add_argument("outdir", type=Path, help="directory containing .txt output files")
-    _add_common(plot_p)
+    _add_common(plot_p, multi=True)
     plot_p.add_argument("--xrange", default=None, metavar="xmin:xmax",
                         help="zoom the x-axis of every plot to [xmin, xmax]")
 
@@ -1744,35 +1768,45 @@ def main(argv=None):
     if not outdir.is_dir():
         sys.exit(f"Error: output directory not found: {outdir}")
 
-    # A casename the user typed restricts which files are plotted; one we
-    # guessed only labels them (see plot_directory).
-    strict_case = bool(args.casename)
-    if not args.casename:
+    # 'plot' takes one or more --cases; 'run' carries the single --casename it
+    # read from the namelist.  Cases the user typed restrict which files are
+    # plotted; one we guessed only labels them (see plot_directory).
+    cases = list(getattr(args, "cases", None) or [])
+    if not cases and getattr(args, "casename", ""):
+        cases = [args.casename]
+    strict_case = bool(cases)
+    if not cases:
         # Auto-detect the casename from the output filenames. With --files, search
         # only those names; otherwise scan the whole directory, so a plain
-        # `plot <dir>` works for a single-case folder without requiring --casename.
-        args.casename = _detect_casename(outdir, names=args.files)
-        if args.casename:
-            print(f"Casename (auto-detected): {args.casename}")
+        # `plot <dir>` works for a single-case folder without requiring --cases.
+        detected = _detect_casename(outdir, names=args.files)
+        if detected:
+            print(f"Casename (auto-detected): {detected}")
+        cases = [detected]          # may be "" — the no-casename file set
 
     if not args.show:
         plt.switch_backend("Agg")
 
     print(f"\nPlotting output files in: {outdir}")
-    plot_directory(
-        outdir,
-        save_dir=args.save_dir,
-        show=args.show,
-        log=args.log,
-        casename=args.casename,
-        restrict=args.files,
-        strict_case=strict_case,
-        steady_state=args.steady_state,
-        show_sc=not args.no_sc,
-        show_pow=not args.no_pow,
-        show_mom=not args.no_mom,
-        plot3d=args.plot3d,
-    )
+    for n, case in enumerate(cases):
+        if len(cases) > 1:
+            print(f"\n=== case {n + 1}/{len(cases)}: {case} ===")
+        plot_directory(
+            outdir,
+            save_dir=args.save_dir,
+            show=args.show,
+            log=args.log,
+            casename=case,
+            restrict=args.files,
+            strict_case=strict_case,
+            steady_state=args.steady_state,
+            show_sc=not args.no_sc,
+            show_pow=not args.no_pow,
+            show_mom=not args.no_mom,
+            plot3d=args.plot3d,
+            # hold the blocking show() until every case has been drawn
+            defer_show=(n < len(cases) - 1),
+        )
     print("Done.")
 
 
