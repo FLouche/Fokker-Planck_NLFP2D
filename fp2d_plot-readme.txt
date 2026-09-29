@@ -88,17 +88,41 @@ SYNTAX
 POSITIONAL ARGUMENTS
   <outdir>  Directory containing the solver output .txt files.
 
+CHOOSING THE CASE(S)
+  --cases takes one or more casenames and draws a SEPARATE set of figures for
+  each; use the compare subcommand if you want them overlaid on shared axes
+  instead.  With --show, the windows of every case open together.  --casename
+  is accepted as an alias, so older command lines keep working.
+
+  A casename you type also selects WHICH FILES ARE READ, not merely how they
+  are labelled.  So
+
+      --cases ITER_EDA-RF-NLSC_2 --files fout
+
+  plots fout-ITER_EDA-RF-NLSC_2.txt alone, and not the fout of every other case
+  in the directory.  Note that a longer name is a different case: the command
+  above does NOT pick up fout-ITER_EDA-RF-NLSC_2-Grid_1.txt.
+
+  Omit --cases and the casename is auto-detected from the filenames.  An
+  auto-detected name only labels the plots, so  --files fout  with no --cases
+  still plots the fout of every case in a multi-case directory.
+
 EXAMPLES
   # Plot everything, display interactively
   python fp2d_plot.py plot x64/Release --show
 
   # Save PNGs for a named case
   python fp2d_plot.py plot x64/Release ^
-      --casename JET-beam7-TD0-NLSC --save plots/beam7
+      --cases JET-beam7-TD0-NLSC --save plots/beam7
 
   # Plot only two specific files
   python fp2d_plot.py plot x64/Release ^
       --files fout.txt energy_vs_time-JET-beam7-TD0-NLSC.txt --show
+
+  # The same quantity for two cases, one set of windows each
+  python fp2d_plot.py plot . ^
+      --cases ITER_EDA-RF-NLSC_2 ITER_EDA-RF-NLSC_2-Grid_1 ^
+      --files fout --show
 
   # Skip momentum plots (e.g. they were not written)
   python fp2d_plot.py plot x64/Release --no-mom --show
@@ -140,10 +164,32 @@ BEHAVIOR
   - Output files are named  <stem>-compare.png.
 
 --files OPTION IN COMPARE MODE
-  The --files option accepts either:
+  The --files option accepts any of:
     (a) a bare stem key    e.g.  anisotropy_vs_time
     (b) a full filename    e.g.  anisotropy_vs_time-JET-beam7-TD0-Lin.txt
+    (c) a glob             e.g.  "power_*"      (quote it, or the shell expands
+                                                 it against the local folder)
   Form (a) is shorter and recommended when --cases is already given.
+
+  An entry that matches nothing produces a warning naming it, instead of
+  quietly plotting less than you asked for.
+
+FILES WHOSE NAME CONTAINS A SPACE
+  The per-background-species outputs carry the species index in the stem, with
+  a space before it:
+
+      power_coll_ion 1_vs_time-<casename>.txt
+      momentum_coll_ion 1_vs_time-<casename>.txt
+
+  All of these spellings work, in both plot and compare mode, quoted or not:
+
+      --files power_coll_ion 1_vs_time
+      --files "power_coll_ion 1_vs_time"
+      --files power_coll_ion1_vs_time
+      --files power_coll_ion_1_vs_time
+
+  (Matching ignores spaces, underscores and letter case, and entries that a
+  shell split at the space are rejoined automatically.)
 
 EXAMPLES
   # Compare Lin and NLSC for all available file types
@@ -191,13 +237,19 @@ COMMON OPTIONS  (all three sub-commands)
                     warning is printed (the plot would otherwise be blank).
                     Example: --xrange 0:5e6
 
-  --casename STR    (run and plot only)  Case label appended to every plot
-                    title and used to locate output files.  Detected
-                    automatically from the namelist in run mode.
+  --cases CASE ...  (plot and compare)  Case(s) to work on.  In plot mode each
+                    case gets its own set of figures and the name also selects
+                    which files are read; in compare mode the cases are
+                    overlaid on shared axes.  Omitted in plot mode, the case is
+                    auto-detected from the filenames and then only labels the
+                    plots.  --casename is accepted as an alias in plot mode.
 
-  --files F ...     Restrict plotting to the listed filenames (basenames).
-                    In compare mode, bare stem keys are also accepted
-                    (e.g. --files anisotropy_vs_time).
+  --casename STR    (run only)  Case label for the output filenames and plot
+                    titles.  Read from the namelist when omitted.
+
+  --files F ...     Restrict plotting to the listed files.  A bare stem key
+                    (--files anisotropy_vs_time), a full filename or a quoted
+                    glob are all accepted, in both plot and compare mode.
 
   --steady-state    (run and plot only)  Skip all time-trace plots.  Set
                     automatically in run mode when ntimes(1) = 0.
@@ -323,9 +375,21 @@ the solver appends it to every output filename:
   ...
 
 fp2d_plot.py detects the casename automatically in run mode by reading the
-namelist.  In plot mode it can auto-detect it from the filenames present in the
-directory when --files is used; alternatively set it explicitly with
---casename.
+namelist.  In plot and compare mode, name the case(s) with --cases; in plot
+mode it is auto-detected from the filenames in the directory if you do not.
+
+The distinction matters in a directory holding several cases.  A casename you
+give with --cases selects which files are read; an auto-detected one only
+labels the plots.  So
+
+  plot . --cases NLSC_2 --files fout   plots fout-NLSC_2.txt only
+  plot . --files fout                  plots the fout of every case present
+
+Two further points on these names.  A longer name is a different case:
+--cases NLSC_2 does not match fout-NLSC_2-Grid_1.txt.  And the per-species
+files carry a space in the stem ("power_coll_ion 1_vs_time-<casename>.txt");
+--files accepts that name with the space, with an underscore, or with nothing
+in its place, quoted or not.
 
 
 ================================================================================
