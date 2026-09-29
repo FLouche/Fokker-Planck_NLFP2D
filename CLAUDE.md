@@ -211,6 +211,40 @@ The script is at the project root. Key extension points:
 - **`FILE_META`** — dict keyed by file stem; `ptype` in `{"1d","2d","ts","ts2"}` controls which plot function is used. Add new entries here to make a new output file auto-discovered. `_SKIP_STEMS` lists stems that are handled by composite functions instead of the per-file loop.
 - **Per-file plot functions** — `plot_1d`, `plot_2d`, `plot_3d`, `plot_ts`, `plot_ts2` (called by the main loop in `plot_directory`)
 - **Composite plot functions** — `plot_power_combined`, `plot_power_coll`, `plot_sc_power_split`, `plot_coulomb_log`, `plot_momentum_coll`, `plot_momentum_breakdown`, `plot_momentum_balance`, `plot_fout_vs_maxw_at_vpar0` — called at the end of `plot_directory` when `restrict is None`
-- **`plot_directory`** — main orchestrator: iterates txt files, dispatches to per-file functions, then calls composite functions
+- **`plot_directory`** — main orchestrator: iterates txt files, dispatches to per-file functions, then calls composite functions. Called once per case by `main`, with `defer_show=True` on all but the last so a single blocking `plt.show()` opens every case's windows together
 - **`_outfile(outdir, stem, casename)`** — constructs the expected filename for a given stem+casename (mirrors the Fortran `outfile()` function)
 - **Namelist readers** — `_read_ntimes_from_namelist`, `_read_isc_from_namelist`, `_read_iplot_pow_from_namelist`, `_read_iplot_mom_from_namelist` used by `run` subcommand to set plotting flags before the solver runs
+
+### Case selection (`--cases`)
+
+Both `plot` and `compare` take `--cases CASE [CASE ...]`; `plot` also accepts
+`--casename` as an alias. In `plot` each case gets its own set of figures;
+in `compare` the cases are overlaid on shared axes. `run` keeps a **singular**
+`--casename` — one run produces one case, and the label is read from the
+namelist when omitted.
+
+A case the user *types* also **selects which files are read**, not merely how
+they are labelled: `--cases X --files fout` plots `fout-X.txt` alone, not every
+`fout-*.txt` in the directory (`strict_case=True`). A case that was
+*auto-detected* only labels, so `--files` with no `--cases` still plots across
+every case in a multi-case folder.
+
+### `--files` matching
+
+`--files` entries may be a glob, a full filename, or a bare stem; `plot` and
+`compare` use the same matcher (`_restrict_match`). Three traps are handled
+explicitly, all from the per-species outputs whose stem carries a space
+(`power_coll_ion 1_vs_time`, built in Fortran from the species index):
+
+- `_canon_stem` ignores spaces, underscores and case, so `power_coll_ion 1_vs_time`,
+  `power_coll_ion1_vs_time` and `power_coll_ion_1_vs_time` all match.
+- `_rejoin_split_stems` puts back together adjacent argv entries that a shell
+  split at that space, when they name a file that exists.
+- `_species_file_meta` discovers these files on disk for `compare`, which
+  iterates known stems rather than the directory — they are not `FILE_META`
+  keys, so without it they were invisible to it.
+
+An explicitly named file is drawn even when its stem is in `_SKIP_STEMS`: the
+composite that would otherwise draw it only runs when the plot set is
+unrestricted. A `--files` entry that matches nothing prints a warning rather
+than silently plotting less than was asked for.
