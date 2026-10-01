@@ -46,6 +46,22 @@ integer :: i_upwind = 0   ! v_perp convection-diffusion scheme in fd_stencil_2d:
                           !  1: Patankar (1980) power-law scheme, applied only in
                           !     cells with |B|dv/D > 2 (Fornberg kept in the bulk)
 
+integer :: n_snap = 0     ! VDF snapshots: write f every n_snap steps to
+                          ! vdf_snap_<step>.txt (0 = off, the default).  Meant
+                          ! for time-resolved moment diagnostics -- e.g. the
+                          ! drift-frame anisotropy behind the sign of the
+                          ! self-collision power split -- not for production
+                          ! runs: a 151x151 snapshot is ~0.7 MB.
+
+integer :: nstep_restart = 0  ! Time steps already done before this run: the
+                              ! step count stored on the first line of xout.dat
+                              ! by the run being restarted (iold=-1), 0 for a
+                              ! fresh run or an older xout.dat that holds only
+                              ! the time.  Snapshots are numbered
+                              ! nstep_restart + itime_global, so a restart
+                              ! continues the previous run's numbering instead
+                              ! of overwriting its files.
+
 end module shared_grid
 
 !***************************************

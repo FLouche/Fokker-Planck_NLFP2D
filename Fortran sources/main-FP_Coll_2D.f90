@@ -179,6 +179,8 @@ double precision, dimension (:,:), allocatable :: fout
 
 
 double precision time1
+character(len=256) :: xout_head   ! first line of xout.dat: time [, nstep]
+integer :: ios_head
 double precision :: teff_sc, lnaa_sc
 double precision, parameter :: gamma0_sc = 2.390775d-1
 
@@ -277,7 +279,7 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, idiag, notxt, &
-                i_upwind
+                i_upwind, n_snap
 
 
 !write(*,*) 'Read namelist'
@@ -502,7 +504,14 @@ else steady_state
     if(iold == -1) then ! restart from previously stored solution
 
         open(40,file=TRIM(outfile('xout.dat')),status='old')
-        read(40,*) time1
+        ! First line: "time" (older files) or "time  nstep".  Read it as a
+        ! string so a missing step count cannot pull in the first f value.
+        read(40,'(A)') xout_head
+        read(xout_head,*,iostat=ios_head) time1, nstep_restart
+        if (ios_head /= 0) then
+            read(xout_head,*) time1
+            nstep_restart = 0
+        end if
         do ix=1,nbig
             read(40,*) fin(ix)
         enddo

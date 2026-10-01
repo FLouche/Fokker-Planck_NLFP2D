@@ -483,6 +483,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
     END DO
 
+    !--- Optional VDF snapshot (n_snap > 0; off by default) ---------
+    !    See write_vdf_snapshot (time_comps_mod).
+    CALL write_vdf_snapshot(itime_global, time, fout)
+
     !--- Diagnostics (identical to TimeFP3) -----------------------
     CALL time_density(fout, dens_tmp)
   !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
@@ -664,7 +668,9 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   !================================================================
   OPEN(40, file=TRIM(outfile('fout.txt')), status='unknown')
   OPEN(42, file=TRIM(outfile('xout.dat')), status='unknown')
-  WRITE(42,*) time
+  ! Header: time and the total step count, so a restart can continue the
+  ! snapshot numbering (main reads "time" alone from older files).
+  WRITE(42,*) time, nstep_restart + itime_global
   DO iv = 1, nperp
     DO imu = 1, npar
       WRITE(40,*) vperp(iv), vpar(imu), fout(iv,imu)

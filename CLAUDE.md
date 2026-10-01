@@ -122,10 +122,12 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `isource` | -1 / 0 | NBI beam source / no source |
 | `iold` | -1 / 0 | Restart from `xout.dat` / fresh start |
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
+| `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 
 ### Output Files
 All output is written to the run directory. Key files:
-- `fout.txt` / `xout.dat` — final VDF (text / binary restart)
+- `fout.txt` / `xout.dat` — final VDF (text / restart file). The first line of `xout.dat` is `time  nstep` (total steps, including those of any run it was restarted from); `main` also accepts older files whose first line holds only the time, and then counts from 0.
+- `vdf_snap_<step>.txt` — f every `n_snap` steps (`write_vdf_snapshot`, `time_comps_mod`), same layout as `fout.txt` with a `# time =` header. `<step>` is the total step count, so a restart (`iold=-1`) continues the previous run's numbering and cadence instead of overwriting its snapshots. Raw solution: the end-of-run renormalisation of sourceless runs is not applied. Snapshots are not restart files.
 - `fstix.dat` — Stix reference Maxwellian
 - `density_vs_time.txt`, `energy_vs_time.txt` — time traces
 - `power_coll_*_vs_time.txt`, `power_RF_vs_time.txt` — power balance
@@ -197,6 +199,7 @@ New output files must use units not in this table:
 | 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | `iplot_pow=-1` |
 | 522 | sc_density_map (vperp, vpar, f, L_sc f, and its six single-coefficient parts; first step only) | `idiag=-1`, `isc≠0` |
 | 523 | coef_map (vperp, vpar, all00..all02 of the last step; `timefp_7pt_nl` only) | `idiag=-1` |
+| 530 | vdf_snap_<step> (f every `n_snap` steps; opened and closed per snapshot) | `n_snap>0` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |

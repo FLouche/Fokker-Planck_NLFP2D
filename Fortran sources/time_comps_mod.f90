@@ -202,4 +202,48 @@ CONTAINS
 
   END SUBROUTINE time_Tn
 
+  !***********************************************************
+  !* VDF snapshot (namelist n_snap > 0; off by default)      *
+  !*                                                         *
+  !* Called by timefp_7pt and timefp_7pt_nl after each step's *
+  !* solve.  Writes f every n_snap steps to vdf_snap_<step>  *
+  !* .txt (through outfile, so -<casename> is appended), in   *
+  !* the 3-column layout of fout.txt with the time on a       *
+  !* header line.  <step> is the total step count            *
+  !* nstep_restart + itime: a restart (iold=-1) continues the *
+  !* numbering and the cadence of the run it restarts from,   *
+  !* instead of overwriting its snapshots.  f is the raw      *
+  !* solution, without the end-of-run renormalisation applied *
+  !* to fout.txt in sourceless runs.  Unit 530.               *
+  !***********************************************************
+  SUBROUTINE write_vdf_snapshot(itime, time, f)
+
+    USE shared_grid      ! n_snap, nstep_restart, nperp, npar, vperp, vpar
+    USE shared_timer     ! outfile
+
+    IMPLICIT NONE
+
+    INTEGER,          INTENT(IN) :: itime            ! steps done in this run
+    DOUBLE PRECISION, INTENT(IN) :: time
+    DOUBLE PRECISION, INTENT(IN) :: f(nperp, npar)
+
+    CHARACTER(len=64) :: snapname
+    INTEGER :: istep, iv, ip
+
+    IF (n_snap <= 0) RETURN
+    istep = nstep_restart + itime
+    IF (MOD(istep, n_snap) /= 0) RETURN
+
+    WRITE(snapname,'(A,I6.6,A)') 'vdf_snap_', istep, '.txt'
+    OPEN(530, file=TRIM(outfile(snapname)), status='unknown')
+    WRITE(530,'(A,ES16.8)') '# time = ', time
+    DO iv = 1, nperp
+      DO ip = 1, npar
+        WRITE(530,*) vperp(iv), vpar(ip), f(iv,ip)
+      END DO
+    END DO
+    CLOSE(530)
+
+  END SUBROUTINE write_vdf_snapshot
+
 END MODULE time_comps_mod
