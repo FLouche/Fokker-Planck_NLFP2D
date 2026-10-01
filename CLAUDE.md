@@ -305,3 +305,25 @@ Two ordering constraints, both load-bearing:
 
 `--xrange` sets `fig.axes[0]` only (multi-panel figures are built `sharex=True`);
 `--yrange` sets every non-colorbar axes, since y is not shared.
+
+### Movie from the snapshots (`--movie`)
+
+`run` and `plot` accept `--movie` (plus `--fps`, and `--namelist FILE` for
+`plot`). It replaces the usual figures with one animation per case
+(`make_movie`): f and the kinetic-energy density side by side, one frame per
+`vdf_snap_<step>.txt`, colour scales fixed over the whole movie. Rules:
+
+- **`n_snap` is checked first**, from the namelist. With `run` this happens
+  before the solver starts, so a missing `n_snap` does not cost a run. With
+  `plot` the namelist is `--namelist`, or the one in the output folder whose
+  `casename` matches (`_find_namelist`, which reads only file heads looking for
+  `&INPUT`). No namelist, or `n_snap = 0`, skips the movie with a message.
+- **Ekin is rebuilt from f** (`_ekin_map`), exactly as `analysis.f90` builds
+  `Ekin.txt` (Simpson-weighted density, `aa` from the namelist); it matches the
+  solver's `Ekin.txt` to round-off.
+- `--logf` gives f eight decades and leaves everything below the floor blank,
+  rather than drawing the round-off tail in the lowest colour.
+- Written as `movie-<case>.mp4` if ffmpeg is available, `.gif` (Pillow)
+  otherwise, to `--save DIR` or the output folder.
+- `vdf_snap` is in `_SKIP_STEMS`: without it, a plain `plot` would draw every
+  snapshot as a separate 2D map.

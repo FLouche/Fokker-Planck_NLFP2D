@@ -24,6 +24,15 @@ Options (both subcommands)
                   points not shown are counted in a note.
   --3d            Add 3D surface plots for 2D distribution files.
   --files F ...   Plot only these filenames (basenames, e.g. fout.txt).
+  --movie         Instead of the usual plots, animate f and the kinetic-energy
+                  density over the VDF snapshots vdf_snap_<step>.txt.  Checks
+                  n_snap > 0 in the namelist first (for 'run', before the
+                  solver starts).  One frame per snapshot, colour scales fixed
+                  over the movie; --logf puts f on a log scale, --xrange and
+                  --yrange zoom both panels.  Written as movie-<case>.mp4 when
+                  ffmpeg is available, movie-<case>.gif otherwise, to --save DIR
+                  or the output directory.
+  --fps N         Frames per second of the movie (default 5).
 
 plot / compare only
 -------------------
@@ -37,6 +46,9 @@ plot / compare only
   --yrange ymin:ymax   The same for the y-axis. Given alone, --xrange rescales
                        y to the data in the window; --yrange suppresses that
                        and uses the bounds asked for.
+  --namelist FILE      (plot only) Namelist of the run, read by --movie for
+                       n_snap and aa.  Default: the namelist in the output
+                       directory whose casename matches the case.
 
 run only
 --------
@@ -65,6 +77,9 @@ Examples
 
   # Same files for two cases, one set of windows each
   python fp2d_plot.py plot . --cases RF-NLSC_2 RF-NLSC_2-Grid_1 --files fout --show
+
+  # Movie of f (log scale) and Ekin from the snapshots of one case
+  python fp2d_plot.py plot x64/Release --cases RF-NLSC_2 --movie --logf --fps 8
 """
 
 import argparse
@@ -242,7 +257,11 @@ _SKIP_STEMS = {"RF_dirac", "fstix",
                "momentum_RF_vs_time", "momentum_coll_self_vs_time",
                "momentum_NBI_vs_time", "momentum_coll_tot_vs_time",
                "coulomb_log_vs_time", "coulomb_log_self_vs_time",
-               "tau_coll_vs_time", "tau_rf_vs_time"}
+               "tau_coll_vs_time", "tau_rf_vs_time",
+               # VDF snapshots (n_snap > 0): one 2-D file every n_snap steps.
+               # Auto-detection would draw each of them as a map; they are
+               # meant for --movie, which animates them instead.
+               "vdf_snap"}
 
 # SC coefficient / Rosenbluth-potential diagnostics, switched off.  The solver
 # no longer writes them (the two calls are commented out in TimeFP_7pt.f90 and
@@ -1480,6 +1499,188 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
 
 
 # ---------------------------------------------------------------------------
+# Movie from the VDF snapshots (--movie)
+# ---------------------------------------------------------------------------
+# The solver writes f every n_snap steps to vdf_snap_<step>[-<case>].txt
+# (write_vdf_snapshot, time_comps_mod.f90): three columns vperp, vpar, f in the
+# layout of fout.txt, with a '# time = <t>' header line.  A snapshot holds f
+# only; the kinetic-energy density is rebuilt here exactly as analysis.f90
+# builds Ekin.txt, which needs the ion mass number aa from the namelist.
+
+_SNAP_RE = re.compile(r"^vdf_snap_(\d{6})(?:-(.*))?\.txt$")
+_PMASS   = 1.6726e-27     # proton mass (kg), as in analysis.f90
+_KEV_J   = 1.60218e-16    # keV in J, as in analysis.f90
+
+
+def _read_nml_number(input_file: Path, key: str):
+    """Value of a numeric namelist entry (Fortran 'd' exponents allowed), or None."""
+    try:
+        text = input_file.read_text(errors="replace")
+    except Exception:
+        return None
+    m = re.search(rf"\b{key}\s*=\s*([+-]?[0-9.]+(?:[dDeE][+-]?\d+)?)", text)
+    if not m:
+        return None
+    return float(m.group(1).replace("d", "e").replace("D", "e"))
+
+
+def _find_namelist(outdir: Path, casename: str):
+    """A namelist in *outdir* whose casename is *casename*, or None.
+
+    Only the head of each candidate is read, since a run folder can hold
+    thousands of output .txt files and a namelist starts with '&INPUT'.
+    """
+    for pat in ("*.txt", "*.dat", "*.nml", "*.in"):
+        for p in sorted(outdir.glob(pat)):
+            try:
+                with open(p, errors="replace") as fh:
+                    head = fh.read(4096)
+            except Exception:
+                continue
+            if "&input" not in head.lower():
+                continue
+            if _read_casename_from_namelist(p) == casename:
+                return p
+    return None
+
+
+def _snapshot_files(outdir: Path, casename: str) -> list:
+    """(step, path) of the snapshots of *casename*, sorted by step."""
+    out = []
+    for p in outdir.glob("vdf_snap_*.txt"):
+        m = _SNAP_RE.match(p.name)
+        if m and (m.group(2) or "") == casename:
+            out.append((int(m.group(1)), p))
+    return sorted(out)
+
+
+def _simpson_weights(x: np.ndarray) -> np.ndarray:
+    """Composite Simpson weights on an arbitrary grid -- ncint.f90 simpson_weights."""
+    n = len(x); w = np.zeros(n); i = 0
+    while i + 2 <= n - 1:
+        h0, h1 = x[i+1] - x[i], x[i+2] - x[i+1]; hs = h0 + h1
+        w[i]   += hs / 6 * (2 - h1 / h0)
+        w[i+1] += hs**3 / (6 * h0 * h1)
+        w[i+2] += hs / 6 * (2 - h0 / h1)
+        i += 2
+    if i < n - 1:
+        h0 = x[i+1] - x[i]; w[i] += h0 / 2; w[i+1] += h0 / 2
+    return w
+
+
+def _read_snapshot(path: Path):
+    """(time, vperp, vpar, f[i_vperp, j_vpar]) of one snapshot file."""
+    with open(path) as fh:
+        head = fh.readline()
+    m = re.search(r"time\s*=\s*([-+0-9.EeDd]+)", head)
+    time = float(m.group(1).replace("D", "E").replace("d", "e")) if m else float("nan")
+    data = np.loadtxt(path, comments="#")
+    vperp, vpar = np.unique(data[:, 0]), np.unique(data[:, 1])
+    return time, vperp, vpar, data[:, 2].reshape(len(vperp), len(vpar))
+
+
+def _ekin_map(f, vperp, vpar, aa: float) -> np.ndarray:
+    """Kinetic-energy density (keV) as analysis.f90 writes Ekin.txt."""
+    jac  = 2 * np.pi * vperp[:, None] * np.ones_like(f)
+    mod0 = (np.outer(_simpson_weights(vperp), _simpson_weights(vpar)) * f * jac).sum()
+    v2   = vperp[:, None]**2 + vpar[None, :]**2
+    return f * v2 * jac / mod0 * 0.5 * _PMASS * aa / _KEV_J
+
+
+def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
+               fps: float = 5.0) -> None:
+    """Animate f and the kinetic-energy density over the snapshots of one case.
+
+    Checks n_snap in the namelist first: with n_snap = 0 the solver wrote no
+    snapshots and there is nothing to animate.  One frame per snapshot, colour
+    scales fixed over the whole movie so that frames compare.  MP4 when ffmpeg
+    is available, animated GIF (Pillow) otherwise.
+    """
+    from matplotlib import animation
+
+    label = casename or "(no casename)"
+    if namelist is None:
+        namelist = _find_namelist(outdir, casename)
+    if namelist is None or not Path(namelist).exists():
+        print(f"  [movie] {label}: no namelist found for this case in {outdir};"
+              f" pass it with --namelist FILE.  Movie skipped.")
+        return
+    namelist = Path(namelist)
+    n_snap = _read_nml_number(namelist, "n_snap")
+    if not n_snap:
+        print(f"  [movie] {label}: n_snap = 0 in {namelist.name} -- the solver wrote no "
+              f"snapshots.  Set n_snap > 0 and rerun.  Movie skipped.")
+        return
+    aa = _read_nml_number(namelist, "aa")
+    if aa is None:
+        print(f"  [movie] {label}: no 'aa' in {namelist.name}; Ekin needs the ion mass "
+              f"number.  Movie skipped.")
+        return
+    snaps = _snapshot_files(outdir, casename)
+    if not snaps:
+        print(f"  [movie] {label}: n_snap = {int(n_snap)} but no vdf_snap_*.txt files for "
+              f"this case in {outdir}.  Movie skipped.")
+        return
+    if len(snaps) < 2:
+        print(f"  [movie] {label}: only one snapshot; a movie needs at least two.  Skipped.")
+        return
+
+    print(f"  [movie] {label}: {len(snaps)} snapshots (n_snap = {int(n_snap)}, "
+          f"steps {snaps[0][0]}..{snaps[-1][0]}), aa = {aa:g}")
+    frames = []
+    for step, path in snaps:
+        t, vperp, vpar, f = _read_snapshot(path)
+        frames.append((step, t, f, _ekin_map(f, vperp, vpar, aa)))
+
+    fmax = max(fr[2].max() for fr in frames)
+    emax = max(fr[3].max() for fr in frames)
+    if log:
+        # Eight decades.  Anything below the floor -- the far tail, and the
+        # round-off of either sign around it -- is left blank rather than drawn
+        # in the lowest colour, which would paint that noise as a checkerboard.
+        ffloor = fmax * 1e-8
+        fnorm  = mcolors.LogNorm(vmin=ffloor, vmax=fmax)
+        prep   = lambda z: np.where(z > ffloor, z, np.nan)
+    else:
+        fnorm = mcolors.Normalize(vmin=min(0.0, min(fr[2].min() for fr in frames)), vmax=fmax)
+        prep  = lambda z: z
+    enorm = mcolors.Normalize(vmin=0.0, vmax=emax)
+
+    fig, (axf, axe) = plt.subplots(1, 2, figsize=(13, 5.2))
+    step0, t0, f0, e0 = frames[0]
+    mf = axf.pcolormesh(vpar, vperp, prep(f0), norm=fnorm, cmap="rainbow", shading="nearest")
+    me = axe.pcolormesh(vpar, vperp, e0, norm=enorm, cmap="rainbow", shading="nearest")
+    fig.colorbar(mf, ax=axf, label="f" + ("  (log)" if log else ""))
+    fig.colorbar(me, ax=axe, label="kinetic-energy density (keV)")
+    for ax, ttl in ((axf, "VDF  f(v⊥, v∥)"), (axe, "Kinetic energy (keV)")):
+        ax.set_xlabel("v∥ (m/s)"); ax.set_ylabel("v⊥ (m/s)"); ax.set_title(ttl)
+        if _XRANGE is not None: ax.set_xlim(_XRANGE)
+        if _YRANGE is not None: ax.set_ylim(_YRANGE)
+    sup = fig.suptitle("")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+
+    def draw(k):
+        step, t, f, e = frames[k]
+        mf.set_array(prep(f).ravel())
+        me.set_array(e.ravel())
+        sup.set_text(f"{label}    t = {t:.4g} s    (step {step}, frame {k + 1}/{len(frames)})")
+        return mf, me, sup
+
+    anim = animation.FuncAnimation(fig, draw, frames=len(frames), blit=False)
+    dest = Path(save_dir) if save_dir is not None else outdir
+    dest.mkdir(parents=True, exist_ok=True)
+    stem = f"movie-{casename}" if casename else "movie"
+    if animation.writers.is_available("ffmpeg"):
+        out = (dest / f"{stem}.mp4").resolve()
+        anim.save(out, writer=animation.FFMpegWriter(fps=fps), dpi=120)
+    else:
+        out = (dest / f"{stem}.gif").resolve()
+        anim.save(out, writer=animation.PillowWriter(fps=fps), dpi=90)
+    plt.close(fig)
+    print(f"    -> {out}")
+
+
+# ---------------------------------------------------------------------------
 # Casename helpers
 # ---------------------------------------------------------------------------
 
@@ -1638,6 +1839,17 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
                    help="suppress momentum vs time plots (for iplot_mom=0 runs)")
     p.add_argument("--3d",           action="store_true", dest="plot3d",
                    help="add 3D surface plots for 2D distribution files")
+    p.add_argument("--movie",        action="store_true",
+                   help="make a movie of f and the kinetic-energy density from "
+                        "the VDF snapshots (vdf_snap_*.txt) instead of the usual "
+                        "plots; needs n_snap > 0 in the namelist")
+    p.add_argument("--fps",          type=float, default=5.0, metavar="N",
+                   help="frames per second of the --movie (default 5)")
+    if multi:
+        p.add_argument("--namelist", type=Path, default=None, metavar="FILE",
+                       help="namelist of the run, read by --movie for n_snap and "
+                            "aa (default: the namelist in DIR whose casename "
+                            "matches the case)")
 
 
 _COMPARE_ALIASES = {
@@ -1916,6 +2128,10 @@ def main(argv=None):
             if _read_iplot_mom_from_namelist(input_file) == 0:
                 args.no_mom = True
                 print("iplot_mom=0: momentum vs time plots will be skipped.")
+        if args.movie and not _read_nml_number(input_file, "n_snap"):
+            # Checked before the solve: without snapshots the run would be wasted.
+            sys.exit("Error: --movie needs VDF snapshots, but n_snap = 0 in "
+                     f"{input_file.name}.  Set n_snap > 0 in the namelist.")
         rc = run_solver(exe, input_file, run_dir, out_file=args.out)
         if rc != 0:
             sys.exit(f"Solver exited with code {rc} — aborting (no plots written).")
@@ -1941,6 +2157,19 @@ def main(argv=None):
         if detected:
             print(f"Casename (auto-detected): {detected}")
         cases = [detected]          # may be "" — the no-casename file set
+
+    if args.movie:
+        # Movie only: the snapshots replace the usual figures.  For 'run' the
+        # namelist is the input file; for 'plot' it is --namelist or found in
+        # outdir by casename (make_movie).
+        plt.switch_backend("Agg")
+        namelist = input_file if args.command == "run" else args.namelist
+        print(f"\nMaking movie(s) from the snapshots in: {outdir}")
+        for case in cases:
+            make_movie(outdir, case, namelist, save_dir=args.save_dir,
+                       log=args.log, fps=args.fps)
+        print("Done.")
+        return
 
     if not args.show:
         plt.switch_backend("Agg")
