@@ -323,7 +323,11 @@ Two ordering constraints, both load-bearing:
   solver's `Ekin.txt` to round-off.
 - `--logf` gives f eight decades and leaves everything below the floor blank,
   rather than drawing the round-off tail in the lowest colour.
-- Written as `movie-<case>.mp4` if ffmpeg is available, `.gif` (Pillow)
-  otherwise, to `--save DIR` or the output folder.
+- `--movie-format {avi,mp4,gif}`, default `avi`: MPEG-4 Part 2 tagged `xvid`
+  (plays in VLC and Windows' own players), H.264, or an animated GIF (Pillow).
+  avi/mp4 need ffmpeg. `_ffmpeg_available` uses one on the PATH, or else the
+  binary bundled with `pip install imageio-ffmpeg` (installed on this machine,
+  2026-10-01). Without either it falls back to GIF with a message. Written as
+  `movie-<case>.<fmt>` to `--save DIR` or the output folder.
 - `vdf_snap` is in `_SKIP_STEMS`: without it, a plain `plot` would draw every
   snapshot as a separate 2D map.

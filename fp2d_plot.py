@@ -29,10 +29,14 @@ Options (both subcommands)
                   n_snap > 0 in the namelist first (for 'run', before the
                   solver starts).  One frame per snapshot, colour scales fixed
                   over the movie; --logf puts f on a log scale, --xrange and
-                  --yrange zoom both panels.  Written as movie-<case>.mp4 when
-                  ffmpeg is available, movie-<case>.gif otherwise, to --save DIR
-                  or the output directory.
+                  --yrange zoom both panels.  Written as movie-<case>.<fmt> to
+                  --save DIR or the output directory.
   --fps N         Frames per second of the movie (default 5).
+  --movie-format {avi,mp4,gif}
+                  Movie file format (default avi).  avi (MPEG-4) and mp4
+                  (H.264) need ffmpeg: one on the PATH, or the binary bundled
+                  with  pip install imageio-ffmpeg.  Without it the movie
+                  falls back to an animated GIF.
 
 plot / compare only
 -------------------
@@ -1587,14 +1591,33 @@ def _ekin_map(f, vperp, vpar, aa: float) -> np.ndarray:
     return f * v2 * jac / mod0 * 0.5 * _PMASS * aa / _KEV_J
 
 
+def _ffmpeg_available() -> bool:
+    """True if matplotlib can reach an ffmpeg binary.
+
+    An ffmpeg on the PATH is used as is.  Otherwise the binary bundled with the
+    imageio-ffmpeg package (pip install imageio-ffmpeg) is handed to matplotlib,
+    which is what makes AVI and MP4 work on a machine without ffmpeg installed.
+    """
+    from matplotlib import animation
+    if animation.writers.is_available("ffmpeg"):
+        return True
+    try:
+        import imageio_ffmpeg
+        plt.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return False
+    return animation.writers.is_available("ffmpeg")
+
+
 def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
-               fps: float = 5.0) -> None:
+               fps: float = 5.0, fmt: str = "avi") -> None:
     """Animate f and the kinetic-energy density over the snapshots of one case.
 
     Checks n_snap in the namelist first: with n_snap = 0 the solver wrote no
     snapshots and there is nothing to animate.  One frame per snapshot, colour
-    scales fixed over the whole movie so that frames compare.  MP4 when ffmpeg
-    is available, animated GIF (Pillow) otherwise.
+    scales fixed over the whole movie so that frames compare.  *fmt* is avi
+    (MPEG-4 Part 2, plays in VLC and Windows Media Player), mp4 (H.264) or gif
+    (Pillow); avi and mp4 need ffmpeg and fall back to gif without it.
     """
     from matplotlib import animation
 
@@ -1670,12 +1693,26 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
     dest = Path(save_dir) if save_dir is not None else outdir
     dest.mkdir(parents=True, exist_ok=True)
     stem = f"movie-{casename}" if casename else "movie"
-    if animation.writers.is_available("ffmpeg"):
-        out = (dest / f"{stem}.mp4").resolve()
-        anim.save(out, writer=animation.FFMpegWriter(fps=fps), dpi=120)
-    else:
+    if fmt in ("avi", "mp4") and not _ffmpeg_available():
+        print(f"    no ffmpeg found (pip install imageio-ffmpeg provides one): "
+              f"writing a GIF instead of {fmt.upper()}")
+        fmt = "gif"
+    if fmt == "gif":
         out = (dest / f"{stem}.gif").resolve()
         anim.save(out, writer=animation.PillowWriter(fps=fps), dpi=90)
+    else:
+        # yuv420p for player compatibility; it needs even frame dimensions,
+        # which the scale filter guarantees whatever the figure size and dpi.
+        codec = "mpeg4" if fmt == "avi" else "libx264"
+        extra = ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p"]
+        if fmt == "avi":
+            # MPEG-4 quality scale (1 best .. 31), and the XVID fourcc: ffmpeg
+            # labels the stream FMP4 by default, which some Windows players
+            # do not recognise, whereas XVID-tagged MPEG-4 plays natively.
+            extra += ["-q:v", "3", "-vtag", "xvid"]
+        out = (dest / f"{stem}.{fmt}").resolve()
+        anim.save(out, writer=animation.FFMpegWriter(fps=fps, codec=codec,
+                                                     extra_args=extra), dpi=120)
     plt.close(fig)
     print(f"    -> {out}")
 
@@ -1845,6 +1882,11 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
                         "plots; needs n_snap > 0 in the namelist")
     p.add_argument("--fps",          type=float, default=5.0, metavar="N",
                    help="frames per second of the --movie (default 5)")
+    p.add_argument("--movie-format", choices=("avi", "mp4", "gif"), default="avi",
+                   dest="movie_format",
+                   help="file format of the --movie (default avi; avi and mp4 "
+                        "need ffmpeg, e.g. from pip install imageio-ffmpeg, and "
+                        "fall back to gif without it)")
     if multi:
         p.add_argument("--namelist", type=Path, default=None, metavar="FILE",
                        help="namelist of the run, read by --movie for n_snap and "
@@ -2167,7 +2209,7 @@ def main(argv=None):
         print(f"\nMaking movie(s) from the snapshots in: {outdir}")
         for case in cases:
             make_movie(outdir, case, namelist, save_dir=args.save_dir,
-                       log=args.log, fps=args.fps)
+                       log=args.log, fps=args.fps, fmt=args.movie_format)
         print("Done.")
         return
 
