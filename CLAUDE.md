@@ -94,7 +94,7 @@ Matrix type `mtype=11` (real non-symmetric general) is used throughout.
 Both `solve_fp_pardiso` (steady-state) and `timefp_7pt` (time-dependent) call `fd_stencil_2d` in a two-pass loop: first pass counts non-zeros to build `ia`, second pass fills `ja` and `aa`. Entries in each row must be sorted by column index before passing to PARDISO — `sort_stencil` (insertion sort, defined inside `timefp_7pt`) does this.
 
 ### Time-Dependent Solver (timefp_7pt)
-Implements Crank-Nicolson (`icn=-1`, θ=0.5) or fully implicit (`icn≠-1`, θ=1.0). Each step solves:
+Implements the θ-scheme: Crank-Nicolson (`icn=-1`, θ=0.5), intermediate (`icn=1`, θ=0.75) or fully implicit (any other `icn`, θ=1.0), in both `timefp_7pt` and `timefp_7pt_nl`. Note `icn=1` is **not** fully implicit: its stiff components flip sign each step (amplification → −(1−θ)/θ = −1/3), which is what makes per-step diagnostics such as `density_terms_vs_time` scatter while the density trace stays smooth. Each step solves:
 ```
 (I - θ·dt·L)·f^{n+1} = (I + (1-θ)·dt·L)·f^n + dt·S
 ```
@@ -116,7 +116,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | Parameter | Values | Effect |
 |-----------|--------|--------|
 | `ntimes` | 0 / >0 | Steady-state / time-dependent |
-| `icn` | -1 / else | Crank-Nicolson / fully implicit |
+| `icn` | -1 / 1 / else | Crank-Nicolson (θ=0.5) / θ=0.75 / fully implicit (θ=1) |
 | `isc` | 0 / 1 / -1 | No self-coll / Maxwellian approx / neglected in TD |
 | `irf` | -1 / else | Include QL-RF term / no RF |
 | `isource` | -1 / 0 | NBI beam source / no source |
@@ -196,6 +196,7 @@ New output files must use units not in this table:
 | 519 | conv_eps_vs_time (time, eps, eps_tail) | `i_ss_check=-1` |
 | 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | `iplot_pow=-1` |
 | 522 | sc_density_map (vperp, vpar, f, L_sc f, and its six single-coefficient parts; first step only) | `idiag=-1`, `isc≠0` |
+| 523 | coef_map (vperp, vpar, all00..all02 of the last step; `timefp_7pt_nl` only) | `idiag=-1` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |
