@@ -276,10 +276,18 @@ WHAT IS SHOWN
   Two panels per frame, side by side:
     left    f(v_perp, v_par)
     right   the kinetic-energy density (keV), the quantity of Ekin.txt
-  The frame title gives the case, the time, the step and the frame number.
-  One frame per snapshot, in step order.  The colour scales are fixed over the
-  whole movie (from the largest value of any frame), so frames can be compared
-  directly.
+  The frame title gives the case, the time, the step and the frame number, and
+  each panel title the maximum of that panel in that frame.  One frame per
+  snapshot, in step order.
+
+  COLOUR SCALES (--movie-scale)
+    fixed   (default)  One scale for the whole movie, from the largest value
+            of any frame, so frames can be compared directly.  A frame of
+            much smaller amplitude than the largest then looks nearly empty.
+    frame   Each frame scaled to its own maximum: 0 .. max for a linear f and
+            for the energy, eight decades below max with --logf.  Every frame
+            shows its structure whatever its amplitude; the colour bars follow
+            the frame, so read the amplitude from the bar or the panel title.
 
   The snapshots store f only.  The energy panel is computed from each
   snapshot exactly as the solver computes Ekin.txt (it reproduces the solver's
@@ -307,6 +315,7 @@ OPTIONS ACTING ON THE MOVIE
                         the lowest colour.  The energy panel stays linear.
   --xrange / --yrange   Zoom both panels (v_par and v_perp, in m/s).
   --fps N               Frames per second (default 5).
+  --movie-scale S       fixed (default) or frame.  See COLOUR SCALES above.
   --movie-format F      avi (default), mp4 or gif.  See below.
   --save DIR            Folder for the movie (default: the output folder).
 
@@ -334,6 +343,10 @@ EXAMPLES
   # GIF, 2 frames/s, namelist given explicitly
   python fp2d_plot.py plot x64/Release --cases ITER_EDA-RF-NLSC_2 ^
       --movie --movie-format gif --fps 2 --namelist inputs/ITER_EDA_N=2.txt
+
+  # Each frame on its own colour scale (e.g. a beam filling up from zero)
+  python fp2d_plot.py plot x64/Release --cases JET-beam7-TD0-NLSC ^
+      --movie --movie-scale frame
 
 
 ================================================================================
@@ -443,6 +456,10 @@ COMMON OPTIONS  (all three sub-commands)
 
   --fps N           (run and plot only)  Frames per second of the movie
                     (default 5).
+
+  --movie-scale S   (run and plot only)  Colour scales of the movie: fixed
+                    over the whole movie (default) or scaled to each frame's
+                    own maximum (frame).
 
   --movie-format F  (run and plot only)  avi (default), mp4 or gif.  avi and
                     mp4 need ffmpeg (on the PATH, or via pip install

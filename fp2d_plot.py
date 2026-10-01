@@ -32,6 +32,10 @@ Options (both subcommands)
                   --yrange zoom both panels.  Written as movie-<case>.<fmt> to
                   --save DIR or the output directory.
   --fps N         Frames per second of the movie (default 5).
+  --movie-scale {fixed,frame}
+                  Colour scales of the movie: fixed over the whole movie, so
+                  frames compare (default), or scaled to each frame's own
+                  maximum.  Each panel title gives the frame's maximum.
   --movie-format {avi,mp4,gif}
                   Movie file format (default avi).  avi (MPEG-4) and mp4
                   (H.264) need ffmpeg: one on the PATH, or the binary bundled
@@ -1610,12 +1614,13 @@ def _ffmpeg_available() -> bool:
 
 
 def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
-               fps: float = 5.0, fmt: str = "avi") -> None:
+               fps: float = 5.0, fmt: str = "avi", scale: str = "fixed") -> None:
     """Animate f and the kinetic-energy density over the snapshots of one case.
 
     Checks n_snap in the namelist first: with n_snap = 0 the solver wrote no
-    snapshots and there is nothing to animate.  One frame per snapshot, colour
-    scales fixed over the whole movie so that frames compare.  *fmt* is avi
+    snapshots and there is nothing to animate.  One frame per snapshot.  With
+    *scale* 'fixed' the colour scales are fixed over the whole movie, so frames
+    compare; with 'frame' each frame is scaled to its own maximum.  *fmt* is avi
     (MPEG-4 Part 2, plays in VLC and Windows Media Player), mp4 (H.264) or gif
     (Pillow); avi and mp4 need ffmpeg and fall back to gif without it.
     """
@@ -1655,28 +1660,45 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
         t, vperp, vpar, f = _read_snapshot(path)
         frames.append((step, t, f, _ekin_map(f, vperp, vpar, aa)))
 
-    fmax = max(fr[2].max() for fr in frames)
-    emax = max(fr[3].max() for fr in frames)
-    if log:
-        # Eight decades.  Anything below the floor -- the far tail, and the
-        # round-off of either sign around it -- is left blank rather than drawn
-        # in the lowest colour, which would paint that noise as a checkerboard.
-        ffloor = fmax * 1e-8
-        fnorm  = mcolors.LogNorm(vmin=ffloor, vmax=fmax)
-        prep   = lambda z: np.where(z > ffloor, z, np.nan)
-    else:
-        fnorm = mcolors.Normalize(vmin=min(0.0, min(fr[2].min() for fr in frames)), vmax=fmax)
-        prep  = lambda z: z
-    enorm = mcolors.Normalize(vmin=0.0, vmax=emax)
+    # Colour scales.  'fixed': one scale for the whole movie, from the largest
+    # value of any frame, so frames compare directly.  'frame': each frame is
+    # scaled to its own maximum, so its structure stays visible whatever its
+    # amplitude; the colour bars and the panel titles follow the frame.
+    per_frame = (scale == "frame")
+    fmax_all = max(fr[2].max() for fr in frames)
+    fmin_all = min(fr[2].min() for fr in frames)
+    emax_all = max(fr[3].max() for fr in frames)
+
+    def f_limits(f):
+        hi = f.max() if per_frame else fmax_all
+        hi = hi if hi > 0 else 1.0
+        if log:
+            # Eight decades.  Anything below the floor -- the far tail, and the
+            # round-off of either sign around it -- is left blank rather than
+            # drawn in the lowest colour, which would paint that noise as a
+            # checkerboard.
+            return hi * 1e-8, hi
+        return min(0.0, f.min() if per_frame else fmin_all), hi
+
+    def e_limit(e):
+        hi = e.max() if per_frame else emax_all
+        return hi if hi > 0 else 1.0
+
+    def prep(z, lo):
+        return np.where(z > lo, z, np.nan) if log else z
 
     fig, (axf, axe) = plt.subplots(1, 2, figsize=(13, 5.2))
     step0, t0, f0, e0 = frames[0]
-    mf = axf.pcolormesh(vpar, vperp, prep(f0), norm=fnorm, cmap="rainbow", shading="nearest")
+    lo0, hi0 = f_limits(f0)
+    fnorm = (mcolors.LogNorm if log else mcolors.Normalize)(vmin=lo0, vmax=hi0)
+    enorm = mcolors.Normalize(vmin=0.0, vmax=e_limit(e0))
+    mf = axf.pcolormesh(vpar, vperp, prep(f0, lo0), norm=fnorm, cmap="rainbow", shading="nearest")
     me = axe.pcolormesh(vpar, vperp, e0, norm=enorm, cmap="rainbow", shading="nearest")
-    fig.colorbar(mf, ax=axf, label="f" + ("  (log)" if log else ""))
-    fig.colorbar(me, ax=axe, label="kinetic-energy density (keV)")
-    for ax, ttl in ((axf, "VDF  f(v⊥, v∥)"), (axe, "Kinetic energy (keV)")):
-        ax.set_xlabel("v∥ (m/s)"); ax.set_ylabel("v⊥ (m/s)"); ax.set_title(ttl)
+    tail = "  (scaled to each frame)" if per_frame else ""
+    fig.colorbar(mf, ax=axf, label="f" + ("  (log)" if log else "") + tail)
+    fig.colorbar(me, ax=axe, label="kinetic-energy density (keV)" + tail)
+    for ax in (axf, axe):
+        ax.set_xlabel("v∥ (m/s)"); ax.set_ylabel("v⊥ (m/s)")
         if _XRANGE is not None: ax.set_xlim(_XRANGE)
         if _YRANGE is not None: ax.set_ylim(_YRANGE)
     sup = fig.suptitle("")
@@ -1684,8 +1706,15 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
 
     def draw(k):
         step, t, f, e = frames[k]
-        mf.set_array(prep(f).ravel())
+        lo, hi = f_limits(f)
+        mf.set_clim(lo, hi)
+        mf.set_array(prep(f, lo).ravel())
+        me.set_clim(0.0, e_limit(e))
         me.set_array(e.ravel())
+        # The frame's own maximum in the titles: with --movie-scale frame it is
+        # the top of the colour bar, with fixed scales it shows the amplitude.
+        axf.set_title(f"VDF  f(v⊥, v∥)      max = {f.max():.3g}")
+        axe.set_title(f"Kinetic energy      max = {e.max():.3g} keV")
         sup.set_text(f"{label}    t = {t:.4g} s    (step {step}, frame {k + 1}/{len(frames)})")
         return mf, me, sup
 
@@ -1887,6 +1916,11 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
                    help="file format of the --movie (default avi; avi and mp4 "
                         "need ffmpeg, e.g. from pip install imageio-ffmpeg, and "
                         "fall back to gif without it)")
+    p.add_argument("--movie-scale", choices=("fixed", "frame"), default="fixed",
+                   dest="movie_scale",
+                   help="colour scales of the --movie: 'fixed' over the whole "
+                        "movie, from its largest value, so frames compare "
+                        "(default); 'frame' scaled to each frame's own maximum")
     if multi:
         p.add_argument("--namelist", type=Path, default=None, metavar="FILE",
                        help="namelist of the run, read by --movie for n_snap and "
@@ -2209,7 +2243,8 @@ def main(argv=None):
         print(f"\nMaking movie(s) from the snapshots in: {outdir}")
         for case in cases:
             make_movie(outdir, case, namelist, save_dir=args.save_dir,
-                       log=args.log, fps=args.fps, fmt=args.movie_format)
+                       log=args.log, fps=args.fps, fmt=args.movie_format,
+                       scale=args.movie_scale)
         print("Done.")
         return
 

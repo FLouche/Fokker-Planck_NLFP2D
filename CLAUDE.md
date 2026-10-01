@@ -308,10 +308,13 @@ Two ordering constraints, both load-bearing:
 
 ### Movie from the snapshots (`--movie`)
 
-`run` and `plot` accept `--movie` (plus `--fps`, and `--namelist FILE` for
-`plot`). It replaces the usual figures with one animation per case
-(`make_movie`): f and the kinetic-energy density side by side, one frame per
-`vdf_snap_<step>.txt`, colour scales fixed over the whole movie. Rules:
+`run` and `plot` accept `--movie` (plus `--fps`, `--movie-scale`, `--movie-format`, and
+`--namelist FILE` for `plot`). It replaces the usual figures with one animation
+per case (`make_movie`): f and the kinetic-energy density side by side, one
+frame per `vdf_snap_<step>.txt`. `--movie-scale fixed` (default) keeps the
+colour scales fixed over the whole movie; `frame` rescales each frame to its own
+maximum (`set_clim` per frame, so the colour bars follow), and each panel title
+shows the frame's maximum in both modes. Rules:
 
 - **`n_snap` is checked first**, from the namelist. With `run` this happens
   before the solver starts, so a missing `n_snap` does not cost a run. With
