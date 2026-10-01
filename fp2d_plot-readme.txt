@@ -270,7 +270,10 @@ line followed by three columns v_perp, v_par, f, as in fout.txt.  A restart
 snapshots do not overwrite the earlier ones.
 
 --movie turns these snapshots into one animation per case, INSTEAD of the
-usual figures.
+usual figures.  Any of the movie-only options (--movie-scale, --movie-format,
+--fps) implies --movie, and a message says so: they mean nothing without a
+movie, so  plot . --cases X --movie-scale frame  makes the movie rather than
+silently drawing the ordinary figures.
 
 WHAT IS SHOWN
   Two panels per frame, side by side:
@@ -455,15 +458,16 @@ COMMON OPTIONS  (all three sub-commands)
                     FROM THE VDF SNAPSHOTS above.
 
   --fps N           (run and plot only)  Frames per second of the movie
-                    (default 5).
+                    (default 5).  Implies --movie.
 
   --movie-scale S   (run and plot only)  Colour scales of the movie: fixed
                     over the whole movie (default) or scaled to each frame's
-                    own maximum (frame).
+                    own maximum (frame).  Implies --movie.
 
   --movie-format F  (run and plot only)  avi (default), mp4 or gif.  avi and
                     mp4 need ffmpeg (on the PATH, or via pip install
-                    imageio-ffmpeg) and fall back to gif without it.
+                    imageio-ffmpeg) and fall back to gif without it.  Implies
+                    --movie.
 
   --namelist FILE   (plot only)  Namelist of the run, read by --movie for
                     n_snap and aa.  Default: the namelist in the output folder

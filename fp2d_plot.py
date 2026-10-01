@@ -32,6 +32,7 @@ Options (both subcommands)
                   --yrange zoom both panels.  Written as movie-<case>.<fmt> to
                   --save DIR or the output directory.
   --fps N         Frames per second of the movie (default 5).
+                  --fps, --movie-scale and --movie-format each imply --movie.
   --movie-scale {fixed,frame}
                   Colour scales of the movie: fixed over the whole movie, so
                   frames compare (default), or scaled to each frame's own
@@ -1516,6 +1517,12 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
 # builds Ekin.txt, which needs the ion mass number aa from the namelist.
 
 _SNAP_RE = re.compile(r"^vdf_snap_(\d{6})(?:-(.*))?\.txt$")
+
+# Movie-only options: (command-line name, args attribute) and their defaults.
+# Any of them given on its own implies --movie (see main).
+_MOVIE_OPTS     = (("--fps", "fps"), ("--movie-format", "movie_format"),
+                   ("--movie-scale", "movie_scale"))
+_MOVIE_DEFAULTS = {"fps": 5.0, "movie_format": "avi", "movie_scale": "fixed"}
 _PMASS   = 1.6726e-27     # proton mass (kg), as in analysis.f90
 _KEV_J   = 1.60218e-16    # keV in J, as in analysis.f90
 
@@ -1909,18 +1916,24 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
                    help="make a movie of f and the kinetic-energy density from "
                         "the VDF snapshots (vdf_snap_*.txt) instead of the usual "
                         "plots; needs n_snap > 0 in the namelist")
-    p.add_argument("--fps",          type=float, default=5.0, metavar="N",
-                   help="frames per second of the --movie (default 5)")
-    p.add_argument("--movie-format", choices=("avi", "mp4", "gif"), default="avi",
+    # The three options below only make sense for a movie, so giving any of
+    # them implies --movie (main).  Their defaults are therefore None here, to
+    # tell an option the user typed from an untouched one, and are filled in
+    # from _MOVIE_DEFAULTS afterwards.
+    p.add_argument("--fps",          type=float, default=None, metavar="N",
+                   help="frames per second of the movie (default 5); "
+                        "implies --movie")
+    p.add_argument("--movie-format", choices=("avi", "mp4", "gif"), default=None,
                    dest="movie_format",
-                   help="file format of the --movie (default avi; avi and mp4 "
+                   help="file format of the movie (default avi; avi and mp4 "
                         "need ffmpeg, e.g. from pip install imageio-ffmpeg, and "
-                        "fall back to gif without it)")
-    p.add_argument("--movie-scale", choices=("fixed", "frame"), default="fixed",
+                        "fall back to gif without it); implies --movie")
+    p.add_argument("--movie-scale", choices=("fixed", "frame"), default=None,
                    dest="movie_scale",
-                   help="colour scales of the --movie: 'fixed' over the whole "
+                   help="colour scales of the movie: 'fixed' over the whole "
                         "movie, from its largest value, so frames compare "
-                        "(default); 'frame' scaled to each frame's own maximum")
+                        "(default); 'frame' scaled to each frame's own maximum; "
+                        "implies --movie")
     if multi:
         p.add_argument("--namelist", type=Path, default=None, metavar="FILE",
                        help="namelist of the run, read by --movie for n_snap and "
@@ -2153,6 +2166,17 @@ def main(argv=None):
     # logarithmic axes; --logf travels separately as the `log` argument
     _LOGX = bool(getattr(args, "logx", False))
     _LOGY = bool(getattr(args, "logy", False))
+
+    # A movie option on its own means a movie: without this, e.g.
+    # "plot . --movie-scale frame" silently produced the ordinary figures.
+    if hasattr(args, "movie"):
+        given = [opt for opt, dest in _MOVIE_OPTS if getattr(args, dest) is not None]
+        if given and not args.movie:
+            args.movie = True
+            print(f"{', '.join(given)} given: making a movie (--movie implied).")
+        for dest, default in _MOVIE_DEFAULTS.items():
+            if getattr(args, dest) is None:
+                setattr(args, dest, default)
 
     # ----------------------------------------------------------------
     # compare command — handled entirely here, then return

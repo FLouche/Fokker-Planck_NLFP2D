@@ -314,7 +314,11 @@ per case (`make_movie`): f and the kinetic-energy density side by side, one
 frame per `vdf_snap_<step>.txt`. `--movie-scale fixed` (default) keeps the
 colour scales fixed over the whole movie; `frame` rescales each frame to its own
 maximum (`set_clim` per frame, so the colour bars follow), and each panel title
-shows the frame's maximum in both modes. Rules:
+shows the frame's maximum in both modes. `--fps`, `--movie-scale` and
+`--movie-format` each **imply `--movie`** (`_MOVIE_OPTS`): their argparse
+defaults are `None` so `main` can tell a typed option from an untouched one,
+and `_MOVIE_DEFAULTS` fills them in afterwards. Without this, `plot . --cases X
+--movie-scale frame` silently drew the ordinary figures. Rules:
 
 - **`n_snap` is checked first**, from the namelist. With `run` this happens
   before the solver starts, so a missing `n_snap` does not cost a run. With
