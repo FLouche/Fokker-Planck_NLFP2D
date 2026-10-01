@@ -24,6 +24,14 @@ DEPENDENCIES
   Python >= 3.8
   numpy, matplotlib, scipy  (install with: pip install numpy matplotlib scipy)
 
+  For --movie only:
+  Pillow           Writes GIF movies.  Installed with matplotlib.
+  ffmpeg           Needed for AVI and MP4 movies.  Either an ffmpeg on the
+                   PATH, or the copy bundled with the imageio-ffmpeg package:
+                       pip install imageio-ffmpeg
+                   fp2d_plot.py finds that copy by itself.  Without any ffmpeg,
+                   movies fall back to GIF.
+
 
 ================================================================================
 SUBCOMMAND: run
@@ -62,6 +70,9 @@ AUTO-DETECTION FROM THE NAMELIST
   iplot_mom     If iplot_mom = 0 the solver writes no momentum-vs-time files;
                 momentum breakdown and balance figures are suppressed
                 automatically (equivalent to --no-mom).
+  n_snap        With --movie only.  If n_snap = 0 the solver would write no
+                snapshots, so the command stops with an error BEFORE the solver
+                is launched, rather than after a run that cannot give a movie.
 
 EXAMPLES
   # Run and display interactively
@@ -74,6 +85,10 @@ EXAMPLES
   # Redirect solver output to a log file
   python fp2d_plot.py run FP2D_QLRF_NL.exe jet_beam_case7.txt ^
       --out run_beam7.log --save plots/beam7
+
+  # Run, then make a movie of the snapshots (needs n_snap > 0 in the namelist)
+  python fp2d_plot.py run FP2D_QLRF_NL.exe jet_beam_case7.txt ^
+      --outdir x64/Release --movie --logf --save movies
 
 
 ================================================================================
@@ -143,6 +158,16 @@ EXAMPLES
 
   # Zoom every plot to the low-velocity region 0 - 5e6 m/s
   python fp2d_plot.py plot x64/Release --xrange 0:5e6 --show
+
+  # Movie (AVI) of f and Ekin from the snapshots of one case, f on a log scale
+  python fp2d_plot.py plot x64/Release --cases ITER_EDA-RF-NLSC_2 ^
+      --movie --logf
+
+  # The same as an MP4 at 8 frames/s, zoomed, with the namelist named
+  # explicitly (it is not in the output folder)
+  python fp2d_plot.py plot x64/Release --cases ITER_EDA-RF-NLSC_2 ^
+      --movie --logf --movie-format mp4 --fps 8 --xrange=-5e6:5e6 ^
+      --namelist inputs/ITER_EDA_N=2.txt --save movies
 
 
 ================================================================================
@@ -232,6 +257,86 @@ EXAMPLES
 
 
 ================================================================================
+MOVIES FROM THE VDF SNAPSHOTS  (--movie;  run and plot)
+================================================================================
+With the namelist parameter n_snap = N > 0, the solver saves the distribution
+function every N time steps (both time-dependent solvers):
+
+  vdf_snap_<step>-<casename>.txt      (vdf_snap_<step>.txt without casename)
+
+<step> is the 6-digit total step count.  Each file has a "# time = <t>" header
+line followed by three columns v_perp, v_par, f, as in fout.txt.  A restart
+(iold = -1) continues the numbering of the run it restarts from, so its
+snapshots do not overwrite the earlier ones.
+
+--movie turns these snapshots into one animation per case, INSTEAD of the
+usual figures.
+
+WHAT IS SHOWN
+  Two panels per frame, side by side:
+    left    f(v_perp, v_par)
+    right   the kinetic-energy density (keV), the quantity of Ekin.txt
+  The frame title gives the case, the time, the step and the frame number.
+  One frame per snapshot, in step order.  The colour scales are fixed over the
+  whole movie (from the largest value of any frame), so frames can be compared
+  directly.
+
+  The snapshots store f only.  The energy panel is computed from each
+  snapshot exactly as the solver computes Ekin.txt (it reproduces the solver's
+  own Ekin.txt to round-off); this needs the ion mass number aa, read from the
+  namelist.
+
+  The snapshot f is the raw solution: the end-of-run renormalisation to npart
+  that sourceless runs apply to fout.txt is not applied to it.
+
+THE NAMELIST, AND THE n_snap CHECK
+  The movie needs the namelist of the run, for n_snap and aa.
+    run    The namelist is <input.dat>.  If n_snap = 0 there, the command
+           stops BEFORE launching the solver.
+    plot   The namelist is given with --namelist FILE; if omitted, the
+           output folder is searched for a namelist (a file starting with
+           &INPUT) whose casename is the case being animated.
+  The movie of a case is skipped, with a message saying why, when no namelist
+  is found, when n_snap = 0, when no snapshot files exist for the case, or
+  when there is only one.
+
+OPTIONS ACTING ON THE MOVIE
+  --logf                f on a logarithmic colour scale covering eight decades
+                        below its maximum; anything smaller is left blank,
+                        rather than painting the round-off of the far tail in
+                        the lowest colour.  The energy panel stays linear.
+  --xrange / --yrange   Zoom both panels (v_par and v_perp, in m/s).
+  --fps N               Frames per second (default 5).
+  --movie-format F      avi (default), mp4 or gif.  See below.
+  --save DIR            Folder for the movie (default: the output folder).
+
+FORMATS
+  avi    MPEG-4 video, tagged XviD; plays in VLC and in the Windows media
+         players.  Needs ffmpeg.
+  mp4    H.264 video; the smallest file.  Needs ffmpeg.
+  gif    Animated GIF, written with Pillow; no ffmpeg needed.
+  ffmpeg is taken from the PATH, or else from the imageio-ffmpeg package
+  (pip install imageio-ffmpeg).  Without either, avi and mp4 fall back to gif
+  and a message says so.  The movie is written as  movie-<casename>.<format>.
+
+CHOOSING n_snap
+  At 150 x 150 each snapshot is about 0.7 MB, and each one is a frame.  For a
+  run of 1000 steps, n_snap = 25 gives 40 frames (28 MB of snapshots), or 8 s
+  of movie at the default 5 frames/s.  The step size changes between phases
+  (timestep(1..3)), so equal step intervals are not equal time intervals; the
+  time in each frame title is always the true time.
+
+EXAMPLES
+  # AVI of one case, f on a log scale
+  python fp2d_plot.py plot x64/Release --cases ITER_EDA-RF-NLSC_2 ^
+      --movie --logf
+
+  # GIF, 2 frames/s, namelist given explicitly
+  python fp2d_plot.py plot x64/Release --cases ITER_EDA-RF-NLSC_2 ^
+      --movie --movie-format gif --fps 2 --namelist inputs/ITER_EDA_N=2.txt
+
+
+================================================================================
 COMMON OPTIONS  (all three sub-commands)
 ================================================================================
   --show            Open interactive matplotlib windows.  This is the default
@@ -278,6 +383,11 @@ COMMON OPTIONS  (all three sub-commands)
                     and requires xmin < xmax.  If the window contains no data a
                     warning is printed (the plot would otherwise be blank).
                     Example: --xrange 0:5e6
+                    A NEGATIVE lower bound (e.g. a v_par window) must be
+                    attached with '=', or it is read as an option name:
+                      --xrange=-5e6:5e6      (works)
+                      --xrange -5e6:5e6      (error: expected one argument)
+                    The same holds for --yrange.
 
   --yrange ymin:ymax
                     (plot and compare only)  The same for the y-axis: bounds in
@@ -326,6 +436,22 @@ COMMON OPTIONS  (all three sub-commands)
   --3d              (run and plot only)  Add 3D surface plots alongside each
                     2D contour map (fout, Ekin, beam, ...).
 
+  --movie           (run and plot only)  Instead of the usual figures, make a
+                    movie of f and the kinetic-energy density from the VDF
+                    snapshots.  Needs n_snap > 0 in the namelist.  See MOVIES
+                    FROM THE VDF SNAPSHOTS above.
+
+  --fps N           (run and plot only)  Frames per second of the movie
+                    (default 5).
+
+  --movie-format F  (run and plot only)  avi (default), mp4 or gif.  avi and
+                    mp4 need ffmpeg (on the PATH, or via pip install
+                    imageio-ffmpeg) and fall back to gif without it.
+
+  --namelist FILE   (plot only)  Namelist of the run, read by --movie for
+                    n_snap and aa.  Default: the namelist in the output folder
+                    whose casename matches the case.
+
 
 ================================================================================
 OUTPUT FILES AND THEIR PLOTS
@@ -366,6 +492,13 @@ INDIVIDUAL FIGURES
   sc_power_density.txt        SC power density map dP_SC/d^3v (signed; drawn with
                                 a diverging colour scale: red > 0 source,
                                 blue < 0 sink)  -- SC_diagnostics build
+
+  VDF snapshots  (not plotted one by one)
+  -------------
+  vdf_snap_<step>.txt         f every n_snap steps.  Skipped by the normal
+                                plotting, which would otherwise draw every
+                                snapshot as a separate map; animated by
+                                --movie instead.
 
   Time traces -- single curve
   ----------------------------
@@ -470,6 +603,14 @@ NAMELIST PARAMETERS THAT AFFECT PLOTTING
   isc =  0                    No self-collision files; SC plots suppressed.
 
   ntimes(1) = 0               Steady-state run; all time traces suppressed.
+
+  n_snap =  0      (default)  No VDF snapshots; --movie has nothing to show
+                               (run --movie stops before the solver starts).
+  n_snap =  N > 0             f is saved every N steps to vdf_snap_<step>.txt,
+                               which --movie animates.
+
+  aa                          Ion mass number; read by --movie to compute the
+                               kinetic-energy panel.
 
 
 ================================================================================
