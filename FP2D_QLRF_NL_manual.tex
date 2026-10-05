@@ -281,7 +281,9 @@ Three grid spacing modes are available, controlled by \texttt{ising}:
         higher resolution near the magnetic axis where gradients are typically
         steeper.
 
-  \item[\texttt{ising = +1}] Quadratic spacing in $\vp$, providing higher
+  \item[\texttt{ising = +1}] Power-law spacing in $\vp$,
+        ${\vp}_i \propto \bigl[(i-\tfrac12)/(\texttt{nperp}-1)\bigr]^{p}$ with
+        $p = \texttt{p\_grid}$ (default 2, quadratic), providing higher
         resolution near the axis $\vp = 0$.  The \texttt{fd\_stencil\_2d}
         routine uses the Fornberg algorithm (\texttt{fornberg\_weights}) to
         compute exact finite-difference weights for the local non-uniform
@@ -763,10 +765,11 @@ iplot\_mom & $0$ &
   $-1$: write all momentum files.
   $0$: skip (default; momentum files are large). \\[4pt]
 
-idiag & $0$ &
-  Selects the end-of-run balance diagnostics printed to stdout.
-  $0$: power balance only.
-  $-1$: all three balances (particle density, momentum, power). \\[4pt]
+n\_snap & $0$ &
+  VDF snapshots during a time-dependent run.
+  $0$: none.
+  $N > 0$: write $f$ every $N$ steps to \texttt{vdf\_snap\_<step>.txt}
+  (Section~\ref{sec:snap}).  Both time solvers. \\[4pt]
 
 notxt & $0$ &
   Controls how many \texttt{.txt} output files are written (the \texttt{.dat}
@@ -816,7 +819,17 @@ ising & $0$ &
   Grid spacing mode in $\vp$.
   $0$: uniform.
   $-1$: two-domain (fine for $\vp \le \texttt{vbound}$, coarser above).
-  $+1$: quadratic spacing, higher resolution near $\vp = 0$. \\[4pt]
+  $+1$: power-law spacing (quadratic by default, see \texttt{p\_grid}), higher
+  resolution near $\vp = 0$. \\[4pt]
+
+p\_grid & $2$ &
+  Exponent of the power-law grid when \texttt{ising = +1}:
+  ${\vp}_i = \texttt{vperp\_min} + \texttt{vperp\_max}\,
+  \bigl[(i-\tfrac12)/(\texttt{nperp}-1)\bigr]^{p}$.
+  $p = 2$ is the original quadratic grid (reproduced to the bit); a larger
+  $p$ moves points from the tail into the thermal bulk and coarsens the
+  spacing at the $\vp$ wall, which raises the wall P\'eclet number.
+  Ignored for \texttt{ising} $\ne +1$. \\[4pt]
 
 nsing & -- &
   Number of fine grid points in the inner domain when \texttt{ising = -1}.
@@ -1116,10 +1129,33 @@ extension.
 
 \begin{description}
   \item[\texttt{fout.txt}] Final VDF as a list of $(\vp, \vpa, f)$ triples.
-  \item[\texttt{xout.dat}] Binary restart file: one header line (final time)
-        followed by the packed 1D solution vector.  Used with \texttt{iold = -1}.
+  \item[\texttt{xout.dat}] Restart file: one header line, \texttt{time nstep}
+        (final time and total number of steps, including those of any run it
+        was itself restarted from), followed by the packed 1D solution vector.
+        Used with \texttt{iold = -1}.  Older files whose header holds only the
+        time are still accepted; the step count then starts from 0.
   \item[\texttt{fstix.dat}] Stix Maxwellian reference distribution.
+  \item[\texttt{Ekin.txt}, \texttt{Ekin\_perp.txt}, \texttt{Ekin\_par.txt},
+        \texttt{Ekin\_perp\_at\_vpar0.txt}] Kinetic-energy density of the final
+        $f$ (total, perpendicular and parallel parts), and its cut at
+        $\vpa = 0$.
+  \item[\texttt{fsc\_maxw.txt}, \texttt{fsc\_maxw\_at\_vpar0.txt}] Maxwellian
+        background of the self-collision operator, at $T_\mathrm{eff}$
+        (\texttt{isc = 2}) or $T_n$ (\texttt{isc = 3}).
+  \item[\texttt{beam.txt}] NBI source $S(\vp,\vpa)$ (\texttt{isource = -1}).
 \end{description}
+
+\subsection{VDF Snapshots}
+\label{sec:snap}
+
+With \texttt{n\_snap = N > 0}, $f$ is written every $N$ steps to
+\texttt{vdf\_snap\_<step>.txt}, in the same layout as \texttt{fout.txt} with a
+\texttt{\# time =} header line.  \texttt{<step>} is the \emph{total} step count
+read from the \texttt{xout.dat} header, so a restart continues the previous
+run's numbering and cadence instead of overwriting its snapshots.  Snapshots
+hold the raw solution (the end-of-run renormalisation of sourceless runs is not
+applied) and are not restart files.  \texttt{fp2d\_plot.py --movie} turns them
+into an animation (Section~\ref{sec:plotting}).
 
 \subsection{1D Cuts of the VDF}
 
@@ -1156,17 +1192,44 @@ which are written once per \texttt{n\_ss\_window}-step window):
   \item[\texttt{power\_RF\_vs\_time.txt}] RF power density.
   \item[\texttt{coulomb\_log\_vs\_time.txt}] Coulomb logarithm for background ion species.
   \item[\texttt{coulomb\_log\_self\_vs\_time.txt}] Self-collision Coulomb logarithm.
+  \item[\texttt{density\_terms\_vs\_time.txt}] Particle rate $\mathrm{d}n/\mathrm{d}t$
+        carried by each term of the operator (m$^{-3}$\,s$^{-1}$): time, total,
+        collisions with each background species (electrons first),
+        self-collisions, RF, source, losses.  Each term is the velocity
+        integral of its own part of $\mathcal{L}f$; every term is a divergence,
+        so a non-zero value means particles leave through the Dirichlet walls
+        or the term is not conservative in its discrete form.  Written when
+        \texttt{iplot\_pow = -1}.
   \item[\texttt{momentum\_coll\_*\_vs\_time.txt}] Momentum transfer rates
         (2 columns per file: $\perp$ and $\parallel$ components), written when
-        \texttt{iplot\_mom = -1}.
+        \texttt{iplot\_mom = -1}.  The RF, NBI and self-collision rates go
+        to \texttt{momentum\_RF}, \texttt{momentum\_NBI} and
+        \texttt{momentum\_coll\_self}.
+  \item[\texttt{tau\_coll\_vs\_time.txt}] Columns: time, effective
+        $\tau_{ii}$, $\tau_{ie}$ (s).
+  \item[\texttt{tau\_rf\_vs\_time.txt}] Columns: time, RF tail-formation
+        time (s); written when \texttt{irf = -1}.
+\end{description}
+
+\subsection{Other Files}
+
+\begin{description}
+  \item[\texttt{phi\_kern-<casename>.dat}] Cache of the compressed
+        $\phi$-kernel of the nonlinear self-collision operator
+        (\texttt{isc = -1}); reused by a later run on the same grid, rebuilt
+        otherwise.  Not a diagnostic; may be deleted.
+  \item[\texttt{RF\_dirac.txt}] Parallel resonance function of the RF
+        operator (\texttt{irf = -1}, \texttt{notxt = 0}).  Not routed through
+        \texttt{casename}: every run overwrites it.
 \end{description}
 
 \subsection{End-of-Run Balance Diagnostics (stdout)}
 
-A power balance (and, when \texttt{idiag = -1}, particle density and
-momentum balances) is printed to standard output at the end of the run.
-Values are given in MW/m$^3$ for power, N/m$^3$ for momentum, and s$^{-1}$
-for particle rates.
+Power, particle density and momentum ($\perp$ and $\parallel$) balances are
+printed to standard output at the end of every run.  Values are given in
+MW/m$^3$ for power, N/m$^3$ for momentum, and s$^{-1}$ for particle rates.
+(The former switch \texttt{idiag}, which selected them, has been removed; a
+namelist that still sets it is rejected at read time.)
 
 
 % ============================================================
@@ -1189,6 +1252,7 @@ default (off) values.
   vperp_min = 0.d0,  vperp_max = 5.d6,
   vpar_min  = -4.d6, vpar_max  = 4.d6,
   ising = 1, nsing = 25, vbound = 0.07d6,
+  p_grid = 2.d0,
 
   ! Plasma: electrons + D ions
   nbulk = 2,
@@ -1239,8 +1303,8 @@ default (off) values.
   ! Output
   iplot_pow = -1,
   iplot_mom = -1,
-  idiag     = -1,
   notxt     = 0,
+  n_snap    = 0,
 
   ! Advanced numerics (default 0 = off)
   i_upwind     = 0,
@@ -1269,13 +1333,19 @@ FP2D_QLRF_NL.exe < inputs/jet_beam_case1.dat
 Output files are written to the working directory.
 
 \subsection{Plotting}
+\label{sec:plotting}
 
 Use the companion Python script \texttt{fp2d\_plot.py}:
 \begin{lstlisting}
 python fp2d_plot.py run FP2D_QLRF_NL.exe inputs/jet_beam_case1.dat --show
 python fp2d_plot.py plot x64/Release --casename JET-beam7-TD0-NLSC --save plots/
 python fp2d_plot.py compare x64/Release --cases JET-beam7-TD0-Lin JET-beam7-TD0-NLSC
+python fp2d_plot.py plot x64/Release --cases JET-beam7-TD0-NLSC --movie
 \end{lstlisting}
+The last line builds an animation of $f$ and of the kinetic-energy density from
+the \texttt{vdf\_snap} files (requires \texttt{n\_snap > 0}); \texttt{--movie-scale
+frame} rescales each frame to its own maximum, and \texttt{--movie-format}
+selects AVI (default), MP4 or GIF.
 See \texttt{fp2d\_plot-readme.txt} for the full documentation of the
 plotting tool.
 
