@@ -42,8 +42,6 @@ double precision, allocatable, dimension(:) :: dirac
 complex*16, dimension(nharm+3) :: cy
 double precision, allocatable, dimension(:) :: dn,ddndvperp
 
-double precision, allocatable, dimension(:,:) :: dpepe,dpepa,dpapa
-
 complex*16 :: arg,jnm1,jnp1,cjnm1,cjnp1,djnm1,djnp1
 complex*16, dimension(0:nharm+2) :: jbes
 complex*16, dimension(0:nharm+1) :: djbes
@@ -74,8 +72,6 @@ if (notxt == 0) close(40)
 ! ----------------
 
 allocate(dn(nperp),ddndvperp(nperp))
-
-open(55,file='theta_n.txt',status='unknown')
 
 do i = 1,nperp
 
@@ -119,32 +115,18 @@ do i = 1,nperp
    ! Theta = E+ J(n-1)+E- J(n+1)
    
    dn(i)=(eplus*jnm1+emin*jnp1)*(ceplus*cjnm1+cemin*cjnp1)
-
+   
    ! Derivative of (Theta)^2 wrt Vperp
-
+   
    ddndvperp(i) = 2.d0*dreal(eta*(eplus*djnm1+emin*djnp1)*(ceplus*cjnm1+cemin*cjnp1))
-
-   ! TEMPORARY: vperp, |Theta|^2 and its analytic vperp-derivative
-   write(55,'(3ES24.15E3)') vperp(i),dn(i),ddndvperp(i)
-
+   
    
 enddo
-
-close(55)
 
 !=========================================================
 !
 ! Coefficients of the FP equation
 ! -------------------------------
-
-allocate(dpepe,dpepa,dpapa,mold=rf10)
-
-
-open(44,file="Dpepe.txt",status='unknown')
-open(45,file="Dpepa.txt",status='unknown')
-open(46,file="Dpapa.txt",status='unknown')
-
-
 
 do j=1,npar
     
@@ -164,7 +146,6 @@ rf10(i,j) = rfcte*dirac(j)*(comfac1*(comfac1*(dn(i)/vperp(i)+ddndvperp(i)) &
 
 rf20(i,j) = rfcte*dirac(j)*comfac1**2*dn(i)
 
-
 !      Coefficient of df/dvpar
 !      ------------------------
 
@@ -181,46 +162,10 @@ rf02(i,j) = rfcte*dirac(j)*vperp(i)**2*dn(i)
 
 rf11(i,j) = rfcte*dirac(j)*2.d0*comfac1*vperp(i)*dn(i)
 
-! TEMPORARY: plot Dperperp etyc. at vpar =0
-
-dpepe(i,j) = 4.d0*rf20(i,j)
-dpapa(i,j) = 4.d0*rf02(i,j)
-dpepa(i,j) = 4.d0*rfcte*dirac(j)*dn(i)*comfac1*vperp(i)
-
-
-
-if(j == jmid) then
-    write(44,*) vperp(i),dpepe(i,j)
-    write(45,*) vperp(i),dpepa(i,j)     ! was dpapa: Dpepa.txt and Dpapa.txt were swapped
-    write(46,*) vperp(i),dpapa(i,j)
-endif
-
 
 
 	enddo
 enddo
-
-close(46)
-close(45)
-close(44)
-
-! TEMPORARY: full 2D maps, so that the v_par derivatives at v_par=0 can be
-! taken on the grid (the files above hold the jmid row only).
-open(56,file="Dpepe_2d.txt",status='unknown')
-open(57,file="Dpepa_2d.txt",status='unknown')
-open(58,file="Dpapa_2d.txt",status='unknown')
-do i = 1,nperp
-   do j = 1,npar
-      write(56,'(3ES24.15E3)') vperp(i),vpar(j),dpepe(i,j)
-      write(57,'(3ES24.15E3)') vperp(i),vpar(j),dpepa(i,j)
-      write(58,'(3ES24.15E3)') vperp(i),vpar(j),dpapa(i,j)
-   enddo
-enddo
-close(58)
-close(57)
-close(56)
-
-deallocate(dpepe,dpepa,dpapa)
 
 !=========================================================
 

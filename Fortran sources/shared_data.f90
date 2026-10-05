@@ -150,7 +150,6 @@ integer :: i_conv_shape = 0      ! convergence criterion (mod_conv_diag):
 integer :: istart = 1            ! TD initial condition: 0=zero(beam only) 1=Stix 2=SS no-SC 3=SS Maxw-SC
 integer :: iplot_pow = -1        ! -1: write power vs time files; 0: skip
 integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
-integer :: idiag     = 0         ! 0: power balance only; -1: all balances (density+momentum+power)
 integer :: notxt     = 0         ! .txt output: 0=write all; 1=suppress all; 2=keep only the minimal test/diagnostic set
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''

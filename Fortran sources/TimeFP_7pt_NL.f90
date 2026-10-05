@@ -624,38 +624,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
 
-  !--- Coefficient map of the last step (idiag=-1) ------------------
-  ! The six assembled coefficients A..F (collisions + RF + SC) that built
-  ! the last step's operator, for Peclet / effective-diffusion checks of
-  ! the v_perp wall rows: at i=nperp-1 the wall column is deleted from the
-  ! 7-point stencil, which turns anti-diffusive once |B| dv/D is large
-  ! enough.  Truncate the run (ntimes) to sample a chosen time.
-  IF (idiag == -1) THEN
-    OPEN(523, file=TRIM(outfile('coef_map.txt')), status='unknown')
-    WRITE(523,'(A,ES16.8)') '# vperp vpar all00 all10 all01 all20 all11 all02   time = ', time
-    DO iv = 1, nperp
-      DO imu = 1, npar
-        WRITE(523,'(8ES18.8E3)') vperp(iv), vpar(imu), all00(iv,imu), all10(iv,imu), &
-                                 all01(iv,imu), all20(iv,imu), all11(iv,imu), all02(iv,imu)
-      END DO
-    END DO
-    CLOSE(523)
-  END IF
-
-  !================================================================
-  ! Diagnostic (idiag=-1): SC friction/diffusion tensor and Rosenbluth
-  ! potentials at v_par~0 (isc=-1), from the computed potentials:
-  ! Dperperp, Dparpar, Dperpar, Fperp, Fpar, psi, phi (plus the
-  ! un-regularised phi/Fperp/Fpar).  Writes sc_*_at_vpar0.txt, which
-  ! fp2d_plot.py then turns into one figure each.  On a Maxwellian, compare
-  ! with the analytic values of sc_components_maxw_diag (same file names).
-  !
-  ! The CALL MUST stay BEFORE the DEALLOCATE that follows -- compute_psi
-  ! applies the phi kernel through phi_kernel_matvec -- and it costs one
-  ! extra kernel apply.
-  !================================================================
-  IF (isc /= 0 .AND. idiag == -1) CALL sc_components_diag(x_vec, teff)
-
   DEALLOCATE(phi_kern)
   IF (ALLOCATED(phi_khat)) DEALLOCATE(phi_khat)
 

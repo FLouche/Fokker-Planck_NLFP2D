@@ -172,23 +172,22 @@ file-unit registry under *Fortran Internals*. Time traces are written by both
 The `power_coll_ion<k>` / `momentum_coll_ion<k>` names are built from the species
 index and may carry a space (see *`--files` matching* below).
 
-**Diagnostic maps** (`idiag=-1`; `time_power_7pt.f90`)
-
-| File | Content | Condition |
-|------|---------|-----------|
-| `sc_density_map.txt` | f, L_sc f and its six single-coefficient parts (first step) | `isc≠0` |
-| `coef_map.txt` | `all00`…`all02` of the last step | `timefp_7pt_nl` only |
-| `sc_{Dpepe,Dpapa,Dpepa,Fpe,Fpa,psi,phi}_at_vpar0.txt` | SC coefficients and Rosenbluth potentials at the node nearest v∥=0 (`sc_components_diag`; `nlterm_test` adds `_raw` variants) | `isc≠0` |
-
-Note `jmid` is not exactly v∥=0 when `npar` is even; read `vpar(jmid)` from the file.
+**End-of-run balance checks** (`analysis.f90`, stdout only): power, particle
+density and momentum balance (`test_power_balance_7pt`,
+`test_density_balance_7pt`, `test_momentum_balance_7pt`), always run.
 
 **Cache, not a diagnostic:** `phi_kern-<case>.dat`, the compressed φ-kernel of
 `timefp_7pt_nl` (`mod_phi_kernel`), reused when the grid matches.
 
 **Not routed through `outfile()`** (no casename, overwritten by every run):
-`qlrfterm.f90` writes `RF_dirac.txt` (`notxt=0`) and, while its QL-tensor test
-code is in place, `theta_n.txt`, `Dpepe.txt`, `Dpepa.txt`, `Dpapa.txt` and their
-`*_2d.txt` maps (units 44–46, 55–58).
+`qlrfterm.f90` writes `RF_dirac.txt` (`notxt=0`).
+
+**Removed 2026-10-05 (branch `last-dev`, after `1845cf1`):** the namelist
+parameter `idiag` and everything it switched on — `sc_density_map.txt`,
+`coef_map.txt`, `sc_*_at_vpar0.txt` (`sc_components_diag`,
+`sc_components_maxw_diag`) — and the QL-tensor test output of `qlrfterm.f90`.
+Commit `1845cf1` holds the last version with them. A namelist that still sets
+`idiag` now stops at read time with `forrtl: severe (19)`; delete the entry.
 
 ### Argument Ordering Note
 The two main solver calls use different argument orders than each other. In `main`:
@@ -254,8 +253,6 @@ New output files must use units not in this table:
 | 518 | conv_diag_vs_time.csv (full convergence history) | `i_ss_check=-1` |
 | 519 | conv_eps_vs_time (time, eps, eps_tail) | `i_ss_check=-1` |
 | 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | `iplot_pow=-1` |
-| 522 | sc_density_map (vperp, vpar, f, L_sc f, and its six single-coefficient parts; first step only) | `idiag=-1`, `isc≠0` |
-| 523 | coef_map (vperp, vpar, all00..all02 of the last step; `timefp_7pt_nl` only) | `idiag=-1` |
 | 530 | vdf_snap_<step> (f every `n_snap` steps; opened and closed per snapshot) | `n_snap>0` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |

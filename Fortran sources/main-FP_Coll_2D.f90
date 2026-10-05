@@ -278,7 +278,7 @@ namelist /INPUT/ casename, &
                 icn, ntimes, timestep, iold, istart, isc, core_frac, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
-                iplot_pow, iplot_mom, idiag, notxt, &
+                iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap
 
 

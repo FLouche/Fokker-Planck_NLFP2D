@@ -266,77 +266,6 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
 
 END SUBROUTINE time_power_7pt
 
-!-----------------------------------------------------------------------
-! Restored 2026-09-07 from commit c0180d0 (removed 17d31fe).  Analytic vs
-! numerical Rosenbluth potentials at v_par=0; see
-! CN_N2_CrankNicolson_instability/rosenbluth_retrieved/README.md
-!-----------------------------------------------------------------------
-
-SUBROUTINE sc_components_maxw_diag(vth)
-
-  USE shared_grid           ! vperp, vpar, jmid, nperp, npar
-  USE shared_plasma         ! aa, npart, gammaa
-  USE shared_timer          ! outfile()
-
-  IMPLICIT NONE
-  INTEGER, PARAMETER :: dp = KIND(1.0D0)
-
-  REAL(dp), INTENT(IN) :: vth
-
-  REAL(dp), DIMENSION(nperp) :: Dpepe, Dpapa, Dpepa, Fpe, Fpa, psi_p, phi_p
-  REAL(dp) :: pi, sq2, sqpi, vpe, vpa, v1, v2, arg, arg2
-  REAL(dp) :: func1, derfarg, chandra, Theta, Phi, Psi
-  INTEGER  :: iv
-
-  pi   = 4.0_dp * ATAN(1.0_dp)
-  sq2  = SQRT(2.0_dp)
-  sqpi = SQRT(pi)
-  vpa  = vpar(jmid)
-
-  DO iv = 1, nperp
-    vpe = vperp(iv)
-    v2  = vpe*vpe + vpa*vpa
-    v1  = SQRT(v2)
-    arg = v1 / (sq2*vth)
-    arg2= v2 / (2.0_dp*vth*vth)
-    func1   = ERF(arg)
-    derfarg = (2.0_dp/sqpi) * EXP(-arg2)
-    chandra = (func1 - arg*derfarg) / (2.0_dp*arg*arg)
-    Theta   = chandra / v1
-    Phi     = (func1 - 3.0_dp*chandra) / (2.0_dp*v1*v2)
-    Psi     = chandra / (v1*vth*vth)          ! maonmb = 1 (same species)
-    Dpepe(iv) = gammaa * (Theta + vpa*vpa*Phi)
-    Dpapa(iv) = gammaa * (Theta + vpe*vpe*Phi)
-    Dpepa(iv) = gammaa * (-vpe*vpa*Phi)
-    Fpe(iv)   = gammaa * (-vpe*Psi)
-    Fpa(iv)   = gammaa * (-vpa*Psi)
-    psi_p(iv) = -npart/(8.0_dp*pi) * v1 * (derfarg/(2.0_dp*arg) + func1*(1.0_dp + 1.0_dp/(2.0_dp*arg2)))
-    phi_p(iv) = -npart/(4.0_dp*pi*v1) * func1
-  END DO
-
-  CALL wr1d('sc_Dpepe_at_vpar0.txt', Dpepe)
-  CALL wr1d('sc_Dpapa_at_vpar0.txt', Dpapa)
-  CALL wr1d('sc_Dpepa_at_vpar0.txt', Dpepa)
-  CALL wr1d('sc_Fpe_at_vpar0.txt',   Fpe)
-  CALL wr1d('sc_Fpa_at_vpar0.txt',   Fpa)
-  CALL wr1d('sc_psi_at_vpar0.txt',   psi_p)
-  CALL wr1d('sc_phi_at_vpar0.txt',   phi_p)
-  WRITE(*,*) '  SC components at vpar=0 (D, F, psi, phi) written.'
-
-CONTAINS
-  SUBROUTINE wr1d(name, a)
-    CHARACTER(*), INTENT(IN) :: name
-    REAL(dp),     INTENT(IN) :: a(nperp)
-    INTEGER :: i
-    OPEN(521, file=TRIM(outfile(name)), status='unknown')
-    DO i = 1, nperp
-      WRITE(521,*) vperp(i), a(i)
-    END DO
-    CLOSE(521)
-  END SUBROUTINE wr1d
-
-END SUBROUTINE sc_components_maxw_diag
-
 !*******************************************************
 !* Density rate carried by each term of the operator   *
 !*******************************************************
@@ -381,7 +310,6 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   REAL(dp), ALLOCATABLE :: rf00(:,:)
   REAL(dp) :: taum_save
   INTEGER  :: iv, ip, ib
-  LOGICAL, SAVE :: sc_map_done = .FALSE.
 
   ! apply_operator reads taum through fd_stencil_2d: keep the loss term out
   ! of the operator terms and restore it for the caller (see time_power_7pt).
@@ -402,7 +330,6 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   IF (isc /= 0) THEN
     CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
     CALL integrate_Lf(Lf, nsc)
-    IF (idiag == -1 .AND. .NOT. sc_map_done) CALL write_sc_map()
   ELSE
     nsc = 0.0_dp
   END IF
@@ -449,34 +376,5 @@ CONTAINS
     END DO
     CALL ncint_2d(fint, res)
   END SUBROUTINE integrate_Lf
-
-  ! Where in velocity space does the SC particle source sit, and which
-  ! derivative term carries it?  Written once (first call, idiag=-1) to
-  ! sc_density_map.txt: vperp, vpar, f, L_sc f, then the six single-coefficient
-  ! parts of L_sc f (sc00, sc10, sc01, sc20, sc11, sc02), which add up to L_sc f
-  ! exactly since fd_stencil_2d is linear in its coefficients.  The node
-  ! contribution to dn/dt is (L_sc f)*jacob times the Simpson weights of ncint_2d.
-  SUBROUTINE write_sc_map()
-    REAL(dp), ALLOCATABLE :: z(:,:), part(:,:)
-    ALLOCATE(z(nperp,npar), part(nbig,6))
-    z = 0.0_dp
-    CALL apply_operator(z, z, z, z, z, sc00, f, part(:,1))
-    CALL apply_operator(z, z, z, sc10, z, z, f, part(:,2))
-    CALL apply_operator(z, z, z, z, sc01, z, f, part(:,3))
-    CALL apply_operator(sc20, z, z, z, z, z, f, part(:,4))
-    CALL apply_operator(z, z, sc11, z, z, z, f, part(:,5))
-    CALL apply_operator(z, sc02, z, z, z, z, f, part(:,6))
-    OPEN(522, file=TRIM(outfile('sc_density_map.txt')), status='unknown')
-    WRITE(522,'(A)') '# vperp vpar f L_sc_f  parts: sc00 sc10 sc01 sc20 sc11 sc02'
-    DO iv = 1, nperp
-      DO ip = 1, npar
-        WRITE(522,'(10ES17.8)') vperp(iv), vpar(ip), f(index_mat(iv,ip)), &
-                                Lf(index_mat(iv,ip)), part(index_mat(iv,ip),:)
-      END DO
-    END DO
-    CLOSE(522)
-    DEALLOCATE(z, part)
-    sc_map_done = .TRUE.
-  END SUBROUTINE write_sc_map
 
 END SUBROUTINE time_density_terms_7pt
