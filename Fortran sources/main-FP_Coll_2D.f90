@@ -15,6 +15,9 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Final version - 5th October 2026 (FL)
+    
+    
     ! Version 2.7 - 13th August 2026 (FL)
 
     ! Non-linear self-collisions (isc=-1) made much cheaper, and the isc=3
