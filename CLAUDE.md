@@ -133,6 +133,63 @@ All output is written to the run directory. Key files:
 - `power_coll_*_vs_time.txt`, `power_RF_vs_time.txt` — power balance
 - `fout_at_vpar0.txt`, `fout_at_vperp0.txt`, etc. — 1D cuts of f at boundaries
 
+The full list is in **Diagnostics** below.
+
+### Diagnostics
+
+Everything the code writes, by category. All files go through `outfile()` (so they
+take the `-<casename>` suffix) unless marked otherwise. Unit numbers are in the
+file-unit registry under *Fortran Internals*. Time traces are written by both
+`timefp_7pt` and `timefp_7pt_nl`.
+
+**Distribution function** (`main-FP_Coll_2D.f90`, `consts.f90`, solvers)
+
+| File | Content | Condition |
+|------|---------|-----------|
+| `fout.txt`, `xout.dat` | final f (text / restart) | always |
+| `fout_at_{vpar0,vparmax,vperp0,vperpmax}.txt` | 1D cuts of f | always |
+| `fstix.dat`, `fstix_at_{vpar0,vparmax,vperp0,vperpmax}.txt` | Stix reference Maxwellian and its cuts | always |
+| `vdf_snap_<step>.txt` | f every `n_snap` steps | `n_snap>0` |
+| `fsc_maxw.txt`, `fsc_maxw_at_vpar0.txt` | Maxwellian background of the SC operator | `isc=2,3` |
+| `beam.txt` | NBI source | NBI |
+
+**Energy maps** (`analysis.f90`, end of run): `Ekin.txt`, `Ekin_perp.txt`,
+`Ekin_par.txt`, `Ekin_perp_at_vpar0.txt`.
+
+**Time traces** (`*_vs_time.txt`)
+
+| Group | Files | Condition |
+|-------|-------|-----------|
+| moments | `density`, `energy`, `anisotropy`, `Teff`, `Tn` | always |
+| collision times | `tau_coll` (effective τ_ii, τ_ie) | always |
+| power balance | `power_coll_tot`, `power_coll_e`, `power_coll_ion<k>` (one per species), `power_coll_self` (`isc≠0`), `power_RF` (RF), `power_NBI` (NBI) | `iplot_pow=-1` |
+| density balance | `density_terms`: dn/dt split into total, coll per species, SC, RF, source, losses (m⁻³/s) | `iplot_pow=-1` |
+| momentum balance | `momentum_coll_tot`, `momentum_coll_e`, `momentum_coll_ion<k>`, `momentum_coll_self`, `momentum_RF`, `momentum_NBI` (same conditions as power) | `iplot_mom=-1` |
+| Coulomb logs | `coulomb_log` (`nbulk>1`), `coulomb_log_self` (`isc=1,2`) | — |
+| RF | `tau_rf` (RF tail formation time) | RF |
+| convergence | `conv_eps_vs_time.txt` (time, eps, eps_tail), `conv_diag_vs_time.csv` (full history; `conv_diag.f90`) | `i_ss_check=-1` |
+
+The `power_coll_ion<k>` / `momentum_coll_ion<k>` names are built from the species
+index and may carry a space (see *`--files` matching* below).
+
+**Diagnostic maps** (`idiag=-1`; `time_power_7pt.f90`)
+
+| File | Content | Condition |
+|------|---------|-----------|
+| `sc_density_map.txt` | f, L_sc f and its six single-coefficient parts (first step) | `isc≠0` |
+| `coef_map.txt` | `all00`…`all02` of the last step | `timefp_7pt_nl` only |
+| `sc_{Dpepe,Dpapa,Dpepa,Fpe,Fpa,psi,phi}_at_vpar0.txt` | SC coefficients and Rosenbluth potentials at the node nearest v∥=0 (`sc_components_diag`; `nlterm_test` adds `_raw` variants) | `isc≠0` |
+
+Note `jmid` is not exactly v∥=0 when `npar` is even; read `vpar(jmid)` from the file.
+
+**Cache, not a diagnostic:** `phi_kern-<case>.dat`, the compressed φ-kernel of
+`timefp_7pt_nl` (`mod_phi_kernel`), reused when the grid matches.
+
+**Not routed through `outfile()`** (no casename, overwritten by every run):
+`qlrfterm.f90` writes `RF_dirac.txt` (`notxt=0`) and, while its QL-tensor test
+code is in place, `theta_n.txt`, `Dpepe.txt`, `Dpepa.txt`, `Dpapa.txt` and their
+`*_2d.txt` maps (units 44–46, 55–58).
+
 ### Argument Ordering Note
 The two main solver calls use different argument orders than each other. In `main`:
 - `solve_fp_pardiso(A, B, C, D, E, F, …)` → `(all00, all10, all01, all20, all11, all02, …)`
