@@ -17,7 +17,7 @@ Commit messages should state **what** changed and **why** (the physics or numeri
 - `Add self-collision term to timefp_7pt time loop`
 - `Increase nnz_max estimate to accommodate denser stencil near boundaries`
 
-Never batch unrelated changes into a single commit. Never commit build outputs, `.obj`/`.mod`/`.exe` files, or simulation result files — those are covered by `.gitignore`.
+Never batch unrelated changes into a single commit. Never commit build outputs, `.obj`/`.mod`/`.exe` files, or simulation result files — those are covered by `.gitignore`. The one exception is `Benchmark runs/` (see *Directory Layout*): reference results committed on purpose; add to it only when asked.
 
 ## Build and Run
 
@@ -200,6 +200,31 @@ All `.f90` sources live in `Fortran sources/` at the **project root** — not in
 nested `FP2D_QLRF_NL/` Visual Studio project folder (which holds the `.sln`/`.vfproj` and
 the `x64/Debug`, `x64/Release` build outputs). Run outputs land in whichever `x64/*`
 directory the exe is launched from.
+
+### `Benchmark runs/` — reference results under version control
+
+Added 2026-10-07 (`a737981`): a committed copy of the benchmark cases from
+`FP2D_QLRF_NL/x64/Release/Benchmark/` (which is git-ignored), with the paths
+below `Benchmark/` kept — namelists, outputs, figures and reports:
+
+| Folder | Content |
+|--------|---------|
+| `ITER-RF/ITER-RF-N=2/nominal/nominal_#2--REF` | ITER RF, N=2 nominal reference case |
+| `ITER-RF/ITER-RF-N=1/nominal` | ITER RF, N=1 nominal cases |
+| `JET-Beam` | JET NBI benchmark cases |
+| `JET-RF` | JET RF benchmark cases (without `RF-Case2/Test isc`) |
+
+Use them to check a solver change against the reference outputs (rerun the
+namelist, compare with `fp2d_plot.py compare`). Points to know:
+
+- **Missing on purpose:** the `sum_phi-JET-beam{1,2,3}-NLSC.dat` φ-kernel caches
+  of `JET-Beam/Case*/Restart files` (4.2 GB each, over GitHub's 100 MB file
+  limit — Git LFS stops at 2 GB too). The solver rebuilds the kernel when
+  absent, so the runs stay reproducible. Never try to add files > 100 MB.
+- **`results/*.out` are solver stdout logs**, force-added (`git add -f`): they
+  match the LaTeX `*.out` ignore pattern only by accident. LaTeX build leftovers
+  next to the reports stay ignored.
+- The folder is ~2.9 GB; adding more results grows the clone size for good.
 
 ## Fortran Internals
 
