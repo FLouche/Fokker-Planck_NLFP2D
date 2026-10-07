@@ -1,0 +1,96 @@
+Casename (from namelist): JET-beam2-NLSC
+iplot_mom=0: momentum vs time plots will be skipped.
+Running : E:\Fokker-Planck\FPCode-CoulColl-2D\FP2D_QLRF_NL\FP2D_QLRF_NL\x64\Release\FP2D_QLRF_NL.exe
+Input   : E:\Fokker-Planck\FPCode-CoulColl-2D\FP2D_QLRF_NL\FP2D_QLRF_NL\x64\Release\Benchmark\JET-Beam\Case2\jet_beam_case2.txt
+Workdir : E:\Fokker-Planck\FPCode-CoulColl-2D\FP2D_QLRF_NL\FP2D_QLRF_NL\x64\Release\Benchmark\JET-Beam\Case2
+ Critical velocity:    3476645.95840531       m/s
+ Beam injection perp. velocity =    3390394.46118227       m/s
+ Beam injection par. velocity =   2.076017862366890E-010  m/s
+ Beam density   3.750013716254022E+019 /m3/s
+ Total density   7.500000000000000E+018 /m3
+ Initial condition: f = 0 (beam-driven).
+  sum_phi-JET-beam2-NLSC.dat not found -- computing kernel.
+ Computing phi-distance kernel for non-linear self-collisions...
+ Gauss-Legendre quadrature initialized with          16 points
+
+  Done. CPU time =      2.188 s
+  phi-distance kernel saved to sum_phi-JET-beam2-NLSC.dat
+ Initial density is   0.000000000000000E+000
+ Initial effective temperature is                      NaN
+  [conv_diag] evaluated every   50 steps   (one snapshot of f:     0.17 MB)
+  [conv_diag] tolerances:  eps/nu < 1.00E-03  epsT/nu < 1.00E-02  moments < 1.00E-03
+  [conv_diag] quadrature weights built:
+    sum(W_perp) = 7.95923E+13   exact = 7.95923E+13   rel.err = 1.96E-16
+    sum(W_par ) = 9.00000E+06   exact = 9.00000E+06   rel.err = 0.00E+00
+  Pattern OK: nnz_L=1079974
+  [conv] t= 2.5000E-01 s  (first checkpoint laid down; next 50-step window gives the first verdict)
+  [conv] t= 5.0000E-01 s   eps= 1.834E+00  epsT= 4.499E-01  epsS= 1.604E+00  epsTS= 4.481E-01 /s
+         dn= 8.96E-01  du= 4.64E-01  dE= 2.99E-01  dEn= 7.69E-01  axis= 2.44E+00   [amplitude]
+  [conv] t= 7.5000E-01 s   eps= 5.502E-01  epsT= 1.427E-01  epsS= 3.367E-01  epsTS= 1.423E-01 /s
+         dn= 2.43E-01  du= 7.42E-02  dE= 4.83E-02  dEn= 2.07E-01  axis= 6.96E-01   [amplitude]
+  [conv] t= 1.0000E+00 s   eps= 1.572E-01  epsT= 4.195E-02  epsS= 8.588E-02  epsTS= 4.177E-02 /s
+         dn= 6.89E-02  du= 8.07E-03  dE= 1.21E-02  dEn= 5.78E-02  axis= 1.96E-01   [amplitude]
+  [conv] t= 1.2500E+00 s   eps= 4.514E-02  epsT= 1.215E-02  epsS= 2.386E-02  epsTS= 1.209E-02 /s
+         dn= 1.98E-02  du= 5.88E-03  dE= 3.42E-03  dEn= 1.65E-02  axis= 5.61E-02   [amplitude]
+  [conv] t= 1.5000E+00 s   eps= 1.301E-02  epsT= 3.509E-03  epsS= 6.811E-03  epsTS= 3.491E-03 /s
+         dn= 5.71E-03  du= 1.97E-03  dE= 9.82E-04  dEn= 4.74E-03  axis= 1.62E-02   [amplitude]
+  [conv] t= 1.7500E+00 s   eps= 3.753E-03  epsT= 1.013E-03  epsS= 1.960E-03  epsTS= 1.008E-03 /s
+         dn= 1.65E-03  du= 5.85E-04  dE= 2.83E-04  dEn= 1.37E-03  axis= 4.66E-03   [amplitude]
+  [conv] t= 2.0000E+00 s   eps= 1.083E-03  epsT= 2.926E-04  epsS= 5.653E-04  epsTS= 2.910E-04 /s
+         dn= 4.76E-04  du= 1.70E-04  dE= 8.18E-05  dEn= 3.94E-04  axis= 1.35E-03   [amplitude]
+  [conv] t= 2.2500E+00 s   eps= 3.128E-04  epsT= 8.447E-05  epsS= 1.632E-04  epsTS= 8.402E-05 /s
+         dn= 1.37E-04  du= 4.91E-05  dE= 2.36E-05  dEn= 1.14E-04  axis= 3.88E-04   [amplitude]
+  [conv] t= 2.5000E+00 s   eps= 9.030E-05  epsT= 2.439E-05  epsS= 4.711E-05  epsTS= 2.426E-05 /s
+         dn= 3.97E-05  du= 1.42E-05  dE= 6.82E-06  dEn= 3.28E-05  axis= 1.12E-04   [amplitude]
+  Stopping at t=     2.50000 s (conv_diag criteria met).
+ Solve completed.
+ Density is   7.499382087312256E+018  /m3
+ Average Kinetic Energy is    61.5552731213181      keV
+ Perpendicular Kinetic Energy is    53.3287705956720      keV
+ Parallel Kinetic Energy is    8.22650252564607      keV
+ Effective temperature is    41.0368487475454      keV
+ Perpendicular anisotropy is       76.4222035069296      %  (50% = Maxwellian)
+
+POWER DENSITY BALANCE:
+----------------------
+
+===========================
+ Collisions:
+ -----------
+  Collisions with electrons:     -3.60127E-02 MW/m**3
+  Collisions with ions            1 :  -3.17750E-01 MW/m**3
+ ------------------
+
+ Self-collisions:
+     - P_SC_perp :  -1.60141E-02 MW/m**3
+     -  P_SC_par :   1.59896E-02 MW/m**3
+ ------------------
+  Total self-collisions:        -2.44657E-05 MW/m**3
+
+ -----------------
+  Total collisions:             -3.53788E-01 MW/m**3
+===========================
+
+  Beam source:                   7.23592E-01 MW/m**3
+
+  Particle losses:              -3.69804E-01 MW/m**3
+
+===========================
+
+  RF power:                      0.00000E+00 MW/m**3
+
+  --------------------------------------------
+  Total balance:                 2.57182E-07 MW/m**3
+
+
+ DOMAIN ADEQUACY CHECK (Dirichlet wall)
+ --------------------------------------
+  final Teff  =    41.037 keV   ->  vth =  1.402E+06 m/s
+  for f(wall)/f(peak) <  1.00E-12  recommend |v|max >  1.042E+07 m/s
+  vperp_max   =  5.000E+06  (  3.57 vth)  f(wall)/f(peak) =  1.74E-03  TOO SMALL
+  |vpar|max   =  4.000E+06  (  2.85 vth)  f(wall)/f(peak) =  1.71E-02  TOO SMALL
+
+  ==> the domain truncates the tail. Re-run with |v|max >=  1.042E+07 m/s;
+       refining the grid will NOT reduce this error.
+
+ Simulation duration:    207.750000000000      seconds

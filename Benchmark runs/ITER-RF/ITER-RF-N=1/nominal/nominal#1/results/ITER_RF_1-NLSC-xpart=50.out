@@ -1,0 +1,84 @@
+Critical velocity =  0.26055D+07 [m/s]
+Spitzer Slowing-down Time for resonating ion species =  0.10990D+01 [s]
+Effective thermal velocity of heated ions 0.61917D+06
+Effective Stix temperature of heated ions 0.12000D+02 keV
+Collision time ion-ion      (resonant, like-particle) =  0.30508D-01 [s]
+Collision time ion-electron (equipartition)           =  0.48735D+00 [s]
+Collision time electron-ion (electron collision time) =  0.17694D-03 [s]
+ Cyclotron frequency:    30.4940870964071      MHz
+ Resonant velocity:   -138503.698190793      m/s
+ Critical velocity:    2605488.46034117       m/s
+ Initial condition: Stix Maxwellian (sourceless) or zero (beam).
+  phi_kern-ITER_EDA-RF-NLSC-xpart=50.dat not found -- computing kernel.
+ Computing phi-distance kernel for non-linear self-collisions...
+ Gauss-Legendre quadrature initialized with          16 points
+ 
+  Done. CPU time =      0.031 s
+  phi-distance kernel saved to phi_kern-ITER_EDA-RF-NLSC-xpart=50.dat
+  phi kernel transformed (circulant length 512), CPU time =    0.125 s
+  kernel storage:       25.7 MiB +       44.1 MiB transform  (dense sum_phi would be nbig^2*8 B)
+ Initial density is   7.499999999999997E+019
+ Initial effective temperature is    12.0067998652627     
+  [conv_diag] evaluated every   50 steps   (one snapshot of f:     0.17 MB)
+  [conv_diag] tolerances:  eps/nu < 8.00E-04  epsT/nu < 5.00E-03  moments < 5.00E-04
+  [conv_diag] quadrature weights built:
+    sum(W_perp) = 1.27359E+15   exact = 1.27359E+15   rel.err = 1.96E-16
+    sum(W_par ) = 1.20000E+07   exact = 1.20000E+07   rel.err = 0.00E+00
+  Pattern OK: nnz_L=1065474
+  [conv] t= 2.5000E-01 s  (first checkpoint laid down; next 50-step window gives the first verdict)
+  [conv] t= 5.0000E-01 s   eps= 1.277E-02  epsT= 1.501E-02  epsS= 5.433E-03  epsTS= 1.447E-02 /s
+         dn= 2.93E-05  du= 2.82E-03  dE= 3.13E-02  dEn= 3.13E-02  axis= 1.64E-02   [shape]
+  [conv] t= 7.5000E-01 s   eps= 7.791E-04  epsT= 9.799E-04  epsS= 3.061E-04  epsTS= 9.361E-04 /s
+         dn= 2.92E-05  du= 3.49E-04  dE= 2.66E-03  dEn= 2.63E-03  axis= 9.82E-04   [shape]
+  [conv] t= 1.0000E+00 s   eps= 6.111E-05  epsT= 1.038E-04  epsS= 3.113E-05  epsTS= 1.033E-04 /s
+         dn= 2.92E-05  du= 1.99E-04  dE= 3.67E-04  dEn= 3.37E-04  axis= 7.98E-05   [shape]
+  Stopping at t=     1.00000 s (conv_diag criteria met).
+ Solve completed.
+ Renormalizing...
+ Density is   7.500000000000002E+019  /m3
+ Average Kinetic Energy is    25.8791150063765      keV
+ Perpendicular Kinetic Energy is    18.5258479507943      keV
+ Parallel Kinetic Energy is    7.35326705558218      keV
+ Effective temperature is    17.2527433375843      keV
+ Perpendicular anisotropy is       55.7463738718898      %  (50% = Maxwellian)
+
+POWER DENSITY BALANCE:
+----------------------
+
+===========================
+ Collisions:
+ -----------
+  Collisions with electrons:     -1.94087E-01 MW/m**3
+  Collisions with ions            1 :  -2.11766E+00 MW/m**3
+ ------------------
+
+ Self-collisions:
+     - P_SC_perp :  -3.03993E-01 MW/m**3
+     -  P_SC_par :   3.04006E-01 MW/m**3
+ ------------------
+  Total self-collisions:         1.22053E-05 MW/m**3
+
+ -----------------
+  Total collisions:             -2.31174E+00 MW/m**3
+===========================
+
+  Beam source:                   0.00000E+00 MW/m**3
+
+  Particle losses:               0.00000E+00 MW/m**3
+
+===========================
+
+  RF power:                      2.31178E+00 MW/m**3
+
+  --------------------------------------------
+  Total balance:                 4.45683E-05 MW/m**3
+
+  
+ DOMAIN ADEQUACY CHECK (Dirichlet wall)
+ --------------------------------------
+  final Teff  =    17.253 keV   ->  vth =  7.424E+05 m/s
+  for f(wall)/f(peak) <  1.00E-12  recommend |v|max >  5.519E+06 m/s
+  vperp_max   =  2.000E+07  ( 26.94 vth)  f(wall)/f(peak) =  2.61-158  OK
+  |vpar|max   =  6.000E+06  (  8.08 vth)  f(wall)/f(peak) =  6.57E-15  OK
+  
+ Simulation duration:    77.3281250000000      seconds

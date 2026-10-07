@@ -1,0 +1,43 @@
+&INPUT
+
+   casename = 'JET-RF1-NLSC',
+
+! ---- Grid ----------------------------------------------------------------
+   nperp=100,npar=100,
+   vperp_min=0.d-6,vperp_max=3.d7,
+   vpar_min=-1.d7,vpar_max=1.5d7,
+   ising=1,nsing=25,vbound=0.07d6,
+
+! ---- Background plasma ---------------------------------------------------
+   nbulk=2,   
+   t=15.d3,10.d3,8*0.d0,
+   aa=1.d0,ab=2.d0,8*0.d0,
+   za=1.d0,zb=1.d0,8*0.d0,
+   ne=5.d19,xpart=1.d-2,
+   xb=.99d0,8*0.d0,
+
+! ---- NBI beam source (inert)-----------------------------------------------------
+   isource=0,
+   beam_ekin=120.d0, beam_angle_deg=0.d0,
+   beam_dvperp=0.12d6, beam_dvpar=0.2d6,
+   taus = 200.d-3,
+
+! ---- RF  -------------------------------------------------------------
+   irf=-1,eplus=(4.50d3,1.0d2),emin=(4.d3,1.0d0),kperp=(37.d0,0.d0),
+   kpar=8.d0,frek=53.d6,delta_RF=2.5d6,b0=3.45d0,nharm=1,
+
+! ---- Time integration and solver ----------------------------------------
+   icn = 1, ntimes = 500,1000,0, timestep = 5.d-3, 25.d-3, 0.d0,
+   iold = 0, istart = 1, isc = 0,
+   core_frac = 3.8d-3,
+
+! ---- Steady-state convergence detection (v2.5) ---------------------------
+   i_ss_check = -1, n_ss_window = 50,
+   ss_tol_eps = 1.d-3, ss_tol_tail = 1.d-2, ss_tol_moment = 1.d-3,
+   i_conv_shape = -1,
+
+! ---- Output and numerics (defaults, shown for completeness) --------------
+   iplot_pow = -1, iplot_mom = 0, notxt = 0,
+   i_upwind = 0, n_snap = 1
+  /
+

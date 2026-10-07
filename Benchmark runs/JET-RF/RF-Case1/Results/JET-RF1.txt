@@ -1,0 +1,91 @@
+Casename (from namelist): JET-RF1-NLSC
+No self-collisions (isc=0): self-collision power plots will be skipped.
+iplot_mom=0: momentum vs time plots will be skipped.
+Running : E:\Fokker-Planck\FPCode-CoulColl-2D\FP2D_QLRF_NL\FP2D_QLRF_NL\x64\Release\FP2D_QLRF_NL.exe
+Input   : E:\Fokker-Planck\FPCode-CoulColl-2D\FP2D_QLRF_NL\FP2D_QLRF_NL\x64\Release\Benchmark\JET-RF\RF-Case1\jet_RF_case1.txt
+Workdir : E:\Fokker-Planck\FPCode-CoulColl-2D\FP2D_QLRF_NL\FP2D_QLRF_NL\x64\Release\Benchmark\JET-RF\RF-Case1
+ Cyclotron frequency:    52.6023002413023      MHz
+ Resonant velocity:    312352.660064757      m/s
+ Critical velocity:    3657906.12976533       m/s
+ Initial condition: Stix Maxwellian (sourceless) or zero (beam).
+ Initial density is   4.999999999999998E+017
+ Initial effective temperature is    10.0506373292150
+ Initial density-characteristic temperature is    10.0449573110687
+  [conv_diag] evaluated every   50 steps   (one snapshot of f:     0.08 MB)
+  [conv_diag] tolerances:  eps/nu < 1.00E-03  epsT/nu < 1.00E-02  moments < 1.00E-03
+  [conv_diag] quadrature weights built:
+    sum(W_perp) = 2.88499E+15   exact = 2.88499E+15   rel.err = 0.00E+00
+    sum(W_par ) = 2.50000E+07   exact = 2.50000E+07   rel.err = 0.00E+00
+  [conv] t= 2.5000E-01 s  (first checkpoint laid down; next 50-step window gives the first verdict)
+  [conv] t= 5.0000E-01 s   eps= 6.683E-01  epsT= 5.987E-01  epsS= 5.845E-01  epsTS= 5.101E-01 /s
+         dn= 3.32E-06  du= 3.40E-01  dE= 6.72E-02  dEn= 6.72E-02  axis= 9.27E-01   [shape]
+  [conv] t= 7.5000E-01 s   eps= 3.037E-01  epsT= 2.480E-01  epsS= 2.978E-01  epsTS= 1.866E-01 /s
+         dn= 1.39E-05  du= 1.36E-01  dE= 5.19E-02  dEn= 5.19E-02  axis= 6.95E-01   [shape]
+  [conv] t= 1.0000E+00 s   eps= 1.752E-01  epsT= 1.237E-01  epsS= 1.752E-01  epsTS= 9.073E-02 /s
+         dn= 2.90E-05  du= 6.47E-02  dE= 5.00E-02  dEn= 4.99E-02  axis= 5.45E-01   [shape]
+  [conv] t= 1.2500E+00 s   eps= 9.993E-02  epsT= 6.276E-02  epsS= 9.881E-02  epsTS= 4.755E-02 /s
+         dn= 3.76E-05  du= 3.20E-02  dE= 3.30E-02  dEn= 3.30E-02  axis= 3.69E-01   [shape]
+  [conv] t= 1.5000E+00 s   eps= 5.200E-02  epsT= 3.163E-02  epsS= 5.033E-02  epsTS= 2.557E-02 /s
+         dn= 4.11E-05  du= 1.63E-02  dE= 1.89E-02  dEn= 1.89E-02  axis= 2.07E-01   [shape]
+  [conv] t= 1.7500E+00 s   eps= 2.494E-02  epsT= 1.615E-02  epsS= 2.347E-02  epsTS= 1.404E-02 /s
+         dn= 4.20E-05  du= 8.87E-03  dE= 1.01E-02  dEn= 1.01E-02  axis= 9.59E-02   [shape]
+  [conv] t= 2.0000E+00 s   eps= 1.186E-02  epsT= 8.575E-03  epsS= 1.082E-02  epsTS= 7.882E-03 /s
+         dn= 4.20E-05  du= 5.19E-03  dE= 5.32E-03  dEn= 5.27E-03  axis= 3.97E-02   [shape]
+  [conv] t= 2.2500E+00 s   eps= 5.976E-03  epsT= 4.757E-03  epsS= 5.337E-03  epsTS= 4.510E-03 /s
+         dn= 4.18E-05  du= 3.18E-03  dE= 2.87E-03  dEn= 2.83E-03  axis= 1.69E-02   [shape]
+  [conv] t= 2.5000E+00 s   eps= 3.249E-03  epsT= 2.739E-03  epsS= 2.876E-03  epsTS= 2.630E-03 /s
+         dn= 4.15E-05  du= 1.98E-03  dE= 1.63E-03  dEn= 1.59E-03  axis= 8.10E-03   [shape]
+  Phase 2: dt =   2.5000E-02 s
+  [conv] t= 3.7500E+00 s   eps= 8.609E-04  epsT= 7.618E-04  epsS= 7.731E-04  epsTS= 7.279E-04 /s
+         dn= 4.12E-05  du= 5.92E-04  dE= 4.70E-04  dEn= 4.29E-04  axis= 2.02E-03   [shape]
+  [conv] t= 5.0000E+00 s   eps= 6.997E-05  epsT= 8.672E-05  epsS= 6.986E-05  epsTS= 6.472E-05 /s
+         dn= 4.10E-05  du= 5.47E-05  dE= 7.93E-05  dEn= 3.82E-05  axis= 1.52E-04   [shape]
+  [conv] t= 6.2500E+00 s   eps= 3.816E-05  epsT= 4.295E-05  epsS= 6.378E-06  epsTS= 5.893E-06 /s
+         dn= 4.10E-05  du= 4.98E-06  dE= 4.45E-05  dEn= 3.49E-06  axis= 3.48E-05   [shape]
+  Stopping at t=     6.25000 s (conv_diag criteria met).
+ Solve completed.
+ Renormalizing...
+ Density is   4.999999999999997E+017  /m3
+ Average Kinetic Energy is    938.575740466132      keV
+ Perpendicular Kinetic Energy is    861.418951000550      keV
+ Parallel Kinetic Energy is    77.1567894655821      keV
+ Effective temperature is    625.717160310755      keV
+ Perpendicular anisotropy is       84.8076561118370      %  (50% = Maxwellian)
+
+POWER DENSITY BALANCE:
+----------------------
+
+===========================
+ Collisions:
+ -----------
+  Collisions with electrons:     -1.09319E-01 MW/m**3
+  Collisions with ions            1 :  -1.20303E-02 MW/m**3
+ ------------------
+
+ -----------------
+  Total collisions:             -1.21350E-01 MW/m**3
+===========================
+
+  Beam source:                   0.00000E+00 MW/m**3
+
+  Particle losses:               0.00000E+00 MW/m**3
+
+===========================
+
+  RF power:                      1.21346E-01 MW/m**3
+
+  --------------------------------------------
+  Total balance:                -3.14700E-06 MW/m**3
+
+
+ DOMAIN ADEQUACY CHECK (Dirichlet wall)
+ --------------------------------------
+  final Teff  =   625.717 keV   ->  vth =  7.744E+06 m/s
+  for f(wall)/f(peak) <  1.00E-12  recommend |v|max >  5.757E+07 m/s
+  vperp_max   =  3.000E+07  (  3.87 vth)  f(wall)/f(peak) =  5.51E-04  TOO SMALL
+  |vpar|max   =  1.000E+07  (  1.29 vth)  f(wall)/f(peak) =  4.34E-01  TOO SMALL
+
+  ==> the domain truncates the tail. Re-run with |v|max >=  5.757E+07 m/s;
+       refining the grid will NOT reduce this error.
+
+ Simulation duration:    57.5468750000000      seconds

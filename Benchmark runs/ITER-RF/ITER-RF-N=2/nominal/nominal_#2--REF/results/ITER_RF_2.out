@@ -1,0 +1,114 @@
+Critical velocity =  0.26055D+07 [m/s]
+Spitzer Slowing-down Time for resonating ion species =  0.10990D+01 [s]
+Effective thermal velocity of heated ions 0.61917D+06
+Effective Stix temperature of heated ions 0.12000D+02 keV
+Collision time ion-ion      (resonant, like-particle) =  0.30508D-01 [s]
+Collision time ion-electron (equipartition)           =  0.48735D+00 [s]
+Collision time electron-ion (electron collision time) =  0.17694D-03 [s]
+ Cyclotron frequency:    30.4940870964071      MHz
+ Resonant velocity:   -277007.396381587      m/s
+ Critical velocity:    2605488.46034117       m/s
+ Initial condition: Stix Maxwellian (sourceless) or zero (beam).
+  phi_kern-ITER_EDA-RF-NLSC_2.dat not found -- computing kernel.
+ Computing phi-distance kernel for non-linear self-collisions...
+ Gauss-Legendre quadrature initialized with          16 points
+ 
+  Done. CPU time =      0.031 s
+  phi-distance kernel saved to phi_kern-ITER_EDA-RF-NLSC_2.dat
+  phi kernel transformed (circulant length 512), CPU time =    0.125 s
+  kernel storage:       25.7 MiB +       44.1 MiB transform  (dense sum_phi would be nbig^2*8 B)
+ Initial density is   7.500000000000003E+019
+ Initial effective temperature is    12.0067948790409     
+  [conv_diag] evaluated every   50 steps   (one snapshot of f:     0.17 MB)
+  [conv_diag] tolerances:  eps/nu < 8.00E-04  epsT/nu < 5.00E-03  moments < 5.00E-04
+  [conv_diag] quadrature weights built:
+    sum(W_perp) = 2.86558E+15   exact = 2.86558E+15   rel.err = 0.00E+00
+    sum(W_par ) = 1.60000E+07   exact = 1.60000E+07   rel.err = 0.00E+00
+  Pattern OK: nnz_L=1065474
+  [conv] t= 2.5000E-01 s  (first checkpoint laid down; next 50-step window gives the first verdict)
+  [conv] t= 5.0000E-01 s   eps= 2.969E-02  epsT= 4.556E-02  epsS= 8.125E-03  epsTS= 4.199E-02 /s
+         dn= 1.00E-04  du= 8.01E-01  dE= 4.28E-01  dEn= 4.28E-01  axis= 3.64E-02   [shape]
+  [conv] t= 7.5000E-01 s   eps= 1.156E-02  epsT= 3.070E-02  epsS= 1.999E-03  epsTS= 2.948E-02 /s
+         dn= 9.96E-05  du= 1.91E+00  dE= 4.01E-01  dEn= 4.01E-01  axis= 1.34E-02   [shape]
+  [conv] t= 1.0000E+00 s   eps= 7.008E-03  epsT= 2.643E-02  epsS= 8.698E-04  epsTS= 2.583E-02 /s
+         dn= 1.00E-04  du= 1.47E+00  dE= 3.48E-01  dEn= 3.48E-01  axis= 7.93E-03   [shape]
+  [conv] t= 1.2500E+00 s   eps= 5.056E-03  epsT= 2.293E-02  epsS= 5.125E-04  epsTS= 2.256E-02 /s
+         dn= 1.00E-04  du= 1.10E+00  dE= 2.89E-01  dEn= 2.89E-01  axis= 5.65E-03   [shape]
+  [conv] t= 1.5000E+00 s   eps= 3.977E-03  epsT= 1.964E-02  epsS= 3.654E-04  epsTS= 1.939E-02 /s
+         dn= 1.01E-04  du= 8.32E-01  dE= 2.35E-01  dEn= 2.35E-01  axis= 4.28E-03   [shape]
+  [conv] t= 1.7500E+00 s   eps= 3.265E-03  epsT= 1.669E-02  epsS= 2.885E-04  epsTS= 1.649E-02 /s
+         dn= 1.01E-04  du= 6.42E-01  dE= 1.91E-01  dEn= 1.91E-01  axis= 3.61E-03   [shape]
+  [conv] t= 2.0000E+00 s   eps= 2.733E-03  epsT= 1.411E-02  epsS= 2.395E-04  epsTS= 1.396E-02 /s
+         dn= 1.01E-04  du= 5.01E-01  dE= 1.56E-01  dEn= 1.55E-01  axis= 2.97E-03   [shape]
+  [conv] t= 2.2500E+00 s   eps= 2.306E-03  epsT= 1.192E-02  epsS= 2.035E-04  epsTS= 1.180E-02 /s
+         dn= 1.01E-04  du= 3.96E-01  dE= 1.27E-01  dEn= 1.27E-01  axis= 2.45E-03   [shape]
+  [conv] t= 2.5000E+00 s   eps= 1.948E-03  epsT= 1.006E-02  epsS= 1.745E-04  epsTS= 9.961E-03 /s
+         dn= 1.01E-04  du= 3.15E-01  dE= 1.05E-01  dEn= 1.05E-01  axis= 2.12E-03   [shape]
+  Phase 2: dt =   2.5000E-02 s
+  Pattern OK: nnz_L=1065474
+  [conv] t= 3.7500E+00 s   eps= 1.190E-03  epsT= 6.214E-03  epsS= 1.116E-04  epsTS= 6.160E-03 /s
+         dn= 1.01E-04  du= 1.60E-01  dE= 5.99E-02  dEn= 5.98E-02  axis= 1.30E-03   [shape]
+  [conv] t= 5.0000E+00 s   eps= 4.672E-04  epsT= 2.673E-03  epsS= 5.181E-05  epsTS= 2.658E-03 /s
+         dn= 1.01E-04  du= 6.40E-02  dE= 2.51E-02  dEn= 2.50E-02  axis= 5.19E-04   [shape]
+  [conv] t= 6.2500E+00 s   eps= 1.465E-04  epsT= 1.149E-03  epsS= 2.343E-05  epsTS= 1.148E-03 /s
+         dn= 1.01E-04  du= 2.67E-02  dE= 1.07E-02  dEn= 1.06E-02  axis= 1.70E-04   [shape]
+  [conv] t= 7.5000E+00 s   eps= 1.176E-05  epsT= 4.948E-04  epsS= 1.087E-05  epsTS= 4.937E-04 /s
+         dn= 1.01E-04  du= 1.13E-02  dE= 4.65E-03  dEn= 4.55E-03  axis= 1.64E-05   [shape]
+  [conv] t= 8.7500E+00 s   eps= 5.671E-05  epsT= 2.225E-04  epsS= 5.407E-06  epsTS= 2.100E-04 /s
+         dn= 1.01E-04  du= 4.81E-03  dE= 2.03E-03  dEn= 1.93E-03  axis= 5.01E-05   [shape]
+  [conv] t= 1.0000E+01 s   eps= 8.295E-05  epsT= 1.256E-04  epsS= 3.074E-06  epsTS= 8.701E-05 /s
+         dn= 1.01E-04  du= 2.01E-03  dE= 9.02E-04  dEn= 8.01E-04  axis= 7.90E-05   [shape]
+  [conv] t= 1.1250E+01 s   eps= 9.443E-05  epsT= 1.037E-04  epsS= 2.105E-06  epsTS= 3.373E-05 /s
+         dn= 1.02E-04  du= 8.00E-04  dE= 4.12E-04  dEn= 3.10E-04  axis= 7.95E-05   [shape]
+  [conv] t= 1.2500E+01 s   eps= 9.943E-05  epsT= 1.019E-04  epsS= 1.716E-06  epsTS= 1.101E-05 /s
+         dn= 1.02E-04  du= 2.76E-04  dE= 1.99E-04  dEn= 9.73E-05  axis= 1.09E-04   [shape]
+  Stopping at t=    12.50000 s (conv_diag criteria met).
+ Solve completed.
+ Renormalizing...
+ Density is   7.500000000000015E+019  /m3
+ Average Kinetic Energy is    48.8841874425882      keV
+ Perpendicular Kinetic Energy is    41.5355727879928      keV
+ Parallel Kinetic Energy is    7.34861465459538      keV
+ Effective temperature is    32.5894582950588      keV
+ Perpendicular anisotropy is       73.8636013837787      %  (50% = Maxwellian)
+
+POWER DENSITY BALANCE:
+----------------------
+
+===========================
+ Collisions:
+ -----------
+  Collisions with electrons:     -7.41504E-01 MW/m**3
+  Collisions with ions            1 :  -1.07508E+00 MW/m**3
+ ------------------
+
+ Self-collisions:
+     - P_SC_perp :  -1.75983E-01 MW/m**3
+     -  P_SC_par :   1.76008E-01 MW/m**3
+ ------------------
+  Total self-collisions:         2.40923E-05 MW/m**3
+
+ -----------------
+  Total collisions:             -1.81656E+00 MW/m**3
+===========================
+
+  Beam source:                   0.00000E+00 MW/m**3
+
+  Particle losses:               0.00000E+00 MW/m**3
+
+===========================
+
+  RF power:                      1.81664E+00 MW/m**3
+
+  --------------------------------------------
+  Total balance:                 8.25523E-05 MW/m**3
+
+  
+ DOMAIN ADEQUACY CHECK (Dirichlet wall)
+ --------------------------------------
+  final Teff  =    32.589 keV   ->  vth =  1.020E+06 m/s
+  for f(wall)/f(peak) <  1.00E-12  recommend |v|max >  7.585E+06 m/s
+  vperp_max   =  3.000E+07  ( 29.40 vth)  f(wall)/f(peak) =  1.97-188  OK
+  |vpar|max   =  8.000E+06  (  7.84 vth)  f(wall)/f(peak) =  4.49E-14  OK
+  
+ Simulation duration:    275.562500000000      seconds
