@@ -1594,11 +1594,19 @@ def _read_snapshot(path: Path):
     return time, vperp, vpar, data[:, 2].reshape(len(vperp), len(vpar))
 
 
-def _ekin_map(f, vperp, vpar, aa: float) -> np.ndarray:
-    """Kinetic-energy density (keV) as analysis.f90 writes Ekin.txt."""
+def _ekin_map(f, vperp, vpar, aa: float, part: str = "tot") -> np.ndarray:
+    """Kinetic-energy density (keV) as analysis.f90 writes Ekin.txt.
+
+    *part* 'perp' or 'par' keeps only the v_perp^2 or v_par^2 term, so that
+    perp + par = tot.  'perp' matches Ekin_perp.txt.  'par' is HALF of
+    Ekin_par.txt, which analysis.f90 writes with m v_par^2 (the T_par
+    convention) rather than the kinetic energy (1/2) m v_par^2.
+    """
     jac  = 2 * np.pi * vperp[:, None] * np.ones_like(f)
     mod0 = (np.outer(_simpson_weights(vperp), _simpson_weights(vpar)) * f * jac).sum()
-    v2   = vperp[:, None]**2 + vpar[None, :]**2
+    vpe2 = vperp[:, None]**2 * np.ones_like(f)
+    vpa2 = vpar[None, :]**2 * np.ones_like(f)
+    v2   = {"tot": vpe2 + vpa2, "perp": vpe2, "par": vpa2}[part]
     return f * v2 * jac / mod0 * 0.5 * _PMASS * aa / _KEV_J
 
 
@@ -1622,9 +1630,10 @@ def _ffmpeg_available() -> bool:
 
 def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
                fps: float = 5.0, fmt: str = "avi", scale: str = "fixed") -> None:
-    """Animate f and the kinetic-energy density over the snapshots of one case.
+    """Animate f and the kinetic-energy densities over the snapshots of one case.
 
-    Checks n_snap in the namelist first: with n_snap = 0 the solver wrote no
+    A 2x2 array of panels: f and the total kinetic-energy density on top, its
+    perpendicular and parallel parts below (E_perp + E_par = E_kin).  Checks n_snap in the namelist first: with n_snap = 0 the solver wrote no
     snapshots and there is nothing to animate.  One frame per snapshot.  With
     *scale* 'fixed' the colour scales are fixed over the whole movie, so frames
     compare; with 'frame' each frame is scaled to its own maximum.  *fmt* is avi
@@ -1662,19 +1671,23 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
 
     print(f"  [movie] {label}: {len(snaps)} snapshots (n_snap = {int(n_snap)}, "
           f"steps {snaps[0][0]}..{snaps[-1][0]}), aa = {aa:g}")
+    # The three energy panels: (part, title, colour-bar label).
+    eparts = (("tot",  "Kinetic energy",                "kinetic-energy density (keV)"),
+              ("perp", "Perpendicular kinetic energy",  "½ m v⊥² density (keV)"),
+              ("par",  "Parallel kinetic energy",       "½ m v∥² density (keV)"))
     frames = []
     for step, path in snaps:
         t, vperp, vpar, f = _read_snapshot(path)
-        frames.append((step, t, f, _ekin_map(f, vperp, vpar, aa)))
+        frames.append((step, t, f, [_ekin_map(f, vperp, vpar, aa, p) for p, _, _ in eparts]))
 
-    # Colour scales.  'fixed': one scale for the whole movie, from the largest
-    # value of any frame, so frames compare directly.  'frame': each frame is
-    # scaled to its own maximum, so its structure stays visible whatever its
-    # amplitude; the colour bars and the panel titles follow the frame.
+    # Colour scales.  'fixed': one scale per panel for the whole movie, from
+    # the largest value of any frame, so frames compare directly.  'frame': each
+    # frame is scaled to its own maximum, so its structure stays visible whatever
+    # its amplitude; the colour bars and the panel titles follow the frame.
     per_frame = (scale == "frame")
     fmax_all = max(fr[2].max() for fr in frames)
     fmin_all = min(fr[2].min() for fr in frames)
-    emax_all = max(fr[3].max() for fr in frames)
+    emax_all = [max(fr[3][k].max() for fr in frames) for k in range(len(eparts))]
 
     def f_limits(f):
         hi = f.max() if per_frame else fmax_all
@@ -1687,43 +1700,53 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
             return hi * 1e-8, hi
         return min(0.0, f.min() if per_frame else fmin_all), hi
 
-    def e_limit(e):
-        hi = e.max() if per_frame else emax_all
+    def e_limit(e, k):
+        hi = e.max() if per_frame else emax_all[k]
         return hi if hi > 0 else 1.0
 
     def prep(z, lo):
         return np.where(z > lo, z, np.nan) if log else z
 
-    fig, (axf, axe) = plt.subplots(1, 2, figsize=(13, 5.2))
+    # f and E_kin on top, E_perp and E_par below.
+    fig, axs = plt.subplots(2, 2, figsize=(13, 10))
+    axf, axes_e = axs[0, 0], (axs[0, 1], axs[1, 0], axs[1, 1])
     step0, t0, f0, e0 = frames[0]
     lo0, hi0 = f_limits(f0)
     fnorm = (mcolors.LogNorm if log else mcolors.Normalize)(vmin=lo0, vmax=hi0)
-    enorm = mcolors.Normalize(vmin=0.0, vmax=e_limit(e0))
     mf = axf.pcolormesh(vpar, vperp, prep(f0, lo0), norm=fnorm, cmap="rainbow", shading="nearest")
-    me = axe.pcolormesh(vpar, vperp, e0, norm=enorm, cmap="rainbow", shading="nearest")
     tail = "  (scaled to each frame)" if per_frame else ""
     fig.colorbar(mf, ax=axf, label="f" + ("  (log)" if log else "") + tail)
-    fig.colorbar(me, ax=axe, label="kinetic-energy density (keV)" + tail)
-    for ax in (axf, axe):
+    mes = []
+    for k, (ax, (_, _, cblabel)) in enumerate(zip(axes_e, eparts)):
+        enorm = mcolors.Normalize(vmin=0.0, vmax=e_limit(e0[k], k))
+        me = ax.pcolormesh(vpar, vperp, e0[k], norm=enorm, cmap="rainbow", shading="nearest")
+        fig.colorbar(me, ax=ax, label=cblabel + tail)
+        mes.append(me)
+    for ax in axs.flat:
         ax.set_xlabel("v∥ (m/s)"); ax.set_ylabel("v⊥ (m/s)")
         if _XRANGE is not None: ax.set_xlim(_XRANGE)
         if _YRANGE is not None: ax.set_ylim(_YRANGE)
     sup = fig.suptitle("")
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
 
-    def draw(k):
-        step, t, f, e = frames[k]
+    def draw(i):
+        step, t, f, e = frames[i]
         lo, hi = f_limits(f)
         mf.set_clim(lo, hi)
         mf.set_array(prep(f, lo).ravel())
-        me.set_clim(0.0, e_limit(e))
-        me.set_array(e.ravel())
         # The frame's own maximum in the titles: with --movie-scale frame it is
         # the top of the colour bar, with fixed scales it shows the amplitude.
         axf.set_title(f"VDF  f(v⊥, v∥)      max = {f.max():.3g}")
-        axe.set_title(f"Kinetic energy      max = {e.max():.3g} keV")
-        sup.set_text(f"{label}    t = {t:.4g} s    (step {step}, frame {k + 1}/{len(frames)})")
-        return mf, me, sup
+        for k, (ax, me, (_, title, _)) in enumerate(zip(axes_e, mes, eparts)):
+            me.set_clim(0.0, e_limit(e[k], k))
+            me.set_array(e[k].ravel())
+            ax.set_title(f"{title}      max = {e[k].max():.3g} keV")
+        sup.set_text(f"{label}    t = {t:.4g} s    (step {step}, frame {i + 1}/{len(frames)})")
+        return (mf, *mes, sup)
+
+    # Lay out with the titles in place, or the bottom row's titles collide
+    # with the top row's x-axis labels.
+    draw(0)
+    fig.tight_layout(rect=(0, 0, 1, 0.96), h_pad=2.0)
 
     anim = animation.FuncAnimation(fig, draw, frames=len(frames), blit=False)
     dest = Path(save_dir) if save_dir is not None else outdir

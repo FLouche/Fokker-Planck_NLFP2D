@@ -364,7 +364,9 @@ Two ordering constraints, both load-bearing:
 
 `run` and `plot` accept `--movie` (plus `--fps`, `--movie-scale`, `--movie-format`, and
 `--namelist FILE` for `plot`). It replaces the usual figures with one animation
-per case (`make_movie`): f and the kinetic-energy density side by side, one
+per case (`make_movie`), a 2×2 array — f and E_kin on top, E_⊥ and E_∥ below
+(½m v⊥² f and ½m v∥² f, which add up to E_kin; the solver's `Ekin_par.txt` is
+m v∥² f, twice the movie's E_∥) — one
 frame per `vdf_snap_<step>.txt`. `--movie-scale fixed` (default) keeps the
 colour scales fixed over the whole movie; `frame` rescales each frame to its own
 maximum (`set_clim` per frame, so the colour bars follow), and each panel title

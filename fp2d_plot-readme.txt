@@ -276,25 +276,30 @@ movie, so  plot . --cases X --movie-scale frame  makes the movie rather than
 silently drawing the ordinary figures.
 
 WHAT IS SHOWN
-  Two panels per frame, side by side:
-    left    f(v_perp, v_par)
-    right   the kinetic-energy density (keV), the quantity of Ekin.txt
+  Four panels per frame, in a 2 x 2 array:
+    top left       f(v_perp, v_par)
+    top right      the kinetic-energy density (keV), the quantity of Ekin.txt
+    bottom left    its perpendicular part, (1/2) m v_perp^2 f   (= Ekin_perp.txt)
+    bottom right   its parallel part,      (1/2) m v_par^2 f
+  The two bottom panels add up to the top-right one.  Note that the solver's
+  Ekin_par.txt is written with m v_par^2 (the T_par convention), so it is
+  TWICE the bottom-right panel.
   The frame title gives the case, the time, the step and the frame number, and
   each panel title the maximum of that panel in that frame.  One frame per
   snapshot, in step order.
 
   COLOUR SCALES (--movie-scale)
-    fixed   (default)  One scale for the whole movie, from the largest value
-            of any frame, so frames can be compared directly.  A frame of
+    fixed   (default)  One scale per panel for the whole movie, from the
+            largest value of any frame, so frames can be compared directly.  A frame of
             much smaller amplitude than the largest then looks nearly empty.
     frame   Each frame scaled to its own maximum: 0 .. max for a linear f and
             for the energy, eight decades below max with --logf.  Every frame
             shows its structure whatever its amplitude; the colour bars follow
             the frame, so read the amplitude from the bar or the panel title.
 
-  The snapshots store f only.  The energy panel is computed from each
-  snapshot exactly as the solver computes Ekin.txt (it reproduces the solver's
-  own Ekin.txt to round-off); this needs the ion mass number aa, read from the
+  The snapshots store f only.  The energy panels are computed from each
+  snapshot exactly as the solver computes Ekin.txt (the total reproduces the
+  solver's own Ekin.txt to round-off); this needs the ion mass number aa, read from the
   namelist.
 
   The snapshot f is the raw solution: the end-of-run renormalisation to npart
@@ -315,8 +320,8 @@ OPTIONS ACTING ON THE MOVIE
   --logf                f on a logarithmic colour scale covering eight decades
                         below its maximum; anything smaller is left blank,
                         rather than painting the round-off of the far tail in
-                        the lowest colour.  The energy panel stays linear.
-  --xrange / --yrange   Zoom both panels (v_par and v_perp, in m/s).
+                        the lowest colour.  The energy panels stay linear.
+  --xrange / --yrange   Zoom all four panels (v_par and v_perp, in m/s).
   --fps N               Frames per second (default 5).
   --movie-scale S       fixed (default) or frame.  See COLOUR SCALES above.
   --movie-format F      avi (default), mp4 or gif.  See below.
@@ -506,7 +511,8 @@ INDIVIDUAL FIGURES
   fout.txt                    Full 2D VDF f(v_perp, v_par)  -- filled contour
   Ekin.txt                    Total kinetic energy map (keV)
   Ekin_perp.txt               Perpendicular kinetic energy map (keV)
-  Ekin_par.txt                Parallel kinetic energy map (keV)
+  Ekin_par.txt                Parallel map, m v_par^2 f (keV): twice the parallel
+                              kinetic energy (T_par convention)
   beam.txt                    Beam source S(v_perp, v_par)
   fsc_maxw.txt                SC Maxwellian background f_M(v_perp, v_par) at the
                                 final T_eff  (written when isc = 2)

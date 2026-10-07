@@ -1342,8 +1342,8 @@ python fp2d_plot.py plot x64/Release --casename JET-beam7-TD0-NLSC --save plots/
 python fp2d_plot.py compare x64/Release --cases JET-beam7-TD0-Lin JET-beam7-TD0-NLSC
 python fp2d_plot.py plot x64/Release --cases JET-beam7-TD0-NLSC --movie
 \end{lstlisting}
-The last line builds an animation of $f$ and of the kinetic-energy density from
-the \texttt{vdf\_snap} files (requires \texttt{n\_snap > 0}); \texttt{--movie-scale
+The last line builds an animation of $f$, the kinetic-energy density and its
+perpendicular and parallel parts (a $2\times2$ array of panels) from the \texttt{vdf\_snap} files (requires \texttt{n\_snap > 0}); \texttt{--movie-scale
 frame} rescales each frame to its own maximum, and \texttt{--movie-format}
 selects AVI (default), MP4 or GIF.
 See \texttt{fp2d\_plot-readme.txt} for the full documentation of the
