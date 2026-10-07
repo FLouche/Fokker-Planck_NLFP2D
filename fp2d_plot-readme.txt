@@ -271,7 +271,7 @@ snapshots do not overwrite the earlier ones.
 
 --movie turns these snapshots into one animation per case, INSTEAD of the
 usual figures.  Any of the movie-only options (--movie-scale, --movie-format,
---fps) implies --movie, and a message says so: they mean nothing without a
+--fps, --tstop) implies --movie, and a message says so: they mean nothing without a
 movie, so  plot . --cases X --movie-scale frame  makes the movie rather than
 silently drawing the ordinary figures.
 
@@ -286,7 +286,7 @@ WHAT IS SHOWN
   TWICE the bottom-right panel.
   The frame title gives the case, the time, the step and the frame number, and
   each panel title the maximum of that panel in that frame.  One frame per
-  snapshot, in step order.
+  snapshot, in step order, up to --tstop if it is given.
 
   COLOUR SCALES (--movie-scale)
     fixed   (default)  One scale per panel for the whole movie, from the
@@ -314,7 +314,7 @@ THE NAMELIST, AND THE n_snap CHECK
            &INPUT) whose casename is the case being animated.
   The movie of a case is skipped, with a message saying why, when no namelist
   is found, when n_snap = 0, when no snapshot files exist for the case, or
-  when there is only one.
+  when there is only one (counting only those up to --tstop).
 
 OPTIONS ACTING ON THE MOVIE
   --logf                f on a logarithmic colour scale covering eight decades
@@ -325,6 +325,11 @@ OPTIONS ACTING ON THE MOVIE
   --fps N               Frames per second (default 5).
   --movie-scale S       fixed (default) or frame.  See COLOUR SCALES above.
   --movie-format F      avi (default), mp4 or gif.  See below.
+  --tstop T             End the movie at time T (s): only the snapshots with
+                        t <= T become frames (a snapshot exactly at T is kept),
+                        and the later ones are not read.  With --movie-scale
+                        fixed the scales come from the kept frames only.
+                        Default: all snapshots.
   --save DIR            Folder for the movie (default: the output folder).
 
 FORMATS
@@ -473,6 +478,9 @@ COMMON OPTIONS  (all three sub-commands)
                     mp4 need ffmpeg (on the PATH, or via pip install
                     imageio-ffmpeg) and fall back to gif without it.  Implies
                     --movie.
+
+  --tstop T         (run and plot only)  End the movie at time T (s): only
+                    the snapshots with t <= T become frames.  Implies --movie.
 
   --namelist FILE   (plot only)  Namelist of the run, read by --movie for
                     n_snap and aa.  Default: the namelist in the output folder

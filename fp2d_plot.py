@@ -32,7 +32,8 @@ Options (both subcommands)
                   --yrange zoom both panels.  Written as movie-<case>.<fmt> to
                   --save DIR or the output directory.
   --fps N         Frames per second of the movie (default 5).
-                  --fps, --movie-scale and --movie-format each imply --movie.
+                  --fps, --movie-scale, --movie-format and --tstop each imply
+                  --movie.
   --movie-scale {fixed,frame}
                   Colour scales of the movie: fixed over the whole movie, so
                   frames compare (default), or scaled to each frame's own
@@ -42,6 +43,9 @@ Options (both subcommands)
                   (H.264) need ffmpeg: one on the PATH, or the binary bundled
                   with  pip install imageio-ffmpeg.  Without it the movie
                   falls back to an animated GIF.
+  --tstop T       End the movie at time T (s): only the snapshots with t <= T
+                  become frames (default: all of them).  The colour scales
+                  are taken from the kept frames only.
 
 plot / compare only
 -------------------
@@ -1521,7 +1525,7 @@ _SNAP_RE = re.compile(r"^vdf_snap_(\d{6})(?:-(.*))?\.txt$")
 # Movie-only options: (command-line name, args attribute) and their defaults.
 # Any of them given on its own implies --movie (see main).
 _MOVIE_OPTS     = (("--fps", "fps"), ("--movie-format", "movie_format"),
-                   ("--movie-scale", "movie_scale"))
+                   ("--movie-scale", "movie_scale"), ("--tstop", "tstop"))
 _MOVIE_DEFAULTS = {"fps": 5.0, "movie_format": "avi", "movie_scale": "fixed"}
 _PMASS   = 1.6726e-27     # proton mass (kg), as in analysis.f90
 _KEV_J   = 1.60218e-16    # keV in J, as in analysis.f90
@@ -1583,12 +1587,17 @@ def _simpson_weights(x: np.ndarray) -> np.ndarray:
     return w
 
 
-def _read_snapshot(path: Path):
-    """(time, vperp, vpar, f[i_vperp, j_vpar]) of one snapshot file."""
+def _snapshot_time(path: Path) -> float:
+    """Time (s) of a snapshot, from its '# time =' header line (NaN if absent)."""
     with open(path) as fh:
         head = fh.readline()
     m = re.search(r"time\s*=\s*([-+0-9.EeDd]+)", head)
-    time = float(m.group(1).replace("D", "E").replace("d", "e")) if m else float("nan")
+    return float(m.group(1).replace("D", "E").replace("d", "e")) if m else float("nan")
+
+
+def _read_snapshot(path: Path):
+    """(time, vperp, vpar, f[i_vperp, j_vpar]) of one snapshot file."""
+    time = _snapshot_time(path)
     data = np.loadtxt(path, comments="#")
     vperp, vpar = np.unique(data[:, 0]), np.unique(data[:, 1])
     return time, vperp, vpar, data[:, 2].reshape(len(vperp), len(vpar))
@@ -1629,12 +1638,15 @@ def _ffmpeg_available() -> bool:
 
 
 def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
-               fps: float = 5.0, fmt: str = "avi", scale: str = "fixed") -> None:
+               fps: float = 5.0, fmt: str = "avi", scale: str = "fixed",
+               tstop=None) -> None:
     """Animate f and the kinetic-energy densities over the snapshots of one case.
 
     A 2x2 array of panels: f and the total kinetic-energy density on top, its
-    perpendicular and parallel parts below (E_perp + E_par = E_kin).  Checks n_snap in the namelist first: with n_snap = 0 the solver wrote no
-    snapshots and there is nothing to animate.  One frame per snapshot.  With
+    perpendicular and parallel parts below (E_perp + E_par = E_kin).  Checks
+    n_snap in the namelist first: with n_snap = 0 the solver wrote no
+    snapshots and there is nothing to animate.  One frame per snapshot, up to
+    time *tstop* (s) when it is given; later snapshots are not read.  With
     *scale* 'fixed' the colour scales are fixed over the whole movie, so frames
     compare; with 'frame' each frame is scaled to its own maximum.  *fmt* is avi
     (MPEG-4 Part 2, plays in VLC and Windows Media Player), mp4 (H.264) or gif
@@ -1665,6 +1677,17 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
         print(f"  [movie] {label}: n_snap = {int(n_snap)} but no vdf_snap_*.txt files for "
               f"this case in {outdir}.  Movie skipped.")
         return
+    if tstop is not None:
+        # Only the header line of each snapshot is read here, so the frames
+        # after tstop cost nothing.  A snapshot exactly at tstop is kept.
+        n_all = len(snaps)
+        snaps = [(s, p) for s, p in snaps if _snapshot_time(p) <= tstop]
+        if not snaps:
+            print(f"  [movie] {label}: no snapshot at or before tstop = {tstop:g} s "
+                  f"(the first is at t = {_snapshot_time(_snapshot_files(outdir, casename)[0][1]):.4g} s)."
+                  f"  Movie skipped.")
+            return
+        print(f"  [movie] {label}: tstop = {tstop:g} s keeps {len(snaps)} of {n_all} snapshots")
     if len(snaps) < 2:
         print(f"  [movie] {label}: only one snapshot; a movie needs at least two.  Skipped.")
         return
@@ -1957,6 +1980,9 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
                         "movie, from its largest value, so frames compare "
                         "(default); 'frame' scaled to each frame's own maximum; "
                         "implies --movie")
+    p.add_argument("--tstop", type=float, default=None, metavar="T",
+                   help="end the movie at time T (s): only the snapshots with "
+                        "t <= T become frames (default: all); implies --movie")
     if multi:
         p.add_argument("--namelist", type=Path, default=None, metavar="FILE",
                        help="namelist of the run, read by --movie for n_snap and "
@@ -2291,7 +2317,7 @@ def main(argv=None):
         for case in cases:
             make_movie(outdir, case, namelist, save_dir=args.save_dir,
                        log=args.log, fps=args.fps, fmt=args.movie_format,
-                       scale=args.movie_scale)
+                       scale=args.movie_scale, tstop=args.tstop)
         print("Done.")
         return
 

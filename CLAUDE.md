@@ -370,8 +370,11 @@ m v∥² f, twice the movie's E_∥) — one
 frame per `vdf_snap_<step>.txt`. `--movie-scale fixed` (default) keeps the
 colour scales fixed over the whole movie; `frame` rescales each frame to its own
 maximum (`set_clim` per frame, so the colour bars follow), and each panel title
-shows the frame's maximum in both modes. `--fps`, `--movie-scale` and
-`--movie-format` each **imply `--movie`** (`_MOVIE_OPTS`): their argparse
+shows the frame's maximum in both modes. `--tstop T` ends the movie at time T
+(s): snapshots are filtered on the `# time =` header (`_snapshot_time`) before
+any is loaded, so later ones cost nothing, and fixed scales come from the kept
+frames only. `--fps`, `--movie-scale`, `--movie-format` and `--tstop` each
+**imply `--movie`** (`_MOVIE_OPTS`): their argparse
 defaults are `None` so `main` can tell a typed option from an untouched one,
 and `_MOVIE_DEFAULTS` fills them in afterwards. Without this, `plot . --cases X
 --movie-scale frame` silently drew the ordinary figures. Rules:
