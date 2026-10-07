@@ -373,9 +373,9 @@ maximum (`set_clim` per frame, so the colour bars follow), and each panel title
 shows the frame's maximum in both modes. `--tstop T` ends the movie at time T
 (s): snapshots are filtered on the `# time =` header (`_snapshot_time`) before
 any is loaded, so later ones cost nothing, and fixed scales come from the kept
-frames only. `--fps`, `--movie-scale`, `--movie-format` and `--tstop` each
-**imply `--movie`** (`_MOVIE_OPTS`): their argparse
-defaults are `None` so `main` can tell a typed option from an untouched one,
+frames only. `--fps`, `--movie-scale`, `--movie-format`, `--tstop`, `--logE`,
+`--logEperp` and `--logEpar` each **imply `--movie`** (`_MOVIE_OPTS`): their
+argparse defaults are `None` (also for the three `store_true` log flags) so `main` can tell a typed option from an untouched one,
 and `_MOVIE_DEFAULTS` fills them in afterwards. Without this, `plot . --cases X
 --movie-scale frame` silently drew the ordinary figures. Rules:
 
@@ -388,7 +388,9 @@ and `_MOVIE_DEFAULTS` fills them in afterwards. Without this, `plot . --cases X
   `Ekin.txt` (Simpson-weighted density, `aa` from the namelist); it matches the
   solver's `Ekin.txt` to round-off.
 - `--logf` gives f eight decades and leaves everything below the floor blank,
-  rather than drawing the round-off tail in the lowest colour.
+  rather than drawing the round-off tail in the lowest colour. `--logE`,
+  `--logEperp` and `--logEpar` do the same, independently, for the three
+  energy panels (`elog` in `make_movie`; one `limits` function serves all four).
 - `--movie-format {avi,mp4,gif}`, default `avi`: MPEG-4 Part 2 tagged `xvid`
   (plays in VLC and Windows' own players), H.264, or an animated GIF (Pillow).
   avi/mp4 need ffmpeg. `_ffmpeg_available` uses one on the PATH, or else the

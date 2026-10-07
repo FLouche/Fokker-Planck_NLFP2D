@@ -271,7 +271,8 @@ snapshots do not overwrite the earlier ones.
 
 --movie turns these snapshots into one animation per case, INSTEAD of the
 usual figures.  Any of the movie-only options (--movie-scale, --movie-format,
---fps, --tstop) implies --movie, and a message says so: they mean nothing without a
+--fps, --tstop, --logE, --logEperp, --logEpar) implies --movie, and a message
+says so: they mean nothing without a
 movie, so  plot . --cases X --movie-scale frame  makes the movie rather than
 silently drawing the ordinary figures.
 
@@ -320,7 +321,11 @@ OPTIONS ACTING ON THE MOVIE
   --logf                f on a logarithmic colour scale covering eight decades
                         below its maximum; anything smaller is left blank,
                         rather than painting the round-off of the far tail in
-                        the lowest colour.  The energy panels stay linear.
+                        the lowest colour.
+  --logE                The same for the total kinetic-energy panel,
+  --logEperp            the perpendicular-energy panel and
+  --logEpar             the parallel-energy panel, independently: give any
+                        combination.  Panels without their flag stay linear.
   --xrange / --yrange   Zoom all four panels (v_par and v_perp, in m/s).
   --fps N               Frames per second (default 5).
   --movie-scale S       fixed (default) or frame.  See COLOUR SCALES above.
@@ -481,6 +486,12 @@ COMMON OPTIONS  (all three sub-commands)
 
   --tstop T         (run and plot only)  End the movie at time T (s): only
                     the snapshots with t <= T become frames.  Implies --movie.
+
+  --logE, --logEperp, --logEpar
+                    (run and plot only)  Log colour scale for the total,
+                    perpendicular or parallel kinetic-energy panel of the
+                    movie (eight decades below its maximum), as --logf does
+                    for f.  Any combination.  Each implies --movie.
 
   --namelist FILE   (plot only)  Namelist of the run, read by --movie for
                     n_snap and aa.  Default: the namelist in the output folder

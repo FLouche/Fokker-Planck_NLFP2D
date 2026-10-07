@@ -46,6 +46,11 @@ Options (both subcommands)
   --tstop T       End the movie at time T (s): only the snapshots with t <= T
                   become frames (default: all of them).  The colour scales
                   are taken from the kept frames only.
+  --logE, --logEperp, --logEpar
+                  Put the total, perpendicular or parallel kinetic-energy
+                  panel of the movie on a log colour scale (eight decades
+                  below its maximum), as --logf does for f.  Each implies
+                  --movie.
 
 plot / compare only
 -------------------
@@ -1525,8 +1530,11 @@ _SNAP_RE = re.compile(r"^vdf_snap_(\d{6})(?:-(.*))?\.txt$")
 # Movie-only options: (command-line name, args attribute) and their defaults.
 # Any of them given on its own implies --movie (see main).
 _MOVIE_OPTS     = (("--fps", "fps"), ("--movie-format", "movie_format"),
-                   ("--movie-scale", "movie_scale"), ("--tstop", "tstop"))
-_MOVIE_DEFAULTS = {"fps": 5.0, "movie_format": "avi", "movie_scale": "fixed"}
+                   ("--movie-scale", "movie_scale"), ("--tstop", "tstop"),
+                   ("--logE", "log_e"), ("--logEperp", "log_eperp"),
+                   ("--logEpar", "log_epar"))
+_MOVIE_DEFAULTS = {"fps": 5.0, "movie_format": "avi", "movie_scale": "fixed",
+                   "log_e": False, "log_eperp": False, "log_epar": False}
 _PMASS   = 1.6726e-27     # proton mass (kg), as in analysis.f90
 _KEV_J   = 1.60218e-16    # keV in J, as in analysis.f90
 
@@ -1639,7 +1647,7 @@ def _ffmpeg_available() -> bool:
 
 def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
                fps: float = 5.0, fmt: str = "avi", scale: str = "fixed",
-               tstop=None) -> None:
+               tstop=None, elog=(False, False, False)) -> None:
     """Animate f and the kinetic-energy densities over the snapshots of one case.
 
     A 2x2 array of panels: f and the total kinetic-energy density on top, its
@@ -1648,7 +1656,9 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
     snapshots and there is nothing to animate.  One frame per snapshot, up to
     time *tstop* (s) when it is given; later snapshots are not read.  With
     *scale* 'fixed' the colour scales are fixed over the whole movie, so frames
-    compare; with 'frame' each frame is scaled to its own maximum.  *fmt* is avi
+    compare; with 'frame' each frame is scaled to its own maximum.  *log* puts
+    f on a log scale, and *elog* (E_kin, E_perp, E_par) each energy panel; a
+    log panel spans eight decades below its maximum.  *fmt* is avi
     (MPEG-4 Part 2, plays in VLC and Windows Media Player), mp4 (H.264) or gif
     (Pillow); avi and mp4 need ffmpeg and fall back to gif without it.
     """
@@ -1712,38 +1722,47 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
     fmin_all = min(fr[2].min() for fr in frames)
     emax_all = [max(fr[3][k].max() for fr in frames) for k in range(len(eparts))]
 
-    def f_limits(f):
-        hi = f.max() if per_frame else fmax_all
+    def limits(z, zmax_all, zmin_all, lg):
+        """(lo, hi) of a panel's colour scale for frame data *z*."""
+        hi = z.max() if per_frame else zmax_all
         hi = hi if hi > 0 else 1.0
-        if log:
+        if lg:
             # Eight decades.  Anything below the floor -- the far tail, and the
             # round-off of either sign around it -- is left blank rather than
             # drawn in the lowest colour, which would paint that noise as a
             # checkerboard.
             return hi * 1e-8, hi
-        return min(0.0, f.min() if per_frame else fmin_all), hi
+        return min(0.0, z.min() if per_frame else zmin_all), hi
 
-    def e_limit(e, k):
-        hi = e.max() if per_frame else emax_all[k]
-        return hi if hi > 0 else 1.0
+    def f_limits(f):
+        return limits(f, fmax_all, fmin_all, log)
 
-    def prep(z, lo):
-        return np.where(z > lo, z, np.nan) if log else z
+    def e_limits(e, k):
+        # The energy densities are >= 0 up to round-off, so a linear scale
+        # starts at 0.
+        return limits(e, emax_all[k], 0.0, elog[k])
+
+    def prep(z, lo, lg):
+        return np.where(z > lo, z, np.nan) if lg else z
+
+    def norm(lo, hi, lg):
+        return (mcolors.LogNorm if lg else mcolors.Normalize)(vmin=lo, vmax=hi)
 
     # f and E_kin on top, E_perp and E_par below.
     fig, axs = plt.subplots(2, 2, figsize=(13, 10))
     axf, axes_e = axs[0, 0], (axs[0, 1], axs[1, 0], axs[1, 1])
     step0, t0, f0, e0 = frames[0]
     lo0, hi0 = f_limits(f0)
-    fnorm = (mcolors.LogNorm if log else mcolors.Normalize)(vmin=lo0, vmax=hi0)
-    mf = axf.pcolormesh(vpar, vperp, prep(f0, lo0), norm=fnorm, cmap="rainbow", shading="nearest")
+    mf = axf.pcolormesh(vpar, vperp, prep(f0, lo0, log), norm=norm(lo0, hi0, log),
+                        cmap="rainbow", shading="nearest")
     tail = "  (scaled to each frame)" if per_frame else ""
     fig.colorbar(mf, ax=axf, label="f" + ("  (log)" if log else "") + tail)
     mes = []
     for k, (ax, (_, _, cblabel)) in enumerate(zip(axes_e, eparts)):
-        enorm = mcolors.Normalize(vmin=0.0, vmax=e_limit(e0[k], k))
-        me = ax.pcolormesh(vpar, vperp, e0[k], norm=enorm, cmap="rainbow", shading="nearest")
-        fig.colorbar(me, ax=ax, label=cblabel + tail)
+        lo, hi = e_limits(e0[k], k)
+        me = ax.pcolormesh(vpar, vperp, prep(e0[k], lo, elog[k]), norm=norm(lo, hi, elog[k]),
+                           cmap="rainbow", shading="nearest")
+        fig.colorbar(me, ax=ax, label=cblabel + ("  (log)" if elog[k] else "") + tail)
         mes.append(me)
     for ax in axs.flat:
         ax.set_xlabel("v∥ (m/s)"); ax.set_ylabel("v⊥ (m/s)")
@@ -1755,13 +1774,14 @@ def make_movie(outdir: Path, casename: str, namelist, save_dir, log: bool,
         step, t, f, e = frames[i]
         lo, hi = f_limits(f)
         mf.set_clim(lo, hi)
-        mf.set_array(prep(f, lo).ravel())
+        mf.set_array(prep(f, lo, log).ravel())
         # The frame's own maximum in the titles: with --movie-scale frame it is
         # the top of the colour bar, with fixed scales it shows the amplitude.
         axf.set_title(f"VDF  f(v⊥, v∥)      max = {f.max():.3g}")
         for k, (ax, me, (_, title, _)) in enumerate(zip(axes_e, mes, eparts)):
-            me.set_clim(0.0, e_limit(e[k], k))
-            me.set_array(e[k].ravel())
+            lo, hi = e_limits(e[k], k)
+            me.set_clim(lo, hi)
+            me.set_array(prep(e[k], lo, elog[k]).ravel())
             ax.set_title(f"{title}      max = {e[k].max():.3g} keV")
         sup.set_text(f"{label}    t = {t:.4g} s    (step {step}, frame {i + 1}/{len(frames)})")
         return (mf, *mes, sup)
@@ -1983,6 +2003,14 @@ def _add_common(p: argparse.ArgumentParser, multi: bool = False) -> None:
     p.add_argument("--tstop", type=float, default=None, metavar="T",
                    help="end the movie at time T (s): only the snapshots with "
                         "t <= T become frames (default: all); implies --movie")
+    # Log scale per energy panel of the movie (--logf does f).  default=None,
+    # not False, so that main can tell they were typed and imply --movie.
+    for opt, dest, what in (("--logE", "log_e", "total kinetic-energy"),
+                            ("--logEperp", "log_eperp", "perpendicular-energy"),
+                            ("--logEpar", "log_epar", "parallel-energy")):
+        p.add_argument(opt, action="store_true", default=None, dest=dest,
+                       help=f"movie: {what} panel on a log colour scale (eight "
+                            f"decades below its maximum); implies --movie")
     if multi:
         p.add_argument("--namelist", type=Path, default=None, metavar="FILE",
                        help="namelist of the run, read by --movie for n_snap and "
@@ -2317,7 +2345,8 @@ def main(argv=None):
         for case in cases:
             make_movie(outdir, case, namelist, save_dir=args.save_dir,
                        log=args.log, fps=args.fps, fmt=args.movie_format,
-                       scale=args.movie_scale, tstop=args.tstop)
+                       scale=args.movie_scale, tstop=args.tstop,
+                       elog=(args.log_e, args.log_eperp, args.log_epar))
         print("Done.")
         return
 
