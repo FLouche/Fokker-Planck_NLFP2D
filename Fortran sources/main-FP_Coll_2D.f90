@@ -204,6 +204,7 @@ common/mathcons/pi,twopi
 data pi/3.141592653589793238462643d0/
 
 double precision start_time,end_time
+integer(8) :: clock_start, clock_end, clock_rate   ! wall clock (system_clock)
 
 ! MKL threads.  The Release build links the threaded MKL, whose default (one
 ! thread per physical core) is slower than 8-16 threads on a 64-core machine:
@@ -354,6 +355,7 @@ else
 endif
 
 call cpu_time(start_time)
+call system_clock(clock_start, clock_rate)
 
 !====================================================================
 !
@@ -751,7 +753,13 @@ close(40)
 !close(40)
 
 call cpu_time(end_time)
+call system_clock(clock_end)
 write(*,*) ' '
-    write(*,*) 'Simulation duration: ',end_time-start_time,'seconds'
+! Wall-clock time.  cpu_time sums the CPU time of all threads, so with the
+! threaded MKL it overstates the duration (196 s of CPU for a 13 s run on 16
+! threads); it is kept alongside as a measure of the work done.
+    write(*,'(A,F12.2,A,F12.2,A)') ' Simulation duration: ', &
+        DBLE(clock_end - clock_start) / DBLE(clock_rate), ' seconds (wall clock);  CPU time ', &
+        end_time - start_time, ' s (all threads)'
 
 end program FP_Coll_2D
