@@ -8,7 +8,40 @@ MODULE mod_fd_stencil_2d
   PRIVATE
   PUBLIC :: fd_stencil_2d
 
+  ! Cache of the interior-row Fornberg weights.  They depend only on the grid,
+  ! yet were recomputed for every row at every time step (~10% of a step).
+  ! Built on first use and rebuilt whenever the grid passed in is not the one
+  ! it was built for: sizes and dvpar are checked on every call, vperp once per
+  ! sweep at the first interior row (2,2).  Results are bit-identical.
+  INTEGER,  SAVE :: wc_nperp = -1, wc_npar = -1
+  REAL(dp), SAVE :: wc_dvpar = -1.0_dp
+  REAL(dp), ALLOCATABLE, SAVE :: wc_vperp(:), wc_wi(:,:,:), wc_wj(:,:,:)
+
 CONTAINS
+
+  SUBROUTINE wcache_build(nperp, npar, vperp, dvpar)
+    INTEGER,  INTENT(IN) :: nperp, npar
+    REAL(dp), INTENT(IN) :: vperp(nperp), dvpar
+    INTEGER  :: i, j, k, L
+    REAL(dp) :: x(7)
+    IF (ALLOCATED(wc_vperp)) DEALLOCATE(wc_vperp, wc_wi, wc_wj)
+    ALLOCATE(wc_vperp(nperp), wc_wi(7,0:2,nperp), wc_wj(7,0:2,npar))
+    wc_vperp = vperp; wc_nperp = nperp; wc_npar = npar; wc_dvpar = dvpar
+    DO i = 2, nperp-1
+      L = MIN(MAX(1, i-3), nperp-6)
+      DO k = 1, 7
+        x(k) = vperp(L+k-1) - vperp(i)
+      END DO
+      CALL fornberg_weights(0.0_dp, x, 7, 2, wc_wi(:,:,i))
+    END DO
+    DO j = 2, npar-1
+      L = MIN(MAX(1, j-3), npar-6)
+      DO k = 1, 7
+        x(k) = REAL(L+k-1-j, dp) * dvpar
+      END DO
+      CALL fornberg_weights(0.0_dp, x, 7, 2, wc_wj(:,:,j))
+    END DO
+  END SUBROUTINE wcache_build
 
 SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
                           A_ij, B_ij, C_ij, D_ij, E_ij, F_ij, &
@@ -102,21 +135,19 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   ! CASE 3: Interior points — full PDE stencil
   !================================================================
 
-  !--- v⊥ Fornberg weights (non-uniform) ---------------------------
+  !--- Fornberg weights: v⊥ non-uniform, v∥ uniform, on the clamped
+  !    7-point windows {Li..Li+6}, {Lj..Lj+6}; taken from the cache --------
   Li = MAX(1, i-3)
   Li = MIN(Li, nperp-6)
-  DO k = 1, 7
-    xloc_i(k) = vperp(Li+k-1) - vperp(i)
-  END DO
-  CALL fornberg_weights(0.0_dp, xloc_i, 7, 2, wi)
-
-  !--- v∥ Fornberg weights (uniform) --------------------------------
   Lj = MAX(1, j-3)
   Lj = MIN(Lj, npar-6)
-  DO k = 1, 7
-    xloc_j(k) = REAL(Lj+k-1-j, dp) * dvpar
-  END DO
-  CALL fornberg_weights(0.0_dp, xloc_j, 7, 2, wj)
+  IF (wc_nperp /= nperp .OR. wc_npar /= npar .OR. wc_dvpar /= dvpar) THEN
+    CALL wcache_build(nperp, npar, vperp, dvpar)
+  ELSE IF (i == 2 .AND. j == 2) THEN
+    IF (ANY(wc_vperp /= vperp)) CALL wcache_build(nperp, npar, vperp, dvpar)
+  END IF
+  wi = wc_wi(:,:,i)
+  wj = wc_wj(:,:,j)
 
   !--- Local index of (i,j) within stencils ------------------------
   mi = i - Li + 1
