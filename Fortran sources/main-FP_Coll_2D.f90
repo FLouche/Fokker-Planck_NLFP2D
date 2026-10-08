@@ -205,6 +205,15 @@ data pi/3.141592653589793238462643d0/
 
 double precision start_time,end_time
 
+! MKL threads.  The Release build links the threaded MKL, whose default (one
+! thread per physical core) is slower than 8-16 threads on a 64-core machine:
+! the matrices are too small to keep more busy.  Used only when neither
+! MKL_NUM_THREADS nor OMP_NUM_THREADS is set.  No-ops in the sequential MKL.
+integer, parameter :: mkl_threads_default = 16
+integer :: env_status
+integer, external :: mkl_get_max_threads
+external mkl_set_num_threads
+
 !external derf
 
 
@@ -330,6 +339,19 @@ if (ntimes(1) /= 0 .and. iold /= -1) then
 endif
 
 twopi=2.d0*pi
+
+! Thread count for MKL (PARDISO): the user's MKL_NUM_THREADS / OMP_NUM_THREADS
+! if set, otherwise mkl_threads_default (capped at what MKL would use).
+call get_environment_variable('MKL_NUM_THREADS', status=env_status)
+if (env_status /= 0) call get_environment_variable('OMP_NUM_THREADS', status=env_status)
+if (env_status /= 0) then
+    call mkl_set_num_threads(min(mkl_threads_default, mkl_get_max_threads()))
+    write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
+                        '  (default; set MKL_NUM_THREADS to change)'
+else
+    write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
+                        '  (from MKL_NUM_THREADS / OMP_NUM_THREADS)'
+endif
 
 call cpu_time(start_time)
 

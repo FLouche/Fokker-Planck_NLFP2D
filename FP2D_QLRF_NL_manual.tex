@@ -1326,10 +1326,12 @@ sparse solver PARDISO runs in parallel (the Debug build uses the sequential
 MKL).  The executable is placed at
 \texttt{FP2D\_QLRF\_NL/x64/Release/FP2D\_QLRF\_NL.exe}.
 
-\paragraph{Number of threads.}  Set it with the environment variable
-\texttt{MKL\_NUM\_THREADS} before running, e.g.\ \texttt{set MKL\_NUM\_THREADS=16}
-in a Windows command prompt.  MKL otherwise uses every physical core, which on a
-many-core machine is slower than 8--16 threads.  On a $150\times150$ grid with
+\paragraph{Number of threads.}  The code uses 16 threads by default (fewer on a
+machine with fewer cores) and prints the number at start.  To change it, set the
+environment variable \texttt{MKL\_NUM\_THREADS} (or \texttt{OMP\_NUM\_THREADS})
+before running, e.g.\ \texttt{set MKL\_NUM\_THREADS=4} in a Windows command
+prompt.  MKL's own default, one thread per physical core, is slower than 8--16
+threads on a many-core machine, which is why the code sets its own.  On a $150\times150$ grid with
 nonlinear self-collisions and RF, 100 steps took 29.4~s sequentially, 13.5~s
 with 8 threads and 12.9~s with 16; the rest of the code is serial, so more
 threads gain little.  With one thread the results are identical to the
