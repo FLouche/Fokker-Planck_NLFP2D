@@ -1321,8 +1321,22 @@ default (off) values.
 Open the Visual Studio solution
 \texttt{FP2D\_QLRF\_NL/FP2D\_QLRF\_NL.sln} and build the
 \texttt{Release|x64} configuration.  The compiler is Intel \texttt{ifx}
-with Intel MKL (sequential).  The executable is placed at
+with Intel MKL; the Release build links the \emph{threaded} MKL, so the
+sparse solver PARDISO runs in parallel (the Debug build uses the sequential
+MKL).  The executable is placed at
 \texttt{FP2D\_QLRF\_NL/x64/Release/FP2D\_QLRF\_NL.exe}.
+
+\paragraph{Number of threads.}  Set it with the environment variable
+\texttt{MKL\_NUM\_THREADS} before running, e.g.\ \texttt{set MKL\_NUM\_THREADS=16}
+in a Windows command prompt.  MKL otherwise uses every physical core, which on a
+many-core machine is slower than 8--16 threads.  On a $150\times150$ grid with
+nonlinear self-collisions and RF, 100 steps took 29.4~s sequentially, 13.5~s
+with 8 threads and 12.9~s with 16; the rest of the code is serial, so more
+threads gain little.  With one thread the results are identical to the
+sequential build; with more, they differ in the last digits (up to
+${\sim}10^{-5}$ of $\max f$ after 100 steps), because the parallel
+factorization eliminates in a different order.  When running several cases at
+once, give each only a few threads.
 
 \subsection{Running}
 

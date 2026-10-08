@@ -23,6 +23,8 @@ Never batch unrelated changes into a single commit. Never commit build outputs, 
 
 **Build:** Open `FP2D_QLRF_NL/FP2D_QLRF_NL.sln` in Visual Studio and build the `Debug|x64` configuration. This uses the Intel `ifx` compiler with Intel MKL (sequential). The executable lands at `FP2D_QLRF_NL/x64/Debug/FP2D_QLRF_NL.exe`.
 
+**`Release|x64` links threaded MKL** (`UseMkl="mklParallel"`, since 2026-10-08; `Debug|x64` stays sequential). Only MKL — i.e. PARDISO — runs in parallel; the Fortran itself has no OpenMP. Set the thread count with `MKL_NUM_THREADS`: MKL's default (all 64 physical cores of the Threadripper) is *slower* than 8–16. Measured on the ITER N=2 reference case (150×150, `isc=-1`, RF), 100 steps: sequential 29.4 s; 1 thread 29.5 s (bit-identical); 4 → 15.1 s; 8 → 13.5 s; 16 → 12.9 s; 32 → 12.9 s; default 17.2 s. The remaining ~12 s is the serial Fortran (coefficient assembly, row-by-row matrix refill, diagnostics). With more than one thread the result is not bit-reproducible: after 100 steps f differs from the sequential run by up to ~1.5×10⁻⁵ of its maximum (parallel elimination order and pivot perturbation); MKL's reproducibility mode `iparm(34)` would fix that at some speed cost. When running many cases side by side, give each 1–4 threads.
+
 **Run:** The program reads a Fortran namelist (`&INPUT`) from stdin and writes output files to the working directory (i.e. `x64/Debug/` when launched from Visual Studio, or wherever the shell is):
 ```
 FP2D_QLRF_NL.exe < <case>.dat
