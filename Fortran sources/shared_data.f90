@@ -53,6 +53,16 @@ integer :: n_snap = 0     ! VDF snapshots: write f every n_snap steps to
                           ! self-collision power split -- not for production
                           ! runs: a 151x151 snapshot is ~0.7 MB.
 
+integer :: i_lu_reuse = -1          ! Time-step linear solves (pardiso_solver):
+                                    ! -1: reuse the LU factors of the last
+                                    !     factorisation as the preconditioner of a
+                                    !     CGS iteration (PARDISO phase 23); refactorise
+                                    !     only when CGS fails (default).
+                                    !  0: refactorise every step (the former path).
+double precision :: lu_reuse_tol = 1.d-10  ! CGS stopping tolerance (relative
+                                    ! residual) for i_lu_reuse=-1; rounded to a
+                                    ! power of ten, 10^-L, as PARDISO requires.
+
 integer :: nstep_restart = 0  ! Time steps already done before this run: the
                               ! step count stored on the first line of xout.dat
                               ! by the run being restarted (iold=-1), 0 for a

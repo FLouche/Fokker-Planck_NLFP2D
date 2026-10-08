@@ -85,13 +85,15 @@ The steady-state solver is always `FP_steady_state` ← `fd_stencil_2d` (in `mod
 All sparse matrices are stored in 1-based CSR format. The `pardiso_solver` module (`pardiso_solver (2).f90`) wraps Intel MKL PARDISO with four entry points that exploit phased factorisation:
 - `pardiso_solve_steady` — phases 11+22+33 then release (used by steady-state solver)
 - `pardiso_solve_init` — phases 11+22 once (called once before the time loop in `timefp_7pt`; the symbolic analysis is reused for the whole run because the sparsity pattern never changes)
-- `pardiso_solve_step` — phase 33, preceded by phase 22 when `a_changed=.TRUE.`. Both `timefp_7pt` and `timefp_7pt_nl` always pass `.TRUE.`, so every time step does a numerical refactorisation
-- `pardiso_solve_finalize` — releases PARDISO memory
+- `pardiso_solve_step` — called with `a_changed=.TRUE.` by both time solvers every step. With **LU reuse** (namelist `i_lu_reuse=-1`, the default; passed as `lu_reuse_L` to `pardiso_solve_init`) it first tries phase 23 with `iparm(4)=10·L+1`: CGS preconditioned with the LU factors of the *last* factorisation. The step is accepted only if the true residual ‖b−Ax‖∞/‖b‖∞, computed by `rel_residual`, is ≤ max(`lu_reuse_tol`, 10 × the residual of the latest direct solve); otherwise phases 22+33 refactorise. With `i_lu_reuse=0` every step refactorises (the former path, bit-identical to it).
+- `pardiso_solve_finalize` — releases PARDISO memory and prints the step/factorisation/CGS statistics and the largest residuals
+
+**LU reuse, measured (2026-10-08, report `REPORTS_ALL/Parallelisation`).** The step operator changes slowly, so one factorisation serves hundreds of steps at ~3 CGS iterations each: ITER N=2 reference (900 steps) 2 factorisations, 142 → 52 s on 16 threads; JET-beam1 fill-up from f=0 (500 steps) 2 factorisations, 96 → 28 s; 100 steps on 1 thread 28.7 → 8.3 s. Results agree with refactorising to 3×10⁻⁸ in f (1 thread) and ≤10⁻⁶ in the time traces. Two traps found on the way, both handled: PARDISO's own success flag `iparm(20)>0` is **meaningless as an accuracy check** (a 10⁻⁶⁰ tolerance "converges" in 13 iterations), hence `rel_residual`; and a *fixed* residual bound fails where the direct solve itself only reaches ~5×10⁻¹⁰ (NBI fill-up: 456/499 steps rejected), hence the bound relative to the last direct solve. Do not cap iterative refinement (`iparm(8)`) together with LU reuse: it gains nothing and raised the error to ~10⁻⁵.
 
 Matrix type `mtype=11` (real non-symmetric general) is used throughout.
 
 ### Row Assembly: fd_stencil_2d
-`fd_stencil_2d` (`fd_stencil_2d.f90`) is the central stencil routine. For each grid point (i,j) it returns at most 49 sparse entries (7×7 stencil). The Fornberg weights come from `fornberg_weights` in `derivatives_2d.f90`, which handles non-uniform v⊥ spacing exactly.
+`fd_stencil_2d` (`fd_stencil_2d.f90`) is the central stencil routine. For each grid point (i,j) it returns at most 49 sparse entries (7×7 stencil). The Fornberg weights come from `fornberg_weights` in `derivatives_2d.f90`, which handles non-uniform v⊥ spacing exactly. The interior-row weights depend only on the grid, so they are **cached** in the module (`wcache_build`) on first use and rebuilt only if the grid passed in changes (sizes/`dvpar` checked every call, `vperp` once per sweep at row (2,2)); bit-identical to recomputing them, ~10% of a step saved.
 
 Both `solve_fp_pardiso` (steady-state) and `timefp_7pt` (time-dependent) call `fd_stencil_2d` in a two-pass loop: first pass counts non-zeros to build `ia`, second pass fills `ja` and `aa`. Entries in each row must be sorted by column index before passing to PARDISO — `sort_stencil` (insertion sort, defined inside `timefp_7pt`) does this.
 
@@ -100,7 +102,7 @@ Implements the θ-scheme: Crank-Nicolson (`icn=-1`, θ=0.5), intermediate (`icn=
 ```
 (I - θ·dt·L)·f^{n+1} = (I + (1-θ)·dt·L)·f^n + dt·S
 ```
-**The operator is rebuilt and refactorised every step; it is not constant.** Each step recomputes `Teff` (and `Tn`) from `f^n`, updates the Coulomb logarithms, reassembles the coefficient arrays (`assemble_FP_terms`, plus the `sc**` self-collision terms when `isc=1,2,3`), refills the values of `aa_L` and of the LHS `(I - θ·dt·L)` on the fixed CSR pattern, applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`) to build the RHS, and calls `pardiso_solve_step` with `a_changed=.TRUE.` (phases 22+33). This holds for every case, including RF-off/SC-off ones. The only exception is the NBI fill-up (`isource=-1`, `iold=0`, density below 5% of `npart`): there the Coulomb-log update is skipped and the precomputed `all**_lin` arrays are used, but the matrix is still refilled and refactorised.
+**The operator is rebuilt every step; it is not constant** (it is refactorised only when LU reuse rejects a step, or every step with `i_lu_reuse=0`; see *Sparse Matrix and PARDISO*). Each step recomputes `Teff` (and `Tn`) from `f^n`, updates the Coulomb logarithms, reassembles the coefficient arrays (`assemble_FP_terms`, plus the `sc**` self-collision terms when `isc=1,2,3`), refills the values of `aa_L` and of the LHS `(I - θ·dt·L)` on the fixed CSR pattern, applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`) to build the RHS, and calls `pardiso_solve_step` with `a_changed=.TRUE.`. This holds for every case, including RF-off/SC-off ones. The only exception is the NBI fill-up (`isource=-1`, `iold=0`, density below 5% of `npart`): there the Coulomb-log update is skipped and the precomputed `all**_lin` arrays are used, but the matrix is still refilled (and solved through `pardiso_solve_step` like any other step).
 
 Consequence (stencil study, 2026-09-16): self-collisions (`isc=2`) add no matrix work. They cost only the `self_coll_max` evaluation and six extra N² arrays: +3–13% run time and about +1 MB at 161×161 for the JET RF case.
 
@@ -125,6 +127,8 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `iold` | -1 / 0 | Restart from `xout.dat` / fresh start |
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
+| `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
+| `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
 ### Output Files
 All output is written to the run directory. Key files:

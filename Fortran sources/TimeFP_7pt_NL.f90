@@ -289,7 +289,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END DO
 
   CALL pardiso_solve_init(handle_lhs, ndof, aa_lhs, ia_lhs, ja_lhs, &
-                          a_constant=.FALSE., mtype=11, msglvl=0, error=error)
+                          a_constant=.FALSE., mtype=11, msglvl=0, error=error, &
+                          lu_reuse_L=MERGE(NINT(-LOG10(lu_reuse_tol)), 0, i_lu_reuse == -1))
   IF (error /= 0) THEN
     WRITE(*,*) 'timefp_7pt_nl: pardiso_solve_init failed, error=', error; STOP
   END IF

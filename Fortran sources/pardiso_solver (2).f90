@@ -15,6 +15,16 @@
 !   pardiso_solve_step     – one time step: phase 22 (if A changed) + 33
 !   pardiso_solve_finalize – release PARDISO memory after the time loop
 !
+! LU reuse (pardiso_solve_init argument lu_reuse_L > 0): when A has changed,
+! pardiso_solve_step first tries phase 23 with iparm(4) = 10*L + 1, i.e. CGS
+! preconditioned with the LU factors of the LAST factorisation, to a relative
+! residual of 10^-L.  The result is accepted only if its true residual, checked
+! here, is within max(10^-L, 10 x that of the latest direct solve); otherwise A
+! is refactorised (phase 22 + 33).  The time-step operator changes slowly, so
+! one factorisation typically serves hundreds of steps with ~3 CGS iterations
+! each: 2.7-3.4x faster full runs, results within 10^-6 of refactorising every
+! step (REPORTS_ALL/Parallelisation).  Statistics: pardiso_solve_finalize.
+!
 ! Conventions (CSR, 1-based, upper-triangular for symmetric problems):
 !   ia(n+1)  – row pointers  (1-based)
 !   ja(nnz)  – column indices (1-based)
@@ -56,6 +66,12 @@ MODULE pardiso_solver
     INTEGER            :: msglvl     = 0   ! 0=silent, 1=verbose
     LOGICAL            :: symbolic_done  = .FALSE.
     LOGICAL            :: numeric_done   = .FALSE.
+    ! LU reuse (0 = off) and its statistics
+    INTEGER            :: lu_reuse_L     = 0
+    INTEGER            :: n_steps = 0, n_fact = 0, n_cgs_ok = 0, n_cgs_fail = 0
+    INTEGER(8)         :: n_cgs_iter = 0
+    REAL(dp)           :: res_reuse_max = 0.0_dp, res_direct_max = 0.0_dp
+    REAL(dp)           :: res_direct_last = 0.0_dp   ! residual of the latest direct solve
   END TYPE pardiso_handle_t
 
   !-- PARDISO external interface (MKL signature) --------------------------------
@@ -145,6 +161,24 @@ CONTAINS
     h%iparm(27) = 1      ! matrix checker
     h%iparm(35) = 0      ! 1-based CSR indexing
   END SUBROUTINE pardisoinit_safe
+
+  !-- ||b - A x||_inf / ||b||_inf for a 1-based CSR matrix ---------------------
+  FUNCTION rel_residual(n, a, ia, ja, b, x) RESULT(res)
+    INTEGER,  INTENT(IN) :: n, ia(*), ja(*)
+    REAL(dp), INTENT(IN) :: a(*), b(*), x(*)
+    REAL(dp) :: res, r, rmax, bmax
+    INTEGER  :: i, p
+    rmax = 0.0_dp; bmax = 0.0_dp
+    DO i = 1, n
+      r = b(i)
+      DO p = ia(i), ia(i+1) - 1
+        r = r - a(p) * x(ja(p))
+      END DO
+      rmax = MAX(rmax, ABS(r))
+      bmax = MAX(bmax, ABS(b(i)))
+    END DO
+    res = rmax / MAX(bmax, TINY(1.0_dp))
+  END FUNCTION rel_residual
 
   !=============================================================================
   ! PHASE 11 – symbolic factorisation (reordering)
@@ -301,7 +335,7 @@ CONTAINS
   !   If a_constant=.FALSE., phase 22 is deferred to pardiso_solve_step.
   !-----------------------------------------------------------------------------
   SUBROUTINE pardiso_solve_init(h, n, a, ia, ja, a_constant, &
-                                mtype, msglvl, error)
+                                mtype, msglvl, error, lu_reuse_L)
     TYPE(pardiso_handle_t), INTENT(OUT) :: h
     INTEGER,  INTENT(IN)    :: n
     REAL(dp), INTENT(INOUT) :: a(*)
@@ -310,6 +344,7 @@ CONTAINS
     INTEGER,  INTENT(IN),  OPTIONAL :: mtype
     INTEGER,  INTENT(IN),  OPTIONAL :: msglvl
     INTEGER,  INTENT(OUT), OPTIONAL :: error
+    INTEGER,  INTENT(IN),  OPTIONAL :: lu_reuse_L  ! >0: reuse LU, CGS tol 10^-L
 
     INTEGER :: mt, ml, ierr
 
@@ -317,6 +352,7 @@ CONTAINS
     ml = 0  ; IF (PRESENT(msglvl)) ml = msglvl
 
     CALL handle_init(h, n, mt, ml)
+    IF (PRESENT(lu_reuse_L)) h%lu_reuse_L = MAX(0, lu_reuse_L)
 
     !-- Phase 11 (sparsity pattern, always once) --------------------------------
     CALL phase_symbolic(h, a, ia, ja, ierr)
@@ -348,16 +384,54 @@ CONTAINS
     LOGICAL,  INTENT(IN)    :: a_changed    ! .TRUE. => redo phase 22
     INTEGER,  INTENT(OUT), OPTIONAL :: error
 
-    INTEGER :: ierr
+    INTEGER  :: ierr, nref, perm(h%n)
+    REAL(dp) :: res
+
+    h%n_steps = h%n_steps + 1
+
+    !-- LU reuse: CGS preconditioned with the last LU factors (phase 23) -------
+    !   PARDISO's own verdict (iparm(20) > 0) is not enough: it reports success
+    !   even for tolerances it cannot reach (10^-60 "converges" in 13
+    !   iterations).  So the step is accepted only if the TRUE relative residual
+    !   ||b - A x||_inf / ||b||_inf, computed here (one sparse mat-vec), is
+    !   <= MAX(10^-L, 10 * residual of the latest direct solve); otherwise A is
+    !   refactorised and solved directly below.  The second bound matters: on
+    !   some problems the direct solve itself only reaches ~5e-10 (NBI fill-up),
+    !   and a fixed 10^-10 then rejected almost every step although the CGS
+    !   results matched the direct ones to 1e-13.  With iparm(6) = 0 PARDISO
+    !   does not overwrite b, so the direct solve still sees the caller's rhs.
+    IF (a_changed .AND. h%lu_reuse_L > 0 .AND. h%numeric_done) THEN
+      nref = h%iparm(8)
+      h%iparm(4) = 10*h%lu_reuse_L + 1
+      CALL pardiso(h%pt, h%maxfct, h%mnum, h%mtype, 23, h%n, a, ia, ja, perm, &
+                   h%nrhs, h%iparm, h%msglvl, b, x, ierr)
+      h%iparm(4) = 0
+      h%iparm(8) = nref                 ! iparm(8) is also an output; restore it
+      IF (ierr == 0 .AND. h%iparm(20) > 0) THEN
+        res = rel_residual(h%n, a, ia, ja, b, x)
+        IF (res <= MAX(10.0_dp**(-h%lu_reuse_L), 10.0_dp*h%res_direct_last)) THEN
+          h%n_cgs_ok   = h%n_cgs_ok + 1
+          h%n_cgs_iter = h%n_cgs_iter + h%iparm(20)
+          h%res_reuse_max = MAX(h%res_reuse_max, res)
+          GOTO 99
+        END IF
+      END IF
+      h%n_cgs_fail = h%n_cgs_fail + 1
+    END IF
 
     !-- Optional phase 22: only when matrix values have changed ----------------
     IF (a_changed) THEN
       CALL phase_numeric(h, a, ia, ja, ierr)
       IF (ierr /= 0) GOTO 99
+      h%n_fact = h%n_fact + 1
     END IF
 
     !-- Phase 33: solve with current b ----------------------------------------
     CALL phase_solve(h, a, ia, ja, b, x, ierr)
+    IF (h%lu_reuse_L > 0 .AND. ierr == 0) THEN
+      h%res_direct_last = rel_residual(h%n, a, ia, ja, b, x)
+      h%res_direct_max  = MAX(h%res_direct_max, h%res_direct_last)
+    END IF
 
 99  IF (PRESENT(error)) error = ierr
   END SUBROUTINE pardiso_solve_step
@@ -382,6 +456,21 @@ CONTAINS
 
     h%symbolic_done = .FALSE.
     h%numeric_done  = .FALSE.
+
+    IF (h%n_steps > 0) THEN
+      IF (h%lu_reuse_L > 0) THEN
+        WRITE(*,'(A,I0,A,I0,A,I0,A,F5.1,A,I0,A)') ' PARDISO: ', h%n_steps, &
+          ' steps, ', h%n_fact, ' factorisations; LU reused on ', h%n_cgs_ok, &
+          ' steps (', DBLE(h%n_cgs_iter)/MAX(1,h%n_cgs_ok), &
+          ' CGS iterations on average, ', h%n_cgs_fail, ' rejected)'
+        WRITE(*,'(A,ES9.2,A,ES9.2,A,ES9.2)') '          max relative residual: LU reuse ', &
+          h%res_reuse_max, ', direct ', h%res_direct_max, ';  tolerance ', &
+          10.0_dp**(-h%lu_reuse_L)
+      ELSE
+        WRITE(*,'(A,I0,A,I0,A)') ' PARDISO: ', h%n_steps, ' steps, ', &
+          h%n_fact, ' factorisations (LU reuse off)'
+      END IF
+    END IF
 
     IF (PRESENT(error)) error = ierr
   END SUBROUTINE pardiso_solve_finalize

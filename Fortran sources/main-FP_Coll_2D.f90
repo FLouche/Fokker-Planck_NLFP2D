@@ -292,7 +292,7 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap
+                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol
 
 
 !write(*,*) 'Read namelist'

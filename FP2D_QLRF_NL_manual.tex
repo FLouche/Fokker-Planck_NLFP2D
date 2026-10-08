@@ -1043,6 +1043,19 @@ i\_upwind & $0$ &
   upwind ($-1$).  Both leave the high-order 7-point Fornberg stencil in the
   smooth bulk. \\[4pt]
 
+i\_lu\_reuse & $-1$ &
+  Linear solves of the time steps.
+  $-1$: reuse the LU factors of the last factorisation as the preconditioner of a
+  CGS iteration, and refactorise only when its result is rejected
+  (Section~\ref{sec:lureuse}); 2.7--3.4$\times$ faster runs.
+  $0$: refactorise the matrix at every step (the former behaviour). \\[4pt]
+
+lu\_reuse\_tol & $10^{-10}$ &
+  Residual bound for \texttt{i\_lu\_reuse = -1}: a reused step is accepted if
+  $\|b - A x\|_\infty/\|b\|_\infty \le \max(\texttt{lu\_reuse\_tol},\,
+  10\,r_\mathrm{direct})$, with $r_\mathrm{direct}$ the residual of the latest
+  direct solve.  Values below ${\sim}10^{-11}$ make every step refactorise. \\[4pt]
+
 \end{longtable}
 
 % -------------------------------------------------------------------
@@ -1306,8 +1319,10 @@ default (off) values.
   notxt     = 0,
   n_snap    = 0,
 
-  ! Advanced numerics (default 0 = off)
+  ! Advanced numerics (defaults shown)
   i_upwind     = 0,
+  i_lu_reuse   = -1,
+  lu_reuse_tol = 1.d-10,
 /
 \end{lstlisting}
 
@@ -1339,6 +1354,25 @@ sequential build; with more, they differ in the last digits (up to
 ${\sim}10^{-5}$ of $\max f$ after 100 steps), because the parallel
 factorization eliminates in a different order.  When running several cases at
 once, give each only a few threads.
+
+\paragraph{LU reuse.}\label{sec:lureuse}  The matrix $I - \theta\,\Delta t\,L$
+changes from step to step, but slowly.  With \texttt{i\_lu\_reuse = -1} (the
+default) the code therefore factorises it only occasionally: at the other steps
+it solves by a few CGS iterations preconditioned with the last LU factors
+(PARDISO phase~23), checks the true residual of the result, and refactorises
+only if that residual exceeds
+$\max(\texttt{lu\_reuse\_tol},\,10\,r_\mathrm{direct})$.  The end of the run
+prints how many factorisations were needed and the largest residuals, e.g.
+\begin{lstlisting}
+PARDISO: 900 steps, 2 factorisations; LU reused on 898 steps
+         (2.8 CGS iterations on average, 1 rejected)
+\end{lstlisting}
+On the ITER $N=2$ reference case this cut a full run from 142~s to 52~s and on a
+JET beam fill-up from 96~s to 28~s (16 threads); with one thread, 100 steps went
+from 28.7~s to 8.3~s.  The results agree with refactorising every step to
+${\sim}10^{-8}$ of $\max f$ on one thread, and within the threading noise on
+16.  The finite-difference weights, which depend only on the grid, are also
+computed once per run instead of at every step.
 
 \subsection{Running}
 
