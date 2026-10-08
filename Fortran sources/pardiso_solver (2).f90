@@ -23,7 +23,7 @@
 ! is refactorised (phase 22 + 33).  The time-step operator changes slowly, so
 ! one factorisation typically serves hundreds of steps with ~3 CGS iterations
 ! each: 2.7-3.4x faster full runs, results within 10^-6 of refactorising every
-! step (REPORTS_ALL/Parallelisation).  Statistics: pardiso_solve_finalize.
+! step (Simulations/REPORTS_ALL/Parallelisation).  Stats: pardiso_solve_finalize.
 !
 ! Conventions (CSR, 1-based, upper-triangular for symmetric problems):
 !   ia(n+1)  – row pointers  (1-based)
