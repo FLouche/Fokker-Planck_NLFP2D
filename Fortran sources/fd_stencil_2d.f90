@@ -141,10 +141,22 @@ SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
   Li = MIN(Li, nperp-6)
   Lj = MAX(1, j-3)
   Lj = MIN(Lj, npar-6)
+  ! Thread safety: callers may run this routine in OpenMP loops.  The cache is
+  ! always built in a serial pass first (the sparsity-pattern pass of every
+  ! solver), so in the parallel loops these tests only read it.  A rebuild, if
+  ! the grid ever changed, is serialised and re-tested inside the critical
+  ! section, so only one thread builds.
   IF (wc_nperp /= nperp .OR. wc_npar /= npar .OR. wc_dvpar /= dvpar) THEN
-    CALL wcache_build(nperp, npar, vperp, dvpar)
+    !$OMP CRITICAL (fd_wcache)
+    IF (wc_nperp /= nperp .OR. wc_npar /= npar .OR. wc_dvpar /= dvpar) &
+      CALL wcache_build(nperp, npar, vperp, dvpar)
+    !$OMP END CRITICAL (fd_wcache)
   ELSE IF (i == 2 .AND. j == 2) THEN
-    IF (ANY(wc_vperp /= vperp)) CALL wcache_build(nperp, npar, vperp, dvpar)
+    IF (ANY(wc_vperp /= vperp)) THEN
+      !$OMP CRITICAL (fd_wcache)
+      IF (ANY(wc_vperp /= vperp)) CALL wcache_build(nperp, npar, vperp, dvpar)
+      !$OMP END CRITICAL (fd_wcache)
+    END IF
   END IF
   wi = wc_wi(:,:,i)
   wj = wc_wj(:,:,j)

@@ -1337,8 +1337,10 @@ Open the Visual Studio solution
 \texttt{FP2D\_QLRF\_NL/FP2D\_QLRF\_NL.sln} and build the
 \texttt{Release|x64} configuration.  The compiler is Intel \texttt{ifx}
 with Intel MKL; the Release build links the \emph{threaded} MKL, so the
-sparse solver PARDISO runs in parallel (the Debug build uses the sequential
-MKL).  The executable is placed at
+sparse solver PARDISO runs in parallel, and is compiled with OpenMP, which
+parallelises the code's own loops over the grid: the matrix assembly, the
+self-collision potentials and the per-step diagnostics (the Debug build is
+sequential).  The executable is placed at
 \texttt{FP2D\_QLRF\_NL/x64/Release/FP2D\_QLRF\_NL.exe}.
 
 \paragraph{Number of threads.}  The code uses 16 threads by default (fewer on a
@@ -1346,14 +1348,17 @@ machine with fewer cores) and prints the number at start.  To change it, set the
 environment variable \texttt{MKL\_NUM\_THREADS} (or \texttt{OMP\_NUM\_THREADS})
 before running, e.g.\ \texttt{set MKL\_NUM\_THREADS=4} in a Windows command
 prompt.  MKL's own default, one thread per physical core, is slower than 8--16
-threads on a many-core machine, which is why the code sets its own.  On a $150\times150$ grid with
-nonlinear self-collisions and RF, 100 steps took 29.4~s sequentially, 13.5~s
-with 8 threads and 12.9~s with 16; the rest of the code is serial, so more
-threads gain little.  With one thread the results are identical to the
-sequential build; with more, they differ in the last digits (up to
-${\sim}10^{-5}$ of $\max f$ after 100 steps), because the parallel
-factorization eliminates in a different order.  When running several cases at
-once, give each only a few threads.
+threads on a many-core machine, which is why the code sets its own.  The OpenMP
+loops use the same number unless \texttt{OMP\_NUM\_THREADS} is set.  On a
+$150\times150$ grid with nonlinear self-collisions and RF, 100 steps took 29.4~s
+with the original sequential code and take 3.0~s now on 16 threads (with LU
+reuse, below); a full 900-step run takes 21~s.  The gain saturates at 8--16
+threads.  The OpenMP loops do not change the results; with one thread the
+results are identical to the sequential build, and with more the parallel
+factorization in MKL makes them differ in the last digits (up to
+${\sim}10^{-5}$ of $\max f$ after 100 steps), because it eliminates in a
+different order.  When running several cases at once, give each only a few
+threads.
 
 \paragraph{LU reuse.}\label{sec:lureuse}  The matrix $I - \theta\,\Delta t\,L$
 changes from step to step, but slowly.  With \texttt{i\_lu\_reuse = -1} (the

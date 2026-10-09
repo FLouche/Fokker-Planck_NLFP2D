@@ -169,6 +169,7 @@ CONTAINS
     REAL(dp) :: res, r, rmax, bmax
     INTEGER  :: i, p
     rmax = 0.0_dp; bmax = 0.0_dp
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(i, p, r) REDUCTION(MAX:rmax, bmax)
     DO i = 1, n
       r = b(i)
       DO p = ia(i), ia(i+1) - 1
@@ -177,6 +178,7 @@ CONTAINS
       rmax = MAX(rmax, ABS(r))
       bmax = MAX(bmax, ABS(b(i)))
     END DO
+    !$OMP END PARALLEL DO
     res = rmax / MAX(bmax, TINY(1.0_dp))
   END FUNCTION rel_residual
 

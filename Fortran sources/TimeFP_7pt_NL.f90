@@ -75,6 +75,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: stencil_coeff(49)
   INTEGER  :: n_entries
   REAL(dp) :: rhs_ij
+  LOGICAL  :: pattern_ok
 
   !--- Working vectors ---------------------------------------------
   REAL(dp), ALLOCATABLE :: rhs_vec(:), x_vec(:), Lf(:)
@@ -461,33 +462,44 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     all11 = all11 + sc11;  all20 = all20 + sc20;  all02 = all02 + sc02
 
     !--- 5c. Rebuild aa_L values only (ja_L pattern unchanged) -----
-    ptr = 1
+    ! Rows are filled in parallel: row (i,j) starts at ia_L(row) of the fixed
+    ! pattern, so no running pointer is needed.  A row whose entry count does
+    ! not match the pattern would corrupt the matrix: stop rather than go on.
+    pattern_ok = .TRUE.
+    !$OMP PARALLEL DO SCHEDULE(STATIC) DEFAULT(SHARED) &
+    !$OMP   PRIVATE(i, j, k, row, col_idx, stencil_coeff, n_entries, rhs_ij) &
+    !$OMP   REDUCTION(.AND.:pattern_ok)
     DO i = 1, nperp
       DO j = 1, npar
+        row = (i-1)*npar + j
         CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
                            all00(i,j), all10(i,j), all01(i,j), &
                            all20(i,j), all11(i,j), all02(i,j), &
                            col_idx, stencil_coeff, n_entries, rhs_ij)
         CALL sort_stencil(col_idx, stencil_coeff, n_entries)
-        DO k = 1, n_entries
-          aa_L(ptr) = stencil_coeff(k)
-          ptr = ptr + 1
-        END DO
+        IF (n_entries == ia_L(row+1) - ia_L(row)) THEN
+          DO k = 1, n_entries
+            aa_L(ia_L(row) + k - 1) = stencil_coeff(k)
+          END DO
+        ELSE
+          pattern_ok = .FALSE.
+        END IF
       END DO
     END DO
-    IF (itime == 1) THEN
-      IF (ptr-1 /= nnz_L) THEN
-        WRITE(*,'(A,I0,A,I0)') '  *** PATTERN MISMATCH: ptr-1=', ptr-1, ' nnz_L=', nnz_L
-      ELSE
-        WRITE(*,'(A,I0)')      '  Pattern OK: nnz_L=', nnz_L
-      END IF
-   !   WRITE(*,'(A,2ES14.5)')   '  aa_L min/max:', MINVAL(aa_L(1:nnz_L)), MAXVAL(aa_L(1:nnz_L))
+    !$OMP END PARALLEL DO
+    IF (.NOT. pattern_ok) THEN
+      WRITE(*,'(A,I0)') '  *** PATTERN MISMATCH in the matrix refill at step ', itime
+      STOP
     END IF
+    IF (itime == 1) WRITE(*,'(A,I0)') '  Pattern OK: nnz_L=', nnz_L
 
     !--- 5d. Rebuild aa_lhs = I - theta*dt*L ----------------------
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO ptr = 1, nnz_L
       aa_lhs(ptr) = -theta * timestep_cur * aa_L(ptr)
     END DO
+    !$OMP END PARALLEL DO
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       DO ptr = ia_lhs(row), ia_lhs(row+1)-1
         IF (ja_lhs(ptr) == row) THEN
@@ -496,7 +508,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         END IF
       END DO
     END DO
+    !$OMP END PARALLEL DO
     ! BC rows must remain constraints: restore them to the L stencil.
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
       IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
@@ -505,24 +519,29 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
         END DO
       END IF
     END DO
+    !$OMP END PARALLEL DO
     !IF (itime == 1) THEN
     !  WRITE(*,'(A,2ES14.5)') '  aa_lhs min/max:', MINVAL(aa_lhs(1:nnz_L)), MAXVAL(aa_lhs(1:nnz_L))
     !END IF
 
     !--- 5e. Build RHS: (I + (1-theta)*dt*L)*f^n + dt*S -----------
     CALL sparse_matvec_csr(ndof, ia_L, ja_L, aa_L, fstart, Lf)
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       rhs_vec(row) = fstart(row) &
                    + (1.0_dp - theta) * timestep_cur * Lf(row) &
                    + timestep_cur * source_v(row)
     END DO
+    !$OMP END PARALLEL DO
     ! BC rows are constraints: zero RHS so the BC is enforced exactly.
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
       IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
         rhs_vec(row) = 0.0_dp
       END IF
     END DO
+    !$OMP END PARALLEL DO
     !IF (itime == 1) THEN
     !  WRITE(*,'(A,2ES14.5)') '  ||fstart||, ||Lf||:', SQRT(SUM(fstart**2)), SQRT(SUM(Lf**2))
     !  WRITE(*,'(A,2ES14.5)') '  ||rhs||, ||rhs-f||:', SQRT(SUM(rhs_vec**2)), SQRT(SUM((rhs_vec-fstart)**2))
@@ -685,11 +704,13 @@ CONTAINS
     REAL(dp), INTENT(OUT) :: y(n)
     INTEGER :: row, ptr
     y = 0.0_dp
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr)
     DO row = 1, n
       DO ptr = ia(row), ia(row+1)-1
         y(row) = y(row) + aa(ptr) * x(ja(ptr))
       END DO
     END DO
+    !$OMP END PARALLEL DO
   END SUBROUTINE sparse_matvec_csr
 
   SUBROUTINE sort_stencil(idx, val, n)

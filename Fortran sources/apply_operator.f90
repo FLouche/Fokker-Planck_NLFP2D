@@ -39,6 +39,11 @@
 
     Lf_out = 0.0_dp
 
+    ! Rows are independent: each writes only Lf_out(row_loc).  Called ~8 times
+    ! per step by the power / density-term diagnostics, which made it the
+    ! largest serial cost once the linear solve was cheap.
+    !$OMP PARALLEL DO SCHEDULE(STATIC) DEFAULT(SHARED) &
+    !$OMP   PRIVATE(i_loc, j_loc, row_loc, k_loc, n_ent, rhs_loc, col_idx_loc, coeff_loc)
     DO i_loc = 1, nperp
       DO j_loc = 1, npar
 
@@ -56,6 +61,7 @@
 
       END DO
     END DO
+    !$OMP END PARALLEL DO
 
   END SUBROUTINE apply_operator
   

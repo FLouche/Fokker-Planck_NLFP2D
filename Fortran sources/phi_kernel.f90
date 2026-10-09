@@ -175,11 +175,18 @@ contains
     double precision, allocatable :: br(:,:), cr(:,:)
     integer :: i, ip, j, f, ix
 
-    allocate(buf(0:phi_m-1))
     allocate(ghat(nperp, 0:phi_nf-1), phat(nperp, 0:phi_nf-1))
+
+    ! Three independent sweeps (over v_perp columns, frequencies, v_perp
+    ! rows), each parallel; the implicit barrier after each !$OMP DO orders
+    ! them.  buf, br and cr are per-thread work arrays.  dgemm called inside
+    ! the parallel region runs single-threaded in MKL, as it should here.
+    !$OMP PARALLEL DEFAULT(SHARED) PRIVATE(buf, br, cr, i, ip, j, f, ix)
+    allocate(buf(0:phi_m-1))
     allocate(br(nperp, 2), cr(nperp, 2))
 
     ! ---- forward transform of each v_perp column of g -----------------
+    !$OMP DO SCHEDULE(STATIC)
     do ip = 1, nperp
       buf = (0.0_dp, 0.0_dp)
       do j = 1, npar
@@ -190,10 +197,12 @@ contains
         ghat(ip, f) = buf(f)
       end do
     end do
+    !$OMP END DO
 
     ! ---- one small real GEMM per frequency ----------------------------
     ! khat is real, ghat complex: apply it to the real and imaginary
     ! parts together as a single nperp x nperp by nperp x 2 product.
+    !$OMP DO SCHEDULE(STATIC)
     do f = 0, phi_nf-1
       do ip = 1, nperp
         br(ip, 1) = dble(ghat(ip, f))
@@ -205,8 +214,10 @@ contains
         phat(i, f) = cmplx(cr(i,1), cr(i,2), dp)
       end do
     end do
+    !$OMP END DO
 
     ! ---- inverse transform, restoring the conjugate-even spectrum -----
+    !$OMP DO SCHEDULE(STATIC)
     do i = 1, nperp
       do f = 0, phi_nf-1
         buf(f) = phat(i, f)
@@ -220,8 +231,12 @@ contains
         psi(ix) = dble(buf(j-1)) / dble(phi_m)
       end do
     end do
+    !$OMP END DO
 
-    deallocate(buf, ghat, phat, br, cr)
+    deallocate(buf, br, cr)
+    !$OMP END PARALLEL
+
+    deallocate(ghat, phat)
 
   end subroutine phi_kernel_matvec
 

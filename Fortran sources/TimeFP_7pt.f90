@@ -75,6 +75,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: stencil_coeff(49)
   INTEGER  :: n_entries
   REAL(dp) :: rhs_ij
+  LOGICAL  :: pattern_ok
 
   !--- Working vectors ---------------------------------------------
   REAL(dp), ALLOCATABLE :: rhs_vec(:), x_vec(:), Lf(:)
@@ -404,25 +405,43 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END IF
 
     !--- Rebuild aa_L values (ja_L pattern unchanged) ---------------
-    ptr = 1
+    ! Rows are filled in parallel: row (i,j) starts at ia_L(row) of the fixed
+    ! pattern, so no running pointer is needed.  A row whose entry count does
+    ! not match the pattern would corrupt the matrix: stop rather than go on.
+    pattern_ok = .TRUE.
+    !$OMP PARALLEL DO SCHEDULE(STATIC) DEFAULT(SHARED) &
+    !$OMP   PRIVATE(i, j, k, row, col_idx, stencil_coeff, n_entries, rhs_ij) &
+    !$OMP   REDUCTION(.AND.:pattern_ok)
     DO i = 1, nperp
       DO j = 1, npar
+        row = (i-1)*npar + j
         CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
                            all00(i,j), all10(i,j), all01(i,j), &
                            all20(i,j), all11(i,j), all02(i,j), &
                            col_idx, stencil_coeff, n_entries, rhs_ij)
         CALL sort_stencil(col_idx, stencil_coeff, n_entries)
-        DO k = 1, n_entries
-          aa_L(ptr) = stencil_coeff(k)
-          ptr = ptr + 1
-        END DO
+        IF (n_entries == ia_L(row+1) - ia_L(row)) THEN
+          DO k = 1, n_entries
+            aa_L(ia_L(row) + k - 1) = stencil_coeff(k)
+          END DO
+        ELSE
+          pattern_ok = .FALSE.
+        END IF
       END DO
     END DO
+    !$OMP END PARALLEL DO
+    IF (.NOT. pattern_ok) THEN
+      WRITE(*,'(A,I0)') '  *** PATTERN MISMATCH in the matrix refill at step ', itime
+      STOP
+    END IF
 
     !--- Rebuild aa_lhs = I - theta*dt*L (with BC restoration) -----
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO ptr = 1, nnz_L
       aa_lhs(ptr) = -theta * timestep_cur * aa_L(ptr)
     END DO
+    !$OMP END PARALLEL DO
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       DO ptr = ia_lhs(row), ia_lhs(row+1)-1
         IF (ja_lhs(ptr) == row) THEN
@@ -431,6 +450,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END IF
       END DO
     END DO
+    !$OMP END PARALLEL DO
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
       IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
@@ -439,6 +460,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END DO
       END IF
     END DO
+    !$OMP END PARALLEL DO
 
     !--- Build RHS = (I + (1-theta)*dt*L) * f^n + dt * S ----------
     !
@@ -450,20 +472,24 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     CALL sparse_matvec_csr(ndof, ia_L, ja_L, aa_L, fstart, Lf)
 
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       rhs_vec(row) = fstart(row) &
                    + (1.0_dp - theta) * timestep_cur * Lf(row) &
                    + timestep_cur * source_v(row)
     END DO
+    !$OMP END PARALLEL DO
 
     ! BC rows are constraints: RHS must be zero so the solver enforces
     ! the BC exactly (df/dvp=0 or f=0) at every time step.
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
       IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
         rhs_vec(row) = 0.0_dp
       END IF
     END DO
+    !$OMP END PARALLEL DO
 
     !--- Solve M_lhs * f^{n+1} = rhs  (phase 33 only) -------------
     CALL pardiso_solve_step(handle_lhs, aa_lhs, ia_lhs, ja_lhs, &
@@ -725,11 +751,13 @@ CONTAINS
     REAL(dp), INTENT(OUT) :: y(n)
     INTEGER :: row, ptr
     y = 0.0_dp
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr)
     DO row = 1, n
       DO ptr = ia(row), ia(row+1)-1
         y(row) = y(row) + aa(ptr) * x(ja(ptr))
       END DO
     END DO
+    !$OMP END PARALLEL DO
   END SUBROUTINE sparse_matvec_csr
 
   !----------------------------------------------------------------

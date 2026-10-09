@@ -161,6 +161,7 @@ use func_index
 !
 use mod_ncint
 use time_comps_mod        ! explicit interface for time_energy(..., teff=)
+!$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
 
@@ -353,6 +354,12 @@ else
     write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
                         '  (from MKL_NUM_THREADS / OMP_NUM_THREADS)'
 endif
+! The code's own OpenMP loops (Release build, /Qopenmp) use the same count,
+! unless OMP_NUM_THREADS sets theirs explicitly: the OpenMP default would be
+! every logical CPU (128 on the Threadripper), far too many for these loops.
+call get_environment_variable('OMP_NUM_THREADS', status=env_status)
+!$ if (env_status /= 0) call omp_set_num_threads(mkl_get_max_threads())
+!$ write(*,'(A,I0)') ' OpenMP threads: ', omp_get_max_threads()
 
 call cpu_time(start_time)
 call system_clock(clock_start, clock_rate)
