@@ -26,7 +26,7 @@
     use shared_grid
     use shared_beam
     
-    USE mod_fd_stencil_2d, ONLY: fd_stencil_2d
+    USE mod_fd_stencil_sel, ONLY: fd_stencil_sel, stencil_nnz_per_row   ! STUDY: 3- vs 7-point stencil (branch stencil-study-2)
   
     IMPLICIT NONE
 
@@ -64,7 +64,7 @@
   ! 0. Sizes
   !================================================================
   ndof    = nperp * npar
-  nnz_max = ndof * 49
+  nnz_max = ndof * stencil_nnz_per_row()   ! STUDY: was ndof * 49
   row_ref = (imid-1)*npar + jmid 
   write(*,*) 'row_ref = ',row_ref! global row of the constraint
 
@@ -97,7 +97,7 @@
         CYCLE
       END IF
 
-      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+      CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                    A(i,j), B(i,j), C(i,j),           &
                    D(i,j), E(i,j), F(i,j),           &
                    col_idx, stencil_coeff, n_entries, rhs_ij)
@@ -130,7 +130,7 @@
         CYCLE
       END IF
 
-      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+      CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                    A(i,j), B(i,j), C(i,j),           &
                    D(i,j), E(i,j), F(i,j),           &
                    col_idx, stencil_coeff, n_entries, rhs_ij)

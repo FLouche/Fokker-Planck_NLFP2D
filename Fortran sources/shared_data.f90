@@ -62,6 +62,11 @@ integer :: nstep_restart = 0  ! Time steps already done before this run: the
                               ! continues the previous run's numbering instead
                               ! of overwriting its files.
 
+! STUDY (branch stencil-study-2): 3- vs 7-point stencil comparison
+integer :: stencil = 7    ! finite-difference stencil width:
+                          !  7: 7-point Fornberg (mod_fd_stencil_2d) -- production
+                          !  3: 3-point centred (mod_fd_stencil_2d_3) -- study only
+
 end module shared_grid
 
 !***************************************

@@ -18,7 +18,7 @@
   !================================================================
   SUBROUTINE apply_operator(a20, a02, a11, a10, a01, a00, f_in, Lf_out)
   
-  USE mod_fd_stencil_2d     ! provides fd_stencil_2d
+  USE mod_fd_stencil_sel              ! STUDY: 3- vs 7-point stencil (branch stencil-study-2)
   USE shared_grid
   
     IMPLICIT NONE
@@ -44,7 +44,7 @@
 
         row_loc = (i_loc-1)*npar + j_loc
 
-        CALL fd_stencil_2d(i_loc, j_loc, nperp, npar, vperp, dvpar, &
+        CALL fd_stencil_sel(i_loc, j_loc, nperp, npar, vperp, dvpar, &
                            a00(i_loc,j_loc), a10(i_loc,j_loc), a01(i_loc,j_loc), &
                            a20(i_loc,j_loc), a11(i_loc,j_loc), a02(i_loc,j_loc), &
                            col_idx_loc, coeff_loc, n_ent, rhs_loc)

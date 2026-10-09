@@ -282,7 +282,8 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap
+                i_upwind, n_snap, &
+                stencil       ! STUDY: 3- vs 7-point stencil (branch stencil-study-2)
 
 
 !write(*,*) 'Read namelist'
@@ -308,6 +309,20 @@ namelist /INPUT/ casename, &
 core_frac = 4.0d-3
 
 read(5,INPUT)
+
+! STUDY (branch stencil-study-2): 3- vs 7-point stencil comparison
+if (stencil /= 7 .and. stencil /= 3) then
+    write(*,'(A,I0,A)') 'ERROR: stencil=', stencil, ' is not valid. Use 7 (production) or 3 (study).'
+    stop
+endif
+if (stencil == 3) then
+    write(*,*) '*** 3-POINT STENCIL ACTIVE (comparison study, branch stencil-study-2) ***'
+    if (i_upwind /= 0) then
+        write(*,'(A,I0,A)') 'ERROR: stencil=3 has no upwind/power-law variant; i_upwind=', &
+                            i_upwind, ' is meaningless here.'
+        stop
+    endif
+endif
 
 ! isc=-1, isc=2 and isc=3 require a time-dependent run
 if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
