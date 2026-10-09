@@ -1,0 +1,71 @@
+&INPUT
+! ==========================================================================
+!  Typical namelist for the parallelised version (branch "parallelised").
+!
+!  ITER EDA, second-harmonic (N=2) ICRF heating of tritium, nonlinear
+!  self-collisions, 150 x 150 grid -- the reference case of
+!  Benchmark runs/ITER-RF/ITER-RF-N=2/nominal/nominal_#2--REF, used for all
+!  the timings in Simulations/REPORTS_ALL/Parallelisation.
+!
+!  Run (Release build):   FP2D_QLRF_NL.exe < example_namelist_ITER_N2.txt
+!  Threads: 16 by default for MKL (PARDISO) and the OpenMP loops; change with
+!  "set MKL_NUM_THREADS=8" (both) or OMP_NUM_THREADS (OpenMP loops only).
+!  On a 64-core Threadripper this run stops at convergence after 900 steps
+!  (t = 12.5 s) in about 21 s, with 2 matrix factorisations in all.
+! ==========================================================================
+
+   casename = 'ITER_N2_example',
+
+! ---- Grid ----------------------------------------------------------------
+!  Power-law v_perp grid (ising=1, exponent p_grid, default 2): keep it for
+!  nonlinear self-collisions -- grids uniform near the axis give a much
+!  larger SC particle error.
+   nperp = 150, npar = 150,
+   vperp_min = 0.d0,  vperp_max = 3.d7,
+   vpar_min = -8.d6,  vpar_max  = 8.d6,
+   ising = 1, nsing = 25, vbound = 0.07d6, p_grid = 2.d0,
+
+! ---- Background plasma: electrons + D, resonant T at 50% -------------------
+   nbulk = 2,
+   t  = 12.d3, 12.d3, 8*0.d0,
+   aa = 3.d0, ab = 2.d0, 8*0.d0,
+   za = 1.d0, zb = 1.d0, 8*0.d0,
+   ne = 15.d19, xpart = 50.d-2,
+   xb = .50d0, 8*0.d0,
+
+! ---- NBI source (off; values unused) ----------------------------------------
+   isource = 0,
+   beam_ekin = 120.d0, beam_angle_deg = 0.d0,
+   beam_dvperp = 0.12d6, beam_dvpar = 0.2d6,
+   taus = 200.d-3,
+
+! ---- RF: second harmonic, 60.9 MHz, B0 = 6 T --------------------------------
+   irf = -1, eplus = (1.3d3,1.0d2), emin = (3.9d3,1.0d0), kperp = (40.d0,0.d0),
+   kpar = 2.d0, frek = 60.9d6, delta_RF = 2.5d6, b0 = 6.d0, nharm = 2,
+
+! ---- Time integration: three phases of increasing time step -----------------
+!  icn=1: theta = 0.75.  isc=-1: nonlinear self-collisions.
+   icn = 1, ntimes = 500, 1000, 1000, timestep = 5.d-3, 25.d-3, 50.d-3,
+   iold = 0, istart = 1, isc = -1,
+
+! ---- Linear solver (parallelised version) -----------------------------------
+!  i_lu_reuse=-1: reuse the last LU factorisation as preconditioner of a few
+!  CGS iterations, refactorise only when the true residual exceeds
+!  max(lu_reuse_tol, 10 x that of the last direct solve).  2.7-3.4x faster
+!  than i_lu_reuse=0 (refactorise every step), results within ~1e-6.
+!  The end of the run prints the number of factorisations.
+   i_lu_reuse = -1, lu_reuse_tol = 1.d-10,
+
+! ---- Steady-state convergence detection -------------------------------------
+!  Shape criterion (i_conv_shape=-1): this sourceless run slowly drains
+!  through the walls, so the amplitude-based rates would never converge.
+   i_ss_check = -1, n_ss_window = 50,
+   ss_tol_eps = 8.d-4, ss_tol_tail = 5.d-3, ss_tol_moment = 5.d-4,
+   i_conv_shape = -1,
+
+! ---- Output ------------------------------------------------------------------
+!  iplot_pow=-1: power and per-term density traces every step.  n_snap=0: no
+!  VDF snapshots (set e.g. n_snap=20 for fp2d_plot.py --movie).
+   iplot_pow = -1, iplot_mom = 0, notxt = 0,
+   i_upwind = 0, n_snap = 0
+  /

@@ -39,7 +39,7 @@ Never batch unrelated changes into a single commit. Never commit build outputs, 
 ```
 FP2D_QLRF_NL.exe < <case>.dat
 ```
-No example namelists are checked into the repo; supply your own `&INPUT` file (see the `namelist /INPUT/` declaration in `main-FP_Coll_2D.f90` for the full parameter list).
+A commented example, `example_namelist_ITER_N2.txt` (project root, branch `parallelised`), runs the ITER N=2 reference case with every current parameter, including `i_lu_reuse`/`lu_reuse_tol`; on 16 threads it converges at step 900 in ~21 s with 2 factorisations. The namelists of the reference runs are under `Benchmark runs/`. For the full parameter list see the `namelist /INPUT/` declaration in `main-FP_Coll_2D.f90`.
 
 There is no test suite; correctness is verified by inspecting the output files (`density_vs_time.txt`, `energy_vs_time.txt`, `fout.txt`, etc.) and checking power/density balance diagnostics printed to stdout.
 
