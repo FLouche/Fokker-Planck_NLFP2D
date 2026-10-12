@@ -124,7 +124,8 @@ CONTAINS
 
     ! Common overrides
     h%iparm(1)  = 1      ! non-default settings
-    h%iparm(2)  = 3      ! METIS reordering
+    h%iparm(2)  = 3      ! fill-reducing reordering: parallel (OpenMP) nested dissection,
+                         ! a METIS-type algorithm (0 = minimum degree, 2 = serial METIS)
     h%iparm(8)  = 10     ! max iterative refinement steps
     h%iparm(10) = 13     ! pivot perturbation (10^{-13})
     h%iparm(11) = 1      ! scaling (useful for non-symmetric)
@@ -148,7 +149,8 @@ CONTAINS
     ! Manual iparm initialisation (safe fallback)
     h%iparm     = 0
     h%iparm(1)  = 1
-    h%iparm(2)  = 3      ! METIS reordering
+    h%iparm(2)  = 3      ! fill-reducing reordering: parallel (OpenMP) nested dissection,
+                         ! a METIS-type algorithm (0 = minimum degree, 2 = serial METIS)
     h%iparm(4)  = 0      ! direct algorithm
     h%iparm(5)  = 0      ! user permutation ignored
     h%iparm(6)  = 0      ! write solution to x
