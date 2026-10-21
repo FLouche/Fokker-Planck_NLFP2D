@@ -9,6 +9,7 @@
 !
 !  Run (Release build):   FP2D_QLRF_NL.exe < example_namelist_ITER_N2.txt
 !  Threads: 16 by default for MKL (PARDISO) and the OpenMP loops; change with
+!  n_threads below (both; overrides the environment), or with
 !  "set MKL_NUM_THREADS=8" (both) or OMP_NUM_THREADS (OpenMP loops only).
 !  On a 64-core Threadripper this run stops at convergence after 900 steps
 !  (t = 12.5 s) in about 21 s, with 2 matrix factorisations in all.
@@ -55,6 +56,10 @@
 !  than i_lu_reuse=0 (refactorise every step), results within ~1e-6.
 !  The end of the run prints the number of factorisations.
    i_lu_reuse = -1, lu_reuse_tol = 1.d-10,
+!  n_threads=0: 16 threads, or MKL_NUM_THREADS if set.  n_threads=1 is the
+!  sequential solver (reproducible bit for bit); more threads differ from it
+!  in the last digits.  Gains saturate at 8-16 threads.
+   n_threads = 0,
 
 ! ---- Steady-state convergence detection -------------------------------------
 !  Shape criterion (i_conv_shape=-1): this sourceless run slowly drains

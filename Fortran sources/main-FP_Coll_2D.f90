@@ -213,6 +213,11 @@ integer(8) :: clock_start, clock_end, clock_rate   ! wall clock (system_clock)
 ! MKL_NUM_THREADS nor OMP_NUM_THREADS is set.  No-ops in the sequential MKL.
 integer, parameter :: mkl_threads_default = 16
 integer :: env_status
+! Namelist n_threads: threads for MKL (PARDISO) and the OpenMP loops.  0 (the
+! default) keeps the rule above; n > 0 uses n threads for both and overrides
+! MKL_NUM_THREADS / OMP_NUM_THREADS.  n_threads = 1 is the sequential solver:
+! bit-identical to the sequential build, and reproducible from run to run.
+integer :: n_threads = 0
 integer, external :: mkl_get_max_threads
 external mkl_set_num_threads
 
@@ -293,7 +298,7 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol
+                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads
 
 
 !write(*,*) 'Read namelist'
@@ -342,23 +347,37 @@ endif
 
 twopi=2.d0*pi
 
-! Thread count for MKL (PARDISO): the user's MKL_NUM_THREADS / OMP_NUM_THREADS
-! if set, otherwise mkl_threads_default (capped at what MKL would use).
-call get_environment_variable('MKL_NUM_THREADS', status=env_status)
-if (env_status /= 0) call get_environment_variable('OMP_NUM_THREADS', status=env_status)
-if (env_status /= 0) then
-    call mkl_set_num_threads(min(mkl_threads_default, mkl_get_max_threads()))
-    write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
-                        '  (default; set MKL_NUM_THREADS to change)'
-else
-    write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
-                        '  (from MKL_NUM_THREADS / OMP_NUM_THREADS)'
+! Thread count for MKL (PARDISO) and the OpenMP loops.  n_threads > 0 in the
+! namelist sets both and overrides the environment.  Otherwise MKL takes the
+! user's MKL_NUM_THREADS / OMP_NUM_THREADS if set, else mkl_threads_default
+! (capped at what MKL would use), and the OpenMP loops follow MKL.
+if (n_threads < 0) then
+    write(*,'(A,I0,A)') 'ERROR: n_threads=', n_threads, &
+                        ' is not valid. Use 0 (default) or a positive thread count.'
+    stop
 endif
-! The code's own OpenMP loops (Release build, /Qopenmp) use the same count,
-! unless OMP_NUM_THREADS sets theirs explicitly: the OpenMP default would be
-! every logical CPU (128 on the Threadripper), far too many for these loops.
-call get_environment_variable('OMP_NUM_THREADS', status=env_status)
-!$ if (env_status /= 0) call omp_set_num_threads(mkl_get_max_threads())
+if (n_threads > 0) then
+    call mkl_set_num_threads(n_threads)
+    !$ call omp_set_num_threads(n_threads)
+    write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
+                        '  (from namelist n_threads)'
+else
+    call get_environment_variable('MKL_NUM_THREADS', status=env_status)
+    if (env_status /= 0) call get_environment_variable('OMP_NUM_THREADS', status=env_status)
+    if (env_status /= 0) then
+        call mkl_set_num_threads(min(mkl_threads_default, mkl_get_max_threads()))
+        write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
+                            '  (default; set n_threads or MKL_NUM_THREADS to change)'
+    else
+        write(*,'(A,I0,A)') ' MKL threads: ', mkl_get_max_threads(), &
+                            '  (from MKL_NUM_THREADS / OMP_NUM_THREADS)'
+    endif
+    ! The code's own OpenMP loops (Release build, /Qopenmp) use the same count,
+    ! unless OMP_NUM_THREADS sets theirs explicitly: the OpenMP default would be
+    ! every logical CPU (128 on the Threadripper), far too many for these loops.
+    call get_environment_variable('OMP_NUM_THREADS', status=env_status)
+    !$ if (env_status /= 0) call omp_set_num_threads(mkl_get_max_threads())
+endif
 !$ write(*,'(A,I0)') ' OpenMP threads: ', omp_get_max_threads()
 
 call cpu_time(start_time)

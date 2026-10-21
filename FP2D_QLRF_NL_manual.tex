@@ -1056,6 +1056,14 @@ lu\_reuse\_tol & $10^{-10}$ &
   10\,r_\mathrm{direct})$, with $r_\mathrm{direct}$ the residual of the latest
   direct solve.  Values below ${\sim}10^{-11}$ make every step refactorise. \\[4pt]
 
+n\_threads & $0$ &
+  Number of threads for MKL (PARDISO) and the OpenMP loops (Release build).
+  $0$: \texttt{MKL\_NUM\_THREADS} / \texttt{OMP\_NUM\_THREADS} if set, otherwise
+  16.  $n>0$: $n$ threads for both, overriding the environment.  $1$ is the
+  sequential code: results identical to the sequential (Debug) build and
+  reproducible from run to run; with more threads they differ in the last
+  digits.  No effect in the Debug build (Section~\ref{sec:threads}). \\[4pt]
+
 \end{longtable}
 
 % -------------------------------------------------------------------
@@ -1323,6 +1331,7 @@ default (off) values.
   i_upwind     = 0,
   i_lu_reuse   = -1,
   lu_reuse_tol = 1.d-10,
+  n_threads    = 0,      ! 0: 16, or MKL_NUM_THREADS; n > 0: n threads
 /
 \end{lstlisting}
 
@@ -1343,11 +1352,18 @@ self-collision potentials and the per-step diagnostics (the Debug build is
 sequential).  The executable is placed at
 \texttt{FP2D\_QLRF\_NL/x64/Release/FP2D\_QLRF\_NL.exe}.
 
-\paragraph{Number of threads.}  The code uses 16 threads by default (fewer on a
-machine with fewer cores) and prints the number at start.  To change it, set the
-environment variable \texttt{MKL\_NUM\_THREADS} (or \texttt{OMP\_NUM\_THREADS})
-before running, e.g.\ \texttt{set MKL\_NUM\_THREADS=4} in a Windows command
-prompt.  MKL's own default, one thread per physical core, is slower than 8--16
+\paragraph{Number of threads.}\label{sec:threads}  The code uses 16 threads by default (fewer on a
+machine with fewer cores) and prints the number at start.  To change it, set
+\texttt{n\_threads} in the namelist: \texttt{n\_threads = 4} uses four threads
+for both MKL (PARDISO) and the OpenMP loops, and overrides the environment.
+With \texttt{n\_threads = 0} (the default) the environment variable
+\texttt{MKL\_NUM\_THREADS} (or \texttt{OMP\_NUM\_THREADS}) is used if set before
+running, e.g.\ \texttt{set MKL\_NUM\_THREADS=4} in a Windows command prompt, and
+16 otherwise.  There is no separate sequential solver: \texttt{n\_threads = 1}
+is the sequential code, with results identical to the sequential (Debug) build
+and reproducible from run to run.  The thread count is chosen at run time; only
+the choice between threaded and sequential MKL is fixed at compilation (Release
+and Debug respectively).  MKL's own default, one thread per physical core, is slower than 8--16
 threads on a many-core machine, which is why the code sets its own.  The OpenMP
 loops use the same number unless \texttt{OMP\_NUM\_THREADS} is set.  On a
 $150\times150$ grid with nonlinear self-collisions and RF, 100 steps took 29.4~s
