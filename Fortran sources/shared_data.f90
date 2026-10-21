@@ -46,6 +46,12 @@ integer :: i_upwind = 0   ! v_perp convection-diffusion scheme in fd_stencil_2d:
                           !  1: Patankar (1980) power-law scheme, applied only in
                           !     cells with |B|dv/D > 2 (Fornberg kept in the bulk)
 
+! 3-point stencil comparison (ported from branch stencil-3pt-study, for the
+! filippos_case_1 comparison; not a production option):
+integer :: stencil = 7    ! finite-difference stencil width:
+                          !  7: 7-point Fornberg (mod_fd_stencil_2d) -- production
+                          !  3: 3-point centred (mod_fd_stencil_2d_3) -- study only
+
 integer :: n_snap = 0     ! VDF snapshots: write f every n_snap steps to
                           ! vdf_snap_<step>.txt (0 = off, the default).  Meant
                           ! for time-resolved moment diagnostics -- e.g. the

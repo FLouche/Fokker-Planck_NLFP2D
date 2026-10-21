@@ -30,7 +30,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
                           all11_lin, all20_lin, all02_lin, &
                           fstart, fout, otime)
 
-  USE mod_fd_stencil_2d
+  USE mod_fd_stencil_sel     ! 7- or 3-point (namelist stencil)
   USE pardiso_solver
   USE shared_grid
   USE shared_plasma
@@ -232,7 +232,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   DO i = 1, nperp
     DO j = 1, npar
       row = (i-1)*npar + j
-      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+      CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                          all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
                          all20_lin(i,j), &
                          MERGE(all11_lin(i,j), 1.0_dp, all11_lin(i,j) /= 0.0_dp), &
@@ -251,7 +251,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ptr = 1
   DO i = 1, nperp
     DO j = 1, npar
-      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+      CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                          all00_lin(i,j), all10_lin(i,j), all01_lin(i,j), &
                          all20_lin(i,j), &
                          MERGE(all11_lin(i,j), 1.0_dp, all11_lin(i,j) /= 0.0_dp), &
@@ -472,7 +472,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     DO i = 1, nperp
       DO j = 1, npar
         row = (i-1)*npar + j
-        CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+        CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                            all00(i,j), all10(i,j), all01(i,j), &
                            all20(i,j), all11(i,j), all02(i,j), &
                            col_idx, stencil_coeff, n_entries, rhs_ij)

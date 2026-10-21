@@ -293,7 +293,8 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol
+                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, &
+                stencil      ! 3-point stencil comparison (study only)
 
 
 !write(*,*) 'Read namelist'
@@ -319,6 +320,13 @@ namelist /INPUT/ casename, &
 core_frac = 4.0d-3
 
 read(5,INPUT)
+
+! 3-point stencil comparison (study only)
+if (stencil /= 7 .and. stencil /= 3) then
+    write(*,'(A,I0,A)') 'ERROR: stencil=', stencil, ' is not valid. Use 7 (production) or 3 (study).'
+    stop 1
+end if
+if (stencil == 3) write(*,*) '*** 3-POINT STENCIL ACTIVE (comparison study) ***'
 
 ! isc=-1, isc=2 and isc=3 require a time-dependent run
 if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then

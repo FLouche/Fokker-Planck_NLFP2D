@@ -26,7 +26,7 @@
     use shared_grid
     use shared_beam
     
-    USE mod_fd_stencil_2d, ONLY: fd_stencil_2d
+    USE mod_fd_stencil_sel, ONLY: fd_stencil_sel   ! 7- or 3-point (namelist stencil)
   
     IMPLICIT NONE
 
@@ -97,7 +97,7 @@
         CYCLE
       END IF
 
-      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+      CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                    A(i,j), B(i,j), C(i,j),           &
                    D(i,j), E(i,j), F(i,j),           &
                    col_idx, stencil_coeff, n_entries, rhs_ij)
@@ -130,7 +130,7 @@
         CYCLE
       END IF
 
-      CALL fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
+      CALL fd_stencil_sel(i, j, nperp, npar, vperp, dvpar, &
                    A(i,j), B(i,j), C(i,j),           &
                    D(i,j), E(i,j), F(i,j),           &
                    col_idx, stencil_coeff, n_entries, rhs_ij)
