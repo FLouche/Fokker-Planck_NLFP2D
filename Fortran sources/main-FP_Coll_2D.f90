@@ -15,7 +15,37 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
-    ! Final version - 5th October 2026 (FL)
+    ! Version 3.1 - 21st October 2026 (FL)
+
+    ! The parallelised version.  Same physics and equations as 3.0.  On one
+    !   thread with i_lu_reuse = 0 the results are those of 3.0; the default
+    !   LU reuse moves f by ~3e-8 of its maximum, and several threads change
+    !   the last digits (~1e-5).
+    !
+    !  1) Threads.  The Release build links the threaded MKL (PARDISO in
+    !     parallel) and compiles the code's own loops with OpenMP: the matrix
+    !     refill, the LHS/RHS rows, the stencil mat-vec of the diagnostics and
+    !     the phi-kernel matvec of the non-linear self-collisions.  16 threads by
+    !     default; new namelist entry n_threads (0 = default, or
+    !     MKL_NUM_THREADS / OMP_NUM_THREADS if set; n > 0 overrides both).
+    !     n_threads = 1 is the sequential code, bit-identical to the sequential
+    !     (Debug) build; with more threads results differ in the last digits
+    !     (~1e-5 of max f after 100 steps).  The Debug build stays sequential.
+    !
+    !  2) LU reuse (namelist i_lu_reuse, default -1; lu_reuse_tol = 1e-10).
+    !     The step matrix is refactorised only when a few CGS iterations
+    !     preconditioned with the last LU factors fail a true-residual check;
+    !     agreement with refactorising every step 3e-8 of max f (one thread),
+    !     <= 1e-6 in the time traces.  i_lu_reuse = 0 restores the 3.0 behaviour.
+    !
+    !  3) The Fornberg weights of fd_stencil_2d are cached (they depend on the
+    !     grid only); the run time is reported as wall clock.
+    !
+    !     ITER N=2 reference (150x150, isc=-1, RF): 100 steps 29.4 s with the
+    !     sequential 3.0 code -> 3.0 s on 16 threads; the full 900-step run now
+    !     takes 21 s.  Details in Simulations/REPORTS_ALL/Parallelisation.
+
+    ! Version 3.0 (final version) - 5th October 2026 (FL)
     
     
     ! Version 2.7 - 13th August 2026 (FL)
