@@ -13,7 +13,6 @@ use shared_grid
 use shared_plasma
 use shared_beam
 use shared_rf
-use mod_build_ss
 use shared_timer
 use shared_FPterms
 use mod_ncint
