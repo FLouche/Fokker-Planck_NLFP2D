@@ -167,7 +167,10 @@ enddo
 
 call test_power_balance_7pt(xout)
 call test_density_balance_7pt(xout)
-call test_momentum_balance_7pt(xout)
+! The momentum balances (perpendicular and parallel) are computed and printed
+! only when the momentum diagnostics are requested (iplot_mom = -1), as for the
+! momentum_*_vs_time traces.
+if (iplot_mom == -1) call test_momentum_balance_7pt(xout)
 
 
 
