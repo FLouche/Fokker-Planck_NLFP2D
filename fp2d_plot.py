@@ -6,9 +6,14 @@ Subcommands
 -----------
   run  <exe> <input.dat>   Execute the solver then plot all outputs.
   plot <outdir>            Plot from an existing output directory.
+  compare <outdir>         Overlay the same outputs of several cases.
 
-Options (both subcommands)
---------------------------
+Options (run and plot)
+----------------------
+  compare accepts --save, --show, --logf, --logx, --logy and --files from
+  this list (plus --cases, --xrange, --yrange below); the others are
+  run/plot only.
+
   --save DIR      Write PNG files to DIR (created if absent).
   --show          Open interactive matplotlib windows
                   (default when --save is not given).
