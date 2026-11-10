@@ -50,7 +50,7 @@ module mod_coul_fv
   private
   public :: cfv_build, cfv_fill, cfv_apply_species, cfv_density, bc_row, &
             coll_apply_species, coll_apply_total, cfv_set_sc, sc_apply, &
-            cfv_normalise_source
+            cfv_normalise_source, cfv_set_nl, cfv_nl_off
   public :: cfv_nnz, cfv_ia, cfv_ja
 
   integer, parameter :: dp = kind(1.d0)
@@ -64,6 +64,11 @@ module mod_coul_fv
   ! Maxwellian self-collisions: L_sc without gammaa, for vth_sc
   real(dp), allocatable, save :: val_sc(:)
   real(dp), save :: vth_sc = -1.0_dp, gam_sc = 0.0_dp
+  ! Nonlinear self-collisions (isc = -1): nodal D and A from main_nlterm
+  ! (factor included), and the matrix built from them each step
+  logical,  save :: nl_on = .false.
+  real(dp), allocatable, save :: val_nl(:)
+  real(dp), allocatable, save :: n_dpp(:,:), n_dpa(:,:), n_daa(:,:), n_ap(:,:), n_aa(:,:)
 
 contains
 
@@ -191,6 +196,65 @@ contains
     end do
   end subroutine par_face
 
+  !------------------------------------------------------------------
+  ! Chang-Cooper flux A f + D df/dv across one face of width h, for local
+  ! coefficients: G = cm f_- + cp f_+, with s = A h / D (exact for constant
+  ! A and D).  D <= 0 (should not happen) falls back to upwind drag.
+  !------------------------------------------------------------------
+  subroutine cc_pair(d, a, h, cm, cp)
+    real(dp), intent(in)  :: d, a, h
+    real(dp), intent(out) :: cm, cp
+    real(dp) :: s
+    if (d > 0.0_dp) then
+      s  = a * h / d
+      cm = -d/h * exp(log_bern(s))
+      cp =  d/h * exp(log_bern(-s))
+    else if (a >= 0.0_dp) then
+      cm = 0.0_dp;  cp = a
+    else
+      cm = a;       cp = 0.0_dp
+    end if
+  end subroutine cc_pair
+
+  ! Nonlinear self-collisions: v_perp face between (i,j) and (i+1,j),
+  ! coefficients averaged from the two nodes; same layout as perp_face
+  subroutine perp_face_nl(i, j, c)
+    integer,  intent(in)  :: i, j
+    real(dp), intent(out) :: c(0:1,-1:1)
+    real(dp) :: dpp, dpa, ap, w(-1:1)
+    integer  :: a, l
+    c   = 0.0_dp
+    dpp = 0.5_dp * (n_dpp(i,j) + n_dpp(i+1,j))
+    dpa = 0.5_dp * (n_dpa(i,j) + n_dpa(i+1,j))
+    ap  = 0.5_dp * (n_ap(i,j)  + n_ap(i+1,j))
+    call cc_pair(dpp, ap, vperp(i+1) - vperp(i), c(0,0), c(1,0))
+    call dva_weights(j, w)
+    do a = 0, 1
+      do l = -1, 1
+        c(a,l) = c(a,l) + 0.5_dp * dpa * w(l)
+      end do
+    end do
+  end subroutine perp_face_nl
+
+  ! Nonlinear self-collisions: v_par face between (i,j) and (i,j+1)
+  subroutine par_face_nl(i, j, c)
+    integer,  intent(in)  :: i, j
+    real(dp), intent(out) :: c(-1:1,0:1)
+    real(dp) :: daa, dpa, apa, w(-1:1)
+    integer  :: k, m
+    c   = 0.0_dp
+    daa = 0.5_dp * (n_daa(i,j) + n_daa(i,j+1))
+    dpa = 0.5_dp * (n_dpa(i,j) + n_dpa(i,j+1))
+    apa = 0.5_dp * (n_aa(i,j)  + n_aa(i,j+1))
+    call cc_pair(daa, apa, dvpar, c(0,0), c(0,1))
+    call dvp_weights(i, w)
+    do m = 0, 1
+      do k = -1, 1
+        c(k,m) = c(k,m) + 0.5_dp * dpa * w(k)
+      end do
+    end do
+  end subroutine par_face_nl
+
   ! d/dvpar at node column j: central inside, one-sided at the walls
   subroutine dva_weights(j, w)
     integer,  intent(in)  :: j
@@ -223,13 +287,19 @@ contains
 
   !------------------------------------------------------------------
   ! Matrix values, on the fixed pattern, of the operator for a Maxwellian
-  ! background (vth, mrat), without its gamma factor.  Rows are independent.
+  ! background (vth, mrat), without its gamma factor; or, with nl, of the
+  ! nonlinear self-collision operator from the nodal n_* arrays (vth and
+  ! mrat unused).  Rows are independent.
   !------------------------------------------------------------------
-  subroutine op_values(vth, mrat, v)
+  subroutine op_values(vth, mrat, v, nl)
     real(dp), intent(in)  :: vth, mrat
     real(dp), intent(out) :: v(:)
+    logical,  intent(in), optional :: nl
     integer  :: i, j, row, p, ip, jp, a, m
     real(dp) :: acc(-1:1,-1:1), cp(0:1,-1:1), ca(-1:1,0:1), ri, wj
+    logical  :: use_nl
+    use_nl = .false.
+    if (present(nl)) use_nl = nl
     !$OMP PARALLEL DO SCHEDULE(STATIC) &
     !$OMP   PRIVATE(i, j, row, p, ip, jp, a, m, acc, cp, ca, ri, wj)
     do i = 1, nperp
@@ -244,25 +314,41 @@ contains
         if (j == 1 .or. j == npar) wj = 0.5_dp * dvpar
         acc = 0.0_dp
         if (i < nperp) then                         ! outer v_perp face
-          call perp_face(i, j, vth, mrat, cp)
+          if (use_nl) then
+            call perp_face_nl(i, j, cp)
+          else
+            call perp_face(i, j, vth, mrat, cp)
+          end if
           do a = 0, 1
             acc(a,:) = acc(a,:) + eface(i)/ri * cp(a,:)
           end do
         end if
         if (i > 1) then                             ! inner v_perp face
-          call perp_face(i-1, j, vth, mrat, cp)
+          if (use_nl) then
+            call perp_face_nl(i-1, j, cp)
+          else
+            call perp_face(i-1, j, vth, mrat, cp)
+          end if
           do a = 0, 1
             acc(a-1,:) = acc(a-1,:) - eface(i-1)/ri * cp(a,:)
           end do
         end if
         if (j < npar) then                          ! upper v_par face
-          call par_face(i, j, vth, mrat, ca)
+          if (use_nl) then
+            call par_face_nl(i, j, ca)
+          else
+            call par_face(i, j, vth, mrat, ca)
+          end if
           do m = 0, 1
             acc(:,m) = acc(:,m) + ca(:,m)/wj
           end do
         end if
         if (j > 1) then                             ! lower v_par face
-          call par_face(i, j-1, vth, mrat, ca)
+          if (use_nl) then
+            call par_face_nl(i, j-1, ca)
+          else
+            call par_face(i, j-1, vth, mrat, ca)
+          end if
           do m = 0, 1
             acc(:,m-1) = acc(:,m-1) - ca(:,m)/wj
           end do
@@ -405,7 +491,39 @@ contains
   end subroutine cfv_set_sc
 
   !------------------------------------------------------------------
-  ! aa = sum_b gammab(b) L_b (+ gammaa L_sc) - taum on the diagonal;
+  ! Nonlinear self-collisions: nodal D (pp, pa, aa) and drag A (p, a) from
+  ! main_nlterm, factor included.  The operator is conservative whatever
+  ! the coefficients; its steady state is Maxwellian only as far as the
+  ! numerical potentials make A = (m/T) D.v.
+  !------------------------------------------------------------------
+  subroutine cfv_set_nl(dpp, dpa, daa, ap, apa)
+    real(dp), intent(in), dimension(nperp,npar) :: dpp, dpa, daa, ap, apa
+    logical, save :: warned = .false.
+    integer :: nneg
+    call cfv_build()
+    if (.not. allocated(val_nl)) then
+      allocate(val_nl(cfv_nnz))
+      allocate(n_dpp(nperp,npar), n_dpa(nperp,npar), n_daa(nperp,npar), &
+               n_ap(nperp,npar), n_aa(nperp,npar))
+    end if
+    n_dpp = dpp;  n_dpa = dpa;  n_daa = daa;  n_ap = ap;  n_aa = apa
+    call op_values(1.0_dp, 1.0_dp, val_nl, nl=.true.)
+    nl_on = .true.
+    nneg = count(dpp <= 0.0_dp) + count(daa <= 0.0_dp)
+    if (nneg > 0 .and. .not. warned) then
+      write(*,'(A,I0,A)') '  Nonlinear SC, flux form: ', nneg, &
+            ' nodal D_pp or D_aa <= 0 (faces there use upwind drag); reported once'
+      warned = .true.
+    end if
+  end subroutine cfv_set_nl
+
+  ! no nonlinear self-collision term this step (NBI fill-up from f = 0)
+  subroutine cfv_nl_off()
+    nl_on = .false.
+  end subroutine cfv_nl_off
+
+  !------------------------------------------------------------------
+  ! aa = sum_b gammab(b) L_b (+ gammaa L_sc, + L_nl) - taum on the diagonal;
   ! Dirichlet rows = 1
   !------------------------------------------------------------------
   subroutine cfv_fill(aa, taum)
@@ -421,6 +539,7 @@ contains
         aa(p) = aa(p) + gammab(b) * val(p,b)
       end do
       if (sc) aa(p) = aa(p) + gam_sc * val_sc(p)
+      if (nl_on) aa(p) = aa(p) + val_nl(p)
     end do
     !$OMP END PARALLEL DO
     do row = 1, nbig
@@ -542,7 +661,9 @@ contains
     real(dp), intent(in)  :: f(nbig)
     real(dp), intent(out) :: Lf(nbig)
     if (i_cc == -1) then
-      if (allocated(val_sc)) then
+      if (nl_on) then                              ! isc = -1
+        call csr_apply(val_nl, 1.0_dp, f, Lf)
+      else if (allocated(val_sc)) then             ! isc = 1, 2, 3
         call csr_apply(val_sc, gam_sc, f, Lf)
       else
         Lf = 0.0_dp

@@ -17,7 +17,8 @@
             
     contains
     
-    subroutine main_nlterm(xout,teff,sc00,sc10,sc01,sc20,sc11,sc02)
+    subroutine main_nlterm(xout,teff,sc00,sc10,sc01,sc20,sc11,sc02, &
+                           d_pp,d_pa,d_aa,a_p,a_a)
     
     use shared_grid
     use mod_grid
@@ -39,6 +40,9 @@
     double precision, dimension (nperp,npar):: d3psidpe3, d3psidpepa2,d3psidpe2pa,d3psidpa3
     double precision, dimension (nperp,npar):: Lphi_radial
     double precision, intent(out), dimension (nperp,npar):: sc00,sc10,sc01,sc20,sc11,sc02
+    ! Flux-form coefficients at the nodes (i_cc = -1): diffusion D = coef grad grad psi
+    ! and drag A = -coef grad phi, so that L f = div(A f + D.grad f)
+    double precision, intent(out), dimension (nperp,npar), optional :: d_pp,d_pa,d_aa,a_p,a_a
         
 !integer, parameter :: dp = selected_real_kind(15, 307)
     integer ipe,ipa,ix
@@ -197,6 +201,11 @@ cte0=gamma0*lnaa*(za/aa)**2
         enddo
     enddo
 
+    if (present(d_pp)) d_pp = coef*d2psidpe2
+    if (present(d_pa)) d_pa = coef*d2psidpepa
+    if (present(d_aa)) d_aa = coef*d2psidpa2
+    if (present(a_p))  a_p  = -coef*dphidpe
+    if (present(a_a))  a_a  = -coef*dphidpa
 
     end subroutine main_nlterm
     

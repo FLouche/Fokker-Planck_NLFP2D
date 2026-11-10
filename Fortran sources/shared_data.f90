@@ -48,8 +48,8 @@ integer :: i_upwind = 0   ! v_perp convection-diffusion scheme in fd_stencil_2d:
 integer :: i_cc = 0       ! Coulomb operator discretisation:
                           !  0: expanded form, 7-point Fornberg (default)
                           ! -1: flux form, finite volumes with Chang-Cooper
-                          !     weights (coul_fv.f90), with the Maxwellian
-                          !     self-collisions; needs irf = 0, isc /= -1
+                          !     weights (coul_fv.f90), with the self-
+                          !     collisions (any isc); needs irf = 0
 integer :: i_cc_wall = -1 ! walls with i_cc = -1: -1 zero flux (closed box),
                           !  0 Dirichlet f = 0 at vperp_max and vpar_min/max
 

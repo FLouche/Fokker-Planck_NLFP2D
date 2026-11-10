@@ -31,6 +31,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
                           fstart, fout, otime)
 
   USE mod_fd_stencil_2d
+  USE mod_coul_fv            ! flux-form collision operators (i_cc = -1)
   USE pardiso_solver
   USE shared_grid
   USE shared_plasma
@@ -82,6 +83,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   !--- Total coefficients (linear + self-collision, updated each step) ---
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
+  !--- i_cc = -1: nodal flux-form coefficients of the self-collisions ---
+  REAL(dp), ALLOCATABLE, DIMENSION(:,:) :: nl_dpp, nl_dpa, nl_daa, nl_ap, nl_aa
 
   !--- Scalars and temporaries -------------------------------------
   REAL(dp) :: theta
@@ -223,6 +226,17 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !     positions as all**_lin, so ia_L/ja_L never change.
   !================================================================
 
+  IF (i_cc == -1) THEN
+    !--- Flux form: fixed 3x3 pattern from coul_fv ------------------
+    CALL cfv_build()
+    nnz_L = cfv_nnz
+    ia_L  = cfv_ia
+    ja_L(1:nnz_L) = cfv_ja
+    CALL cfv_fill(aa_L(1:nnz_L), taum)
+    ALLOCATE(nl_dpp(nperp,npar), nl_dpa(nperp,npar), nl_daa(nperp,npar), &
+             nl_ap(nperp,npar), nl_aa(nperp,npar))
+  ELSE
+
   !--- Pass 1: count non-zeros per row ----------------------------
   ! Use sentinel 1.0 for E_ij when all11_lin=0 so the pattern always
   ! includes mixed-derivative off-diagonal entries.  sc11 is added in
@@ -265,6 +279,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       END DO
     END DO
   END DO
+
+  END IF   ! i_cc
 
   !WRITE(*,'(A,I10,A,F6.2,A)') '  L operator (7-pt NL): nnz=', nnz_L, &
    !   '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
@@ -393,6 +409,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END DO
   CALL time_density(f_init, dens_tmp)
   WRITE(*,*) 'Initial density is ', dens_tmp
+  IF (i_cc == -1) WRITE(*,'(A,ES22.14)') &
+      '  Initial density on the finite-volume cells : ', cfv_density(fstart)
 
   CALL time_energy(f_init, dens_tmp, teff=teff_tmp)
   WRITE(*,*) 'Initial effective temperature is ', teff_tmp
@@ -430,6 +448,12 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart) THEN
       sc00 = 0.0_dp;  sc10 = 0.0_dp;  sc01 = 0.0_dp
       sc20 = 0.0_dp;  sc11 = 0.0_dp;  sc02 = 0.0_dp
+      IF (i_cc == -1) CALL cfv_nl_off()
+    ELSE IF (i_cc == -1) THEN
+      ! flux form: the nodal D = coef grad grad psi and A = -coef grad phi
+      CALL main_nlterm(fstart, teff,sc00, sc10, sc01, sc20, sc11, sc02, &
+                       d_pp=nl_dpp, d_pa=nl_dpa, d_aa=nl_daa, a_p=nl_ap, a_a=nl_aa)
+      CALL cfv_set_nl(nl_dpp, nl_dpa, nl_daa, nl_ap, nl_aa)
     ELSE
       CALL main_nlterm(fstart, teff,sc00, sc10, sc01, sc20, sc11, sc02)
     END IF
@@ -466,6 +490,11 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     ! pattern, so no running pointer is needed.  A row whose entry count does
     ! not match the pattern would corrupt the matrix: stop rather than go on.
     pattern_ok = .TRUE.
+    IF (i_cc == -1) THEN
+      ! flux form: background species rescaled by gammab, plus this step's
+      ! nonlinear self-collision matrix
+      CALL cfv_fill(aa_L(1:nnz_L), taum)
+    ELSE
     !$OMP PARALLEL DO SCHEDULE(STATIC) DEFAULT(SHARED) &
     !$OMP   PRIVATE(i, j, k, row, col_idx, stencil_coeff, n_entries, rhs_ij) &
     !$OMP   REDUCTION(.AND.:pattern_ok)
@@ -487,6 +516,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       END DO
     END DO
     !$OMP END PARALLEL DO
+    END IF   ! i_cc
     IF (.NOT. pattern_ok) THEN
       WRITE(*,'(A,I0)') '  *** PATTERN MISMATCH in the matrix refill at step ', itime
       STOP
@@ -513,7 +543,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
-      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+      IF (bc_row(iv, imu)) THEN
         DO ptr = ia_lhs(row), ia_lhs(row+1)-1
           aa_lhs(ptr) = aa_L(ptr)
         END DO
@@ -537,7 +567,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
-      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+      IF (bc_row(iv, imu)) THEN
         rhs_vec(row) = 0.0_dp
       END IF
     END DO
@@ -572,7 +602,12 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     !--- Diagnostics -----------------------------------------------
     CALL time_density(fout, dens_tmp)
   !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
-    WRITE(45,*) time, dens_tmp
+    ! i_cc = -1: third column, the density on the finite-volume cells
+    IF (i_cc == -1) THEN
+      WRITE(45,*) time, dens_tmp, cfv_density(x_vec)
+    ELSE
+      WRITE(45,*) time, dens_tmp
+    END IF
 
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar,teff)
     WRITE(46,*) time, tk, tkperp
@@ -642,6 +677,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   IF (i_ss_check == -1) CALL conv_diag_finalize()
 
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
+  IF (i_cc == -1) WRITE(*,'(A,ES22.14)') &
+      '  Final density on the finite-volume cells   : ', cfv_density(x_vec)
   WRITE(*,*) 'Solve completed.'
 
   DEALLOCATE(phi_kern)
