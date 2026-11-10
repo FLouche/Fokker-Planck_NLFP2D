@@ -136,6 +136,24 @@ u = v/(√2 vt) = 0.1 (closed form loses digits there).
 - Not guaranteed positive (the cross term is not sign-definite), but f
   stayed ≥ 0 in the beam case where the 7-point f dips to −8×10⁻¹⁸ of max.
 
+**Maxwellian self-collisions** (`isc` = 1, 2, 3; `626dcde`): `cblin` with the
+minority as background — mass ratio 1, `vteff_t`, `gammaa` — so the same
+code: the face routines take (vth, mass ratio), `op_values` builds any such
+operator (OpenMP over rows), and `cfv_set_sc(vteff_t, gammaa)`, called next
+to each `self_coll_max` in `timefp_7pt`, recomputes the self-collision matrix
+when `vteff_t` changes (every step for `isc=2,3`, ~16 ms at 151²; once for
+`isc=1`). Diagnostics use `sc_apply`. Measured (JET beam 1, `isc=2`): SC
+Maxwellian null vector to <5×10⁻¹⁵; closed box conserved to 5×10⁻¹³; Teff
+error 2.54% / 1.11% / 0.40% at 101² / 151² / 251² (second order again;
+Richardson 40.911 vs 7-point 40.913 keV); 2× faster than 7-point at 151².
+The SC power does not vanish in either scheme (Maxwellian-background SC does
+not conserve energy when f is not that Maxwellian); the flux form converges
+to the 7-point value.
+
+**Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
+same build already differ (PARDISO), so compare default-mode builds on one
+thread.
+
 ### Sparse Matrix and PARDISO
 All sparse matrices are stored in 1-based CSR format. The `pardiso_solver` module (`pardiso_solver (2).f90`) wraps Intel MKL PARDISO with four entry points that exploit phased factorisation:
 - `pardiso_solve_steady` — phases 11+22+33 then release (used by steady-state solver)
@@ -183,7 +201,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
-| `i_cc` | 0 / -1 | Coulomb operator: expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; for now needs `irf=0`, `isc=0`, time-dependent) |
+| `i_cc` | 0 / -1 | Coulomb operator (and Maxwellian self-collisions): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; for now needs `irf=0`, `isc` = 0, 1, 2 or 3, time-dependent) |
 | `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
