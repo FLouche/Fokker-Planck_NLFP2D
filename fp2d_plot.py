@@ -18,8 +18,8 @@ Options (run and plot)
   --show          Open interactive matplotlib windows
                   (default when --save is not given).
   --logf          Logarithmic scale for the plotted QUANTITY: the colour scale
-                  of a 2D map, the z of a 3D surface, the y of a 1D profile.
-                  (--log is an accepted alias.)
+                  of a 2D map, the z of a 3D surface, the y of a 1D profile
+                  or of a time trace.  (--log is an accepted alias.)
   --logx          Logarithmic x-axis.
   --logy          Logarithmic y-axis (on a 1D profile, same as --logf).
                   An axis that genuinely crosses zero -- v_par, or a power that
@@ -313,8 +313,10 @@ _YRANGE = None
 # Logarithmic AXES, set in main() from --logx/--logy and applied to every
 # figure in _finish().  The third log option, --logf, scales the plotted
 # QUANTITY (the colour scale of a 2D map, the z of a surface, the y of a 1D
-# profile); that cannot be a post-hoc axis change, so it stays the `log`
-# argument threaded through the individual plot functions.
+# profile, the y of a time trace); that cannot be a post-hoc axis change, so it
+# stays the `log` argument threaded through the individual plot functions.  On
+# a time trace the quantity IS the y-axis, so there `log` is handed to
+# _finish(logy=...) and gets the same zero-crossing guard as --logy.
 _LOGX = False
 _LOGY = False
 
@@ -503,8 +505,10 @@ def _hides_data(lo: float, hi: float) -> bool:
     return lo < -_LOG_NEG_TOL * abs(hi)
 
 
-def _apply_log_axes(fig, stem: str) -> None:
+def _apply_log_axes(fig, stem: str, logy: bool = False) -> None:
     """Apply --logx / --logy to the data axes of a figure.
+
+    *logy* asks for a log y-axis on this figure alone: --logf on a time trace.
 
     A log axis needs positive data, and several of these axes legitimately
     reach or cross zero: v_par is signed, and every time trace starts at t=0.
@@ -514,18 +518,20 @@ def _apply_log_axes(fig, stem: str) -> None:
     the smallest positive sample, which stops matplotlib from padding down to
     an arbitrary decade; any non-positive points dropped are reported.
     """
-    if not (_LOGX or _LOGY):
+    want_y = _LOGY or logy
+    if not (_LOGX or want_y):
         return
     for ax in fig.axes:
         if ax.get_label() == "<colorbar>":
             continue
-        for which, want in (("x", _LOGX), ("y", _LOGY)):
+        for which, want in (("x", _LOGX), ("y", want_y)):
             if not want:
                 continue
+            opt = "--logf" if which == "y" and not _LOGY else f"--log{which}"
             span = _positive_span(ax, which)
             if span is None:
                 # e.g. --logx on a v_par axis, which crosses zero
-                print(f"    (--log{which}: the {which}-axis of {stem} crosses "
+                print(f"    ({opt}: the {which}-axis of {stem} crosses "
                       f"zero, left linear)")
                 continue
             lo, hi, dropped = span
@@ -534,7 +540,7 @@ def _apply_log_axes(fig, stem: str) -> None:
             if lim[0] <= 0:
                 getattr(ax, f"set_{which}lim")(lo * 0.9, max(hi * 1.1, lim[1]))
             if dropped:
-                print(f"    (--log{which}: {dropped} non-positive point(s) "
+                print(f"    ({opt}: {dropped} non-positive point(s) "
                       f"not shown on the {which}-axis of {stem})")
 
 
@@ -560,7 +566,7 @@ def _warn_if_range_empty(fig, stem: str, rng, which: str) -> None:
               f"plot is empty.")
 
 
-def _finish(fig, stem: str, save_dir, show: bool) -> None:
+def _finish(fig, stem: str, save_dir, show: bool, logy: bool = False) -> None:
     if _XRANGE is not None and fig.axes:
         # Zoom the data axes' x-range. fig.axes[0] is always the main plot:
         # colorbars are appended afterwards, and every multi-panel figure is
@@ -572,7 +578,7 @@ def _finish(fig, stem: str, save_dir, show: bool) -> None:
             for ax in fig.axes:
                 _autoscale_y_to_xrange(ax, _XRANGE)
         _warn_if_range_empty(fig, stem, _XRANGE, "x")
-    _apply_log_axes(fig, stem)
+    _apply_log_axes(fig, stem, logy)
     if _YRANGE is not None:
         # After _apply_log_axes, which may have set its own limits.  Applied to
         # every data axes rather than just the first: multi-panel figures share
@@ -780,7 +786,7 @@ def plot_3d(data, meta, stem, save_dir, show, log, casename):
     _finish(fig, stem + "_3d", save_dir, show)
 
 
-def plot_ts(data, meta, stem, save_dir, show, casename):
+def plot_ts(data, meta, stem, save_dir, show, casename, log=False):
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(data[:, 0], data[:, 1], color=_PALETTE[0], linewidth=1.5)
     ax.set_xlabel("Time (s)")
@@ -789,10 +795,10 @@ def plot_ts(data, meta, stem, save_dir, show, casename):
     ax.set_xlim(left=0)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    _finish(fig, stem, save_dir, show)
+    _finish(fig, stem, save_dir, show, logy=log)
 
 
-def plot_ts2(data, meta, stem, save_dir, show, casename):
+def plot_ts2(data, meta, stem, save_dir, show, casename, log=False):
     labels = meta.get("labels", [])
     fig, ax = plt.subplots(figsize=(8, 5))
     for i in range(1, data.shape[1]):
@@ -810,7 +816,7 @@ def plot_ts2(data, meta, stem, save_dir, show, casename):
     if meta.get("logy") and np.any(data[:, 1:] > 0):
         ax.set_yscale("log")
     fig.tight_layout()
-    _finish(fig, stem, save_dir, show)
+    _finish(fig, stem, save_dir, show, logy=log)
 
 
 # ---------------------------------------------------------------------------
@@ -1483,9 +1489,9 @@ def plot_directory(outdir: Path, save_dir, show: bool, log: bool,
                 if plot3d:
                     plot_3d(data, meta, stem, save_dir, show, log, file_case)
             elif ptype == "ts":
-                plot_ts(data, meta, stem, save_dir, show, file_case)
+                plot_ts(data, meta, stem, save_dir, show, file_case, log)
             elif ptype == "ts2":
-                plot_ts2(data, meta, stem, save_dir, show, file_case)
+                plot_ts2(data, meta, stem, save_dir, show, file_case, log)
             else:
                 print("    (skipped — unknown type)")
         except Exception as exc:
@@ -2171,7 +2177,9 @@ def compare_directory(outdir: Path, cases: list, save_dir, show: bool,
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
-        _finish(fig, f"{key}-compare", save_dir, show)
+        # --logf on a time trace = log y-axis (1D profiles were set above)
+        _finish(fig, f"{key}-compare", save_dir, show,
+                logy=log and ptype in ("ts", "ts2"))
 
     if show:
         plt.show()
