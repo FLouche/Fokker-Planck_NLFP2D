@@ -49,7 +49,8 @@ module mod_coul_fv
   implicit none
   private
   public :: cfv_build, cfv_fill, cfv_apply_species, cfv_density, bc_row, &
-            coll_apply_species, coll_apply_total, cfv_set_sc, sc_apply
+            coll_apply_species, coll_apply_total, cfv_set_sc, sc_apply, &
+            cfv_normalise_source
   public :: cfv_nnz, cfv_ia, cfv_ja
 
   integer, parameter :: dp = kind(1.d0)
@@ -458,6 +459,27 @@ contains
     real(dp), intent(out) :: Lf(nbig)
     call csr_apply(val(:,b), gammab(b), f, Lf)
   end subroutine cfv_apply_species
+
+  !------------------------------------------------------------------
+  ! NBI source: beam_source normalises it analytically (exact integral
+  ! npart/taus), but the rate the scheme injects is its sum over the cells,
+  ! off by the quadrature error (+4.6e-5 at 151^2, JET beam 1).  Rescale it
+  ! so that sum V S = npart/taus exactly: then the closed-box steady state
+  ! is n = npart on the cells.
+  !------------------------------------------------------------------
+  subroutine cfv_normalise_source()
+    use shared_beam,   only: source, source_v, taus
+    use shared_plasma, only: npart
+    real(dp) :: rate, fac
+    call cfv_build()
+    rate = sum(vol * source_v)
+    if (rate <= 0.0_dp) return
+    fac = (npart / taus) / rate
+    source_v = source_v * fac
+    source   = source   * fac
+    write(*,'(A,ES10.3)') '  NBI source rescaled to npart/taus on the finite-volume cells, factor - 1 = ', &
+          fac - 1.0_dp
+  end subroutine cfv_normalise_source
 
   ! density on the finite-volume cells: 2 pi sum R_i W_j f_ij
   real(dp) function cfv_density(f)

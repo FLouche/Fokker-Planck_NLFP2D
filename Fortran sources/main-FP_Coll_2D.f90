@@ -208,6 +208,7 @@ use func_index
 use mod_ncint
 use time_comps_mod        ! explicit interface for time_energy(..., teff=)
 use mod_domain_check      ! domain adequacy check at the end of the run
+use mod_coul_fv, only: cfv_normalise_source   ! i_cc = -1 source normalisation
 !$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
@@ -509,7 +510,9 @@ allocate(source(nperp,npar),source_v(nbig))
 if (isource == -1) then
 
     call beam_source
-    
+    ! flux form: inject exactly npart/taus summed over the scheme's cells
+    if (i_cc == -1) call cfv_normalise_source()
+
     open(40,file=TRIM(outfile('beam.txt')), status='unknown')
 
 

@@ -682,7 +682,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
   IF (i_cc == -1) WRITE(*,'(A,ES22.14)') &
-      '  Final density on the finite-volume cells   : ', cfv_density(fstart)
+      '  Final density on the finite-volume cells   : ', cfv_density(x_vec)
 
   IF (iplot_pow == -1) THEN
     IF (irf     == -1) CLOSE(480)
