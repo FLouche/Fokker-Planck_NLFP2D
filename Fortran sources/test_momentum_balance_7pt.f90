@@ -24,7 +24,7 @@ use shared_FPterms
 use mod_ncint
 use func_index
 use mod_apply_operator
-use mod_coul_fv, only: coll_apply_species, coll_apply_total
+use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
 
 implicit none
 
@@ -66,7 +66,7 @@ end do
 
 !--- 2. Self-collision momentum ---
 if (isc /= 0) then
-    call apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, fin, Lf)
+    call sc_apply(fin, Lf)
     do iv = 1, nperp
         do ip = 1, npar
             ix = index_mat(iv,ip)

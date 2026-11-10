@@ -26,7 +26,7 @@ SUBROUTINE time_momentum_7pt(f, dens, &
   USE shared_timer
   USE func_index
   USE mod_apply_operator
-  USE mod_coul_fv, only: coll_apply_species, coll_apply_total
+  USE mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
 
   IMPLICIT NONE
 
@@ -91,7 +91,7 @@ SUBROUTINE time_momentum_7pt(f, dens, &
   !================================================================
   IF (isc /= 0) THEN
 
-    CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
+    CALL sc_apply(f, Lf)
 
     DO iv = 1, nperp
       DO ip = 1, npar

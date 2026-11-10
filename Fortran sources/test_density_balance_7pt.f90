@@ -20,7 +20,7 @@ use shared_FPterms
 use mod_ncint
 use func_index
 use mod_apply_operator
-use mod_coul_fv, only: coll_apply_species, coll_apply_total
+use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
 
 INTEGER, PARAMETER :: dp = KIND(1.0D0)
 
@@ -48,7 +48,7 @@ do ib = 1, nbulk
 end do
 
 if (isc /= 0) then
-    call apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, fin, Lf_col_sc)
+    call sc_apply(fin, Lf_col_sc)
 end if
 
 if (irf == -1) then

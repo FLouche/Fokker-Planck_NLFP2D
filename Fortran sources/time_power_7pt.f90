@@ -32,7 +32,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
 
   use mod_apply_operator
 
-  use mod_coul_fv, only: coll_apply_species, coll_apply_total
+  use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
   
   IMPLICIT NONE
 
@@ -109,7 +109,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   !================================================================
   IF (isc /= 0) THEN
 
-    CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
+    CALL sc_apply(f, Lf)
 
     DO iv = 1, nperp
       DO ip = 1, npar
@@ -294,7 +294,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   USE shared_timer          ! isc
   USE func_index
   USE mod_apply_operator
-  USE mod_coul_fv, only: coll_apply_species, coll_apply_total
+  USE mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
 
   IMPLICIT NONE
 
@@ -319,7 +319,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   END DO
 
   IF (isc /= 0) THEN
-    CALL apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
+    CALL sc_apply(f, Lf)
     CALL integrate_Lf(Lf, nsc)
   ELSE
     nsc = 0.0_dp

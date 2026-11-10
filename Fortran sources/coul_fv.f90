@@ -35,6 +35,11 @@
 !   The per-species matrices do not change in time (grid and T_b fixed):
 !   they are built once, and each step only rescales them by gammab(b).
 !
+!   Maxwellian self-collisions (isc = 1, 2, 3) are the same operator with
+!   the minority as background: mass ratio 1, thermal speed vteff_t, factor
+!   gammaa (self_coll_max).  For isc = 2, 3 vteff_t follows Teff or Tn, so
+!   cfv_set_sc recomputes that matrix whenever vteff_t changes.
+!
 !====================================================================
 module mod_coul_fv
 
@@ -44,7 +49,7 @@ module mod_coul_fv
   implicit none
   private
   public :: cfv_build, cfv_fill, cfv_apply_species, cfv_density, bc_row, &
-            coll_apply_species, coll_apply_total
+            coll_apply_species, coll_apply_total, cfv_set_sc, sc_apply
   public :: cfv_nnz, cfv_ia, cfv_ja
 
   integer, parameter :: dp = kind(1.d0)
@@ -55,6 +60,9 @@ module mod_coul_fv
   real(dp), allocatable, save :: val(:,:)      ! (nnz, nbulk): L_b without gammab
   real(dp), allocatable, save :: vol(:)        ! cell volume 2 pi R_i W_j
   real(dp), allocatable, save :: eface(:)      ! v_perp faces e(0:nperp)
+  ! Maxwellian self-collisions: L_sc without gammaa, for vth_sc
+  real(dp), allocatable, save :: val_sc(:)
+  real(dp), save :: vth_sc = -1.0_dp, gam_sc = 0.0_dp
 
 contains
 
@@ -120,18 +128,20 @@ contains
   end function lnM
 
   !------------------------------------------------------------------
-  ! Flux through the v_perp face between (i,j) and (i+1,j), species b:
+  ! Flux through the v_perp face between (i,j) and (i+1,j), for a
+  ! Maxwellian background of thermal speed vth and mass ratio mrat:
   ! G = sum c(a,l) f(i+a, j+l), a = 0,1, l = -1..1
   !------------------------------------------------------------------
-  subroutine perp_face(i, j, b, c)
-    integer,  intent(in)  :: i, j, b
+  subroutine perp_face(i, j, vth, mrat, c)
+    integer,  intent(in)  :: i, j
+    real(dp), intent(in)  :: vth, mrat
     real(dp), intent(out) :: c(0:1,-1:1)
     real(dp) :: kap, h, th, ph, dpp, dpa, s, lb, lm0, w(-1:1)
     integer  :: a, l
     c   = 0.0_dp
-    kap = maonmb(b) / (2.0_dp * vt(b)**2)
+    kap = mrat / (2.0_dp * vth**2)
     h   = vperp(i+1) - vperp(i)
-    call theta_phi(eface(i), vpar(j), vt(b), th, ph)
+    call theta_phi(eface(i), vpar(j), vth, th, ph)
     dpp = th + vpar(j)**2 * ph
     dpa = -eface(i) * vpar(j) * ph
     lm0 = lnM(i, j, kap)
@@ -151,18 +161,19 @@ contains
   end subroutine perp_face
 
   !------------------------------------------------------------------
-  ! Flux through the v_par face between (i,j) and (i,j+1), species b:
+  ! Flux through the v_par face between (i,j) and (i,j+1):
   ! G = sum c(k,m) f(i+k, j+m), k = -1..1, m = 0,1
   !------------------------------------------------------------------
-  subroutine par_face(i, j, b, c)
-    integer,  intent(in)  :: i, j, b
+  subroutine par_face(i, j, vth, mrat, c)
+    integer,  intent(in)  :: i, j
+    real(dp), intent(in)  :: vth, mrat
     real(dp), intent(out) :: c(-1:1,0:1)
     real(dp) :: kap, vf, th, ph, daa, dpa, s, lb, lm0, w(-1:1)
     integer  :: k, m
     c   = 0.0_dp
-    kap = maonmb(b) / (2.0_dp * vt(b)**2)
+    kap = mrat / (2.0_dp * vth**2)
     vf  = 0.5_dp * (vpar(j) + vpar(j+1))
-    call theta_phi(vperp(i), vf, vt(b), th, ph)
+    call theta_phi(vperp(i), vf, vth, th, ph)
     daa = th + vperp(i)**2 * ph
     dpa = -vperp(i) * vf * ph
     lm0 = lnM(i, j, kap)
@@ -210,14 +221,104 @@ contains
   end subroutine dvp_weights
 
   !------------------------------------------------------------------
+  ! Matrix values, on the fixed pattern, of the operator for a Maxwellian
+  ! background (vth, mrat), without its gamma factor.  Rows are independent.
+  !------------------------------------------------------------------
+  subroutine op_values(vth, mrat, v)
+    real(dp), intent(in)  :: vth, mrat
+    real(dp), intent(out) :: v(:)
+    integer  :: i, j, row, p, ip, jp, a, m
+    real(dp) :: acc(-1:1,-1:1), cp(0:1,-1:1), ca(-1:1,0:1), ri, wj
+    !$OMP PARALLEL DO SCHEDULE(STATIC) &
+    !$OMP   PRIVATE(i, j, row, p, ip, jp, a, m, acc, cp, ca, ri, wj)
+    do i = 1, nperp
+      ri = 0.5_dp * (eface(i)**2 - eface(i-1)**2)       ! int vp dvp over the cell
+      do j = 1, npar
+        row = (i-1)*npar + j
+        if (bc_row(i, j)) then                     ! Dirichlet: set in cfv_fill
+          v(cfv_ia(row):cfv_ia(row+1)-1) = 0.0_dp
+          cycle
+        end if
+        wj = dvpar
+        if (j == 1 .or. j == npar) wj = 0.5_dp * dvpar
+        acc = 0.0_dp
+        if (i < nperp) then                         ! outer v_perp face
+          call perp_face(i, j, vth, mrat, cp)
+          do a = 0, 1
+            acc(a,:) = acc(a,:) + eface(i)/ri * cp(a,:)
+          end do
+        end if
+        if (i > 1) then                             ! inner v_perp face
+          call perp_face(i-1, j, vth, mrat, cp)
+          do a = 0, 1
+            acc(a-1,:) = acc(a-1,:) - eface(i-1)/ri * cp(a,:)
+          end do
+        end if
+        if (j < npar) then                          ! upper v_par face
+          call par_face(i, j, vth, mrat, ca)
+          do m = 0, 1
+            acc(:,m) = acc(:,m) + ca(:,m)/wj
+          end do
+        end if
+        if (j > 1) then                             ! lower v_par face
+          call par_face(i, j-1, vth, mrat, ca)
+          do m = 0, 1
+            acc(:,m-1) = acc(:,m-1) - ca(:,m)/wj
+          end do
+        end if
+        do p = cfv_ia(row), cfv_ia(row+1)-1
+          ip = (cfv_ja(p)-1)/npar + 1
+          jp = cfv_ja(p) - (ip-1)*npar
+          v(p) = acc(ip-i, jp-j)
+        end do
+      end do
+    end do
+    !$OMP END PARALLEL DO
+  end subroutine op_values
+
+  !------------------------------------------------------------------
+  ! Check that the Maxwellian of (vth, mrat) is a null vector of v, row by
+  ! row (rows reaching a Dirichlet node excluded)
+  !------------------------------------------------------------------
+  subroutine check_null(v, vth, mrat, label)
+    real(dp), intent(in) :: v(:), vth, mrat
+    character(*), intent(in) :: label
+    real(dp), allocatable :: fm(:)
+    real(dp) :: kap, res, scl, rmax
+    integer  :: i, j, row, p
+    allocate(fm(nbig))
+    kap = mrat / (2.0_dp * vth**2)
+    do i = 1, nperp
+      do j = 1, npar
+        fm((i-1)*npar + j) = exp(lnM(i, j, kap))
+      end do
+    end do
+    rmax = 0.0_dp
+    do row = 1, nbig
+      i = (row-1)/npar + 1
+      j = row - (i-1)*npar
+      if (bc_row(i, j)) cycle
+      if (i_cc_wall == 0 .and. (i >= nperp-1 .or. j <= 2 .or. j >= npar-1)) cycle
+      res = 0.0_dp;  scl = 0.0_dp
+      do p = cfv_ia(row), cfv_ia(row+1)-1
+        res = res + v(p) * fm(cfv_ja(p))
+        scl = scl + abs(v(p) * fm(cfv_ja(p)))
+      end do
+      if (scl > 0.0_dp) rmax = max(rmax, abs(res)/scl)
+    end do
+    write(*,'(A,A,A,ES9.2)') '  Coulomb flux form: ', label, &
+          ', max |L M| / sum |terms| on its Maxwellian = ', rmax
+    deallocate(fm)
+  end subroutine check_null
+
+  !------------------------------------------------------------------
   ! Build the fixed CSR pattern (3x3 per row, sorted) and the per-species
   ! values; check that each species' Maxwellian is an exact null vector.
   !------------------------------------------------------------------
   subroutine cfv_build()
-    integer  :: i, j, b, row, p, ip, jp, a, m
-    real(dp) :: acc(-1:1,-1:1), cp(0:1,-1:1), ca(-1:1,0:1)
-    real(dp) :: ri, wj, kap, res, scl, rmax
-    real(dp), allocatable :: fm(:)
+    integer  :: i, j, b, row, p, ip, jp
+    real(dp) :: ri, wj
+    character(len=16) :: lab
 
     if (built) return
     allocate(eface(0:nperp))
@@ -245,10 +346,9 @@ contains
     end do
     cfv_nnz = cfv_ia(nbig+1) - 1
     allocate(cfv_ja(cfv_nnz), val(cfv_nnz, nbulk))
-    val = 0.0_dp
 
     do i = 1, nperp
-      ri = 0.5_dp * (eface(i)**2 - eface(i-1)**2)       ! int vp dvp over the cell
+      ri = 0.5_dp * (eface(i)**2 - eface(i-1)**2)
       do j = 1, npar
         wj = dvpar
         if (j == 1 .or. j == npar) wj = 0.5_dp * dvpar
@@ -263,70 +363,15 @@ contains
             p = p + 1
           end do
         end do
-        if (bc_row(i, j)) cycle                   ! Dirichlet: filled in cfv_fill
-
-        do b = 1, nbulk
-          acc = 0.0_dp
-          if (i < nperp) then                     ! outer v_perp face
-            call perp_face(i, j, b, cp)
-            do a = 0, 1
-              acc(a,:) = acc(a,:) + eface(i)/ri * cp(a,:)
-            end do
-          end if
-          if (i > 1) then                         ! inner v_perp face
-            call perp_face(i-1, j, b, cp)
-            do a = 0, 1
-              acc(a-1,:) = acc(a-1,:) - eface(i-1)/ri * cp(a,:)
-            end do
-          end if
-          if (j < npar) then                      ! upper v_par face
-            call par_face(i, j, b, ca)
-            do m = 0, 1
-              acc(:,m) = acc(:,m) + ca(:,m)/wj
-            end do
-          end if
-          if (j > 1) then                         ! lower v_par face
-            call par_face(i, j-1, b, ca)
-            do m = 0, 1
-              acc(:,m-1) = acc(:,m-1) - ca(:,m)/wj
-            end do
-          end if
-          do p = cfv_ia(row), cfv_ia(row+1)-1
-            ip = (cfv_ja(p)-1)/npar + 1
-            jp = cfv_ja(p) - (ip-1)*npar
-            val(p,b) = acc(ip-i, jp-j)
-          end do
-        end do
       end do
     end do
     built = .true.
 
-    ! Self-check: L_b M_b = 0 row by row (rows reaching a Dirichlet node excluded)
-    allocate(fm(nbig))
     do b = 1, nbulk
-      kap = maonmb(b) / (2.0_dp * vt(b)**2)
-      do i = 1, nperp
-        do j = 1, npar
-          fm((i-1)*npar + j) = exp(lnM(i, j, kap))
-        end do
-      end do
-      rmax = 0.0_dp
-      do row = 1, nbig
-        i = (row-1)/npar + 1
-        j = row - (i-1)*npar
-        if (bc_row(i, j)) cycle
-        if (i_cc_wall == 0 .and. (i >= nperp-1 .or. j <= 2 .or. j >= npar-1)) cycle
-        res = 0.0_dp;  scl = 0.0_dp
-        do p = cfv_ia(row), cfv_ia(row+1)-1
-          res = res + val(p,b) * fm(cfv_ja(p))
-          scl = scl + abs(val(p,b) * fm(cfv_ja(p)))
-        end do
-        if (scl > 0.0_dp) rmax = max(rmax, abs(res)/scl)
-      end do
-      write(*,'(A,I0,A,ES9.2)') '  Coulomb flux form: species ', b, &
-            ', max |L M| / sum |terms| on its Maxwellian = ', rmax
+      call op_values(vt(b), maonmb(b), val(:,b))
+      write(lab,'(A,I0)') 'species ', b
+      call check_null(val(:,b), vt(b), maonmb(b), trim(lab))
     end do
-    deallocate(fm)
   end subroutine cfv_build
 
   ! is column (ip,jp) part of row (i,j)?
@@ -340,18 +385,41 @@ contains
   end function keep
 
   !------------------------------------------------------------------
-  ! aa = sum_b gammab(b) L_b - taum on the diagonal; Dirichlet rows = 1
+  ! Maxwellian self-collisions: thermal speed vth (vteff_t) and factor gam
+  ! (gammaa).  The matrix is recomputed only when vth changes; the first
+  ! one is checked against its Maxwellian.
+  !------------------------------------------------------------------
+  subroutine cfv_set_sc(vth, gam)
+    real(dp), intent(in) :: vth, gam
+    logical :: first
+    call cfv_build()
+    first = .not. allocated(val_sc)
+    if (first) allocate(val_sc(cfv_nnz))
+    if (vth /= vth_sc) then
+      call op_values(vth, 1.0_dp, val_sc)
+      vth_sc = vth
+      if (first) call check_null(val_sc, vth, 1.0_dp, 'self-collisions')
+    end if
+    gam_sc = gam
+  end subroutine cfv_set_sc
+
+  !------------------------------------------------------------------
+  ! aa = sum_b gammab(b) L_b (+ gammaa L_sc) - taum on the diagonal;
+  ! Dirichlet rows = 1
   !------------------------------------------------------------------
   subroutine cfv_fill(aa, taum)
     real(dp), intent(out) :: aa(:)
     real(dp), intent(in)  :: taum
     integer :: p, b, row, i, j
+    logical :: sc
+    sc = allocated(val_sc)
     !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(p, b)
     do p = 1, cfv_nnz
       aa(p) = 0.0_dp
       do b = 1, nbulk
         aa(p) = aa(p) + gammab(b) * val(p,b)
       end do
+      if (sc) aa(p) = aa(p) + gam_sc * val_sc(p)
     end do
     !$OMP END PARALLEL DO
     do row = 1, nbig
@@ -365,6 +433,22 @@ contains
     end do
   end subroutine cfv_fill
 
+  ! Lf = gam * V f (0 on constraint rows: their values are zero)
+  subroutine csr_apply(v, gam, f, Lf)
+    real(dp), intent(in)  :: v(:), gam, f(nbig)
+    real(dp), intent(out) :: Lf(nbig)
+    integer :: row, p
+    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, p)
+    do row = 1, nbig
+      Lf(row) = 0.0_dp
+      do p = cfv_ia(row), cfv_ia(row+1)-1
+        Lf(row) = Lf(row) + v(p) * f(cfv_ja(p))
+      end do
+      Lf(row) = gam * Lf(row)
+    end do
+    !$OMP END PARALLEL DO
+  end subroutine csr_apply
+
   !------------------------------------------------------------------
   ! Lf = gammab(b) L_b f (0 on constraint rows)
   !------------------------------------------------------------------
@@ -372,16 +456,7 @@ contains
     integer,  intent(in)  :: b
     real(dp), intent(in)  :: f(nbig)
     real(dp), intent(out) :: Lf(nbig)
-    integer :: row, p
-    !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, p)
-    do row = 1, nbig
-      Lf(row) = 0.0_dp
-      do p = cfv_ia(row), cfv_ia(row+1)-1
-        Lf(row) = Lf(row) + val(p,b) * f(cfv_ja(p))
-      end do
-      Lf(row) = gammab(b) * Lf(row)
-    end do
-    !$OMP END PARALLEL DO
+    call csr_apply(val(:,b), gammab(b), f, Lf)
   end subroutine cfv_apply_species
 
   ! density on the finite-volume cells: 2 pi sum R_i W_j f_ij
@@ -434,5 +509,25 @@ contains
       call apply_operator(colin20, colin02, colin11, colin10, colin01, colin00, f, Lf)
     end if
   end subroutine coll_apply_total
+
+  !------------------------------------------------------------------
+  ! Self-collision operator applied to f, through the scheme in use (the
+  ! one set by the last cfv_set_sc / self_coll_max call)
+  !------------------------------------------------------------------
+  subroutine sc_apply(f, Lf)
+    use mod_apply_operator, only: apply_operator
+    use shared_FPterms
+    real(dp), intent(in)  :: f(nbig)
+    real(dp), intent(out) :: Lf(nbig)
+    if (i_cc == -1) then
+      if (allocated(val_sc)) then
+        call csr_apply(val_sc, gam_sc, f, Lf)
+      else
+        Lf = 0.0_dp
+      end if
+    else
+      call apply_operator(sc20, sc02, sc11, sc10, sc01, sc00, f, Lf)
+    end if
+  end subroutine sc_apply
 
 end module mod_coul_fv

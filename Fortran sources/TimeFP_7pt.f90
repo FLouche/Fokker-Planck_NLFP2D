@@ -411,6 +411,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END IF
         gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
         CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+        IF (i_cc == -1) CALL cfv_set_sc(vteff_t, gammaa)   ! flux form, same background
         all00 = all00 + sc00;  all10 = all10 + sc10;  all01 = all01 + sc01
         all11 = all11 + sc11;  all20 = all20 + sc20;  all02 = all02 + sc02
       END IF
@@ -582,6 +583,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END IF
         gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
         CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+        IF (i_cc == -1) CALL cfv_set_sc(vteff_t, gammaa)   ! flux form, same background
       END IF
     END IF
 
@@ -612,6 +614,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         END IF
         gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
         CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
+        IF (i_cc == -1) CALL cfv_set_sc(vteff_t, gammaa)   ! flux form, same background
       END IF
     END IF
 

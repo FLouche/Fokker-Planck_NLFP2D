@@ -380,8 +380,9 @@ if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
     stop
 endif
 
-! Flux-form (Chang-Cooper) Coulomb operator, coul_fv.f90: first stage, so far
-! only for the Coulomb operator, in the linear time solver timefp_7pt.
+! Flux-form (Chang-Cooper) Coulomb operator, coul_fv.f90: so far the Coulomb
+! operator and the Maxwellian self-collisions (isc = 1, 2, 3), in the linear
+! time solver timefp_7pt.
 if (i_cc /= 0 .and. i_cc /= -1) then
     write(*,'(A,I0,A)') 'ERROR: i_cc=', i_cc, ' is not valid. Use 0 (7-point) or -1 (flux form).'
     stop
@@ -391,10 +392,10 @@ if (i_cc_wall /= 0 .and. i_cc_wall /= -1) then
     stop
 endif
 if (i_cc == -1) then
-    if (irf == -1 .or. isc /= 0 .or. ntimes(1) == 0) then
-        write(*,*) 'ERROR: i_cc=-1 (flux-form Coulomb operator) needs, for now, irf=0, isc=0'
-        write(*,*) '       and a time-dependent run (ntimes > 0): RF and self-collisions'
-        write(*,*) '       are not yet available in flux form.'
+    if (irf == -1 .or. isc == -1 .or. ntimes(1) == 0) then
+        write(*,*) 'ERROR: i_cc=-1 (flux-form Coulomb operator) needs, for now, irf=0,'
+        write(*,*) '       isc=0,1,2 or 3 and a time-dependent run (ntimes > 0): RF and'
+        write(*,*) '       the nonlinear self-collisions are not yet available in flux form.'
         stop
     endif
     write(*,'(A)') ' Coulomb operator: flux form, finite volumes, Chang-Cooper weights (i_cc = -1)'
