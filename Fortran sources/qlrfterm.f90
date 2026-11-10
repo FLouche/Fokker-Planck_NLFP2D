@@ -73,6 +73,8 @@ if (notxt == 0) close(40)
 
 allocate(dn(nperp),ddndvperp(nperp))
 
+!DEBUG-OFF! open(555,file='theta2_along_vpar0.txt',status='unknown')
+
 do i = 1,nperp
 
    arg = eta*vperp(i)
@@ -116,6 +118,8 @@ do i = 1,nperp
    
    dn(i)=(eplus*jnm1+emin*jnp1)*(ceplus*cjnm1+cemin*cjnp1)
    
+!DEBUG-OFF!    write(555,*) vperp(i),dn(i)/4
+   
    ! Derivative of (Theta)^2 wrt Vperp
    
    ddndvperp(i) = 2.d0*dreal(eta*(eplus*djnm1+emin*djnp1)*(ceplus*cjnm1+cemin*cjnp1))
@@ -123,10 +127,18 @@ do i = 1,nperp
    
 enddo
 
+!DEBUG-OFF! close(555)
+
 !=========================================================
 !
 ! Coefficients of the FP equation
 ! -------------------------------
+
+!open(120,file='RF01.txt',status='unknown')
+!open(121,file='Dpepe_2D.txt',status='unknown')
+!open(122,file='Dpepa_2D.txt',status='unknown')
+!open(123,file='Aw_2D.txt',status='unknown')
+
 
 do j=1,npar
     
@@ -152,6 +164,7 @@ rf20(i,j) = rfcte*dirac(j)*comfac1**2*dn(i)
 rf01(i,j) = rfcte*dirac(j)*(comfac1*(2.d0*dn(i)+vperp(i)*ddndvperp(i)) &
     -2.d0*comfac2*vperp(i)**2*dn(i)/delta_RF**2)
 
+
 !      Coefficient of d2f/dvpar2
 !      --------------------------
 
@@ -162,11 +175,25 @@ rf02(i,j) = rfcte*dirac(j)*vperp(i)**2*dn(i)
 
 rf11(i,j) = rfcte*dirac(j)*2.d0*comfac1*vperp(i)*dn(i)
 
+! Saving the tensor components
+!
+!if(j==jmid) then
+!!    
+!     write(120,*) vperp(i),rf01(i,j)
+!    write(121,*) vperp(i),vpar(j),rfcte*dirac(j)*comfac1*vperp(i)*dn(i)
+!    write(122,*) vperp(i),vpar(j),rfcte*dirac(j)*vperp(i)**2*dn(i)
+!    
+!endif
 
 
 	enddo
 enddo
 
+!close(123)
+!close(122)
+!close(121)
+!close(120)
+!
 !=========================================================
 
 deallocate(dn,ddndvperp)
