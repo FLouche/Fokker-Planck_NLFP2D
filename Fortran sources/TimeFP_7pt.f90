@@ -32,6 +32,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
                       fstart, fout, otime)
 
   USE mod_fd_stencil_2d               ! provides fd_stencil_2d
+  USE mod_coul_fv                     ! flux-form Coulomb operator (i_cc = -1)
   USE pardiso_solver                  ! provides pardiso_handle_t,
                                       !   pardiso_solve_init/step/finalize
   USE shared_grid
@@ -138,6 +139,15 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   !     exactly as in solve_fp_pardiso, but stored in CSR.
   !================================================================
 
+  IF (i_cc == -1) THEN
+    !--- Flux-form Coulomb operator: fixed 3x3 pattern from coul_fv ---
+    CALL cfv_build()
+    nnz_L = cfv_nnz
+    ia_L  = cfv_ia
+    ja_L(1:nnz_L) = cfv_ja
+    CALL cfv_fill(aa_L(1:nnz_L), taum)
+  ELSE
+
   !--- Pass 1: count non-zeros per row -> ia_L --------------------
   ia_L(1) = 1
   DO i = 1, nperp
@@ -173,6 +183,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END DO
   END DO
 
+  END IF   ! i_cc
+
   !WRITE(*,'(A,I10,A,F6.2,A)') '  L operator: nnz=', nnz_L, &
    !   '  (', 100.d0*nnz_L/DBLE(ndof)**2, ' %)'
 
@@ -205,9 +217,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   ! BC rows must be treated as constraints, not time-evolution equations.
   ! Restore them to the original L stencil so the solver enforces
   ! df/dvp=0 (i=1) and f=0 (i=nperp, j=1, j=npar) at every time step.
+  ! (bc_row: with i_cc = -1 only Dirichlet walls, if chosen, are constraints.)
   DO row = 1, ndof
     CALL index_mat_inv(row, iv, imu)
-    IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+    IF (bc_row(iv, imu)) THEN
       DO ptr = ia_lhs(row), ia_lhs(row+1)-1
         aa_lhs(ptr) = aa_L(ptr)
       END DO
@@ -324,6 +337,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       
    CALL time_density(f_init, dens_tmp)
    write(*,*) 'Initial density is ',dens_tmp
+   IF (i_cc == -1) WRITE(*,'(A,ES22.14)') &
+       '  Initial density on the finite-volume cells : ', cfv_density(fstart)
 
    call time_energy(f_init, dens_tmp, teff=teff_tmp)
    write(*,*) 'Initial effective temperature is ',teff_tmp
@@ -409,6 +424,10 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     ! pattern, so no running pointer is needed.  A row whose entry count does
     ! not match the pattern would corrupt the matrix: stop rather than go on.
     pattern_ok = .TRUE.
+    IF (i_cc == -1) THEN
+      ! flux form: fixed per-species matrices rescaled by the new gammab
+      CALL cfv_fill(aa_L(1:nnz_L), taum)
+    ELSE
     !$OMP PARALLEL DO SCHEDULE(STATIC) DEFAULT(SHARED) &
     !$OMP   PRIVATE(i, j, k, row, col_idx, stencil_coeff, n_entries, rhs_ij) &
     !$OMP   REDUCTION(.AND.:pattern_ok)
@@ -430,6 +449,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
     END DO
     !$OMP END PARALLEL DO
+    END IF   ! i_cc
     IF (.NOT. pattern_ok) THEN
       WRITE(*,'(A,I0)') '  *** PATTERN MISMATCH in the matrix refill at step ', itime
       STOP
@@ -454,7 +474,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
-      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+      IF (bc_row(iv, imu)) THEN
         DO ptr = ia_lhs(row), ia_lhs(row+1)-1
           aa_lhs(ptr) = aa_L(ptr)
         END DO
@@ -485,7 +505,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(row, ptr, iv, imu)
     DO row = 1, ndof
       CALL index_mat_inv(row, iv, imu)
-      IF (iv == 1 .OR. iv == nperp .OR. imu == 1 .OR. imu == npar) THEN
+      IF (bc_row(iv, imu)) THEN
         rhs_vec(row) = 0.0_dp
       END IF
     END DO
@@ -652,6 +672,8 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
+  IF (i_cc == -1) WRITE(*,'(A,ES22.14)') &
+      '  Final density on the finite-volume cells   : ', cfv_density(fstart)
 
   IF (iplot_pow == -1) THEN
     IF (irf     == -1) CLOSE(480)

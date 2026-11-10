@@ -24,6 +24,7 @@ use shared_FPterms
 use mod_ncint
 use func_index
 use mod_apply_operator
+use mod_coul_fv, only: coll_apply_species, coll_apply_total
 
 implicit none
 
@@ -51,12 +52,7 @@ mom_fac   = pmass * aa
 
 !--- 1. Bulk-species collisional momentum ---
 do ib = 1, nbulk
-    call apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
-                        gammab(ib)*colin02_sp(:,:,ib), &
-                        gammab(ib)*colin11_sp(:,:,ib), &
-                        gammab(ib)*colin10_sp(:,:,ib), &
-                        gammab(ib)*colin01_sp(:,:,ib), &
-                        gammab(ib)*colin00_sp(:,:,ib), fin, Lf)
+    call coll_apply_species(ib, fin, Lf)
     do iv = 1, nperp
         do ip = 1, npar
             ix = index_mat(iv,ip)

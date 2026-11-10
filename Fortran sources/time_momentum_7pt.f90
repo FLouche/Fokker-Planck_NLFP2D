@@ -26,6 +26,7 @@ SUBROUTINE time_momentum_7pt(f, dens, &
   USE shared_timer
   USE func_index
   USE mod_apply_operator
+  USE mod_coul_fv, only: coll_apply_species, coll_apply_total
 
   IMPLICIT NONE
 
@@ -70,13 +71,7 @@ SUBROUTINE time_momentum_7pt(f, dens, &
   !================================================================
   DO ib = 1, nbulk
 
-    CALL apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
-                        gammab(ib)*colin02_sp(:,:,ib), &
-                        gammab(ib)*colin11_sp(:,:,ib), &
-                        gammab(ib)*colin10_sp(:,:,ib), &
-                        gammab(ib)*colin01_sp(:,:,ib), &
-                        gammab(ib)*colin00_sp(:,:,ib), &
-                        f, Lf)
+    CALL coll_apply_species(ib, f, Lf)
 
     DO iv = 1, nperp
       DO ip = 1, npar

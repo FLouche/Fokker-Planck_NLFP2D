@@ -20,6 +20,7 @@ use shared_FPterms
 use mod_ncint
 use func_index
 use mod_apply_operator
+use mod_coul_fv, only: coll_apply_species, coll_apply_total
 
 INTEGER, PARAMETER :: dp = KIND(1.0D0)
 
@@ -34,16 +35,10 @@ integer :: ix, iv, imu, ib
 
 taum = 0.d0
 
-call apply_operator(colin20, colin02, colin11, colin10, colin01, colin00, fin, Lf_col)
+call coll_apply_total(fin, Lf_col)
 
 do ib = 1, nbulk
-    call apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
-                        gammab(ib)*colin02_sp(:,:,ib), &
-                        gammab(ib)*colin11_sp(:,:,ib), &
-                        gammab(ib)*colin10_sp(:,:,ib), &
-                        gammab(ib)*colin01_sp(:,:,ib), &
-                        gammab(ib)*colin00_sp(:,:,ib), &
-                        fin, Lf_col_sp)
+    call coll_apply_species(ib, fin, Lf_col_sp)
     do iv = 1, nperp
         do imu = 1, npar
             ix = index_mat(iv,imu)

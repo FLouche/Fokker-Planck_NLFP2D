@@ -31,6 +31,8 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   USE func_index
 
   use mod_apply_operator
+
+  use mod_coul_fv, only: coll_apply_species, coll_apply_total
   
   IMPLICIT NONE
 
@@ -89,13 +91,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   !================================================================
   DO ib = 1, nbulk
 
-    CALL apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
-                        gammab(ib)*colin02_sp(:,:,ib), &
-                        gammab(ib)*colin11_sp(:,:,ib), &
-                        gammab(ib)*colin10_sp(:,:,ib), &
-                        gammab(ib)*colin01_sp(:,:,ib), &
-                        gammab(ib)*colin00_sp(:,:,ib), &
-                        f, Lf)
+    CALL coll_apply_species(ib, f, Lf)
 
     DO iv = 1, nperp
       DO ip = 1, npar
@@ -298,6 +294,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   USE shared_timer          ! isc
   USE func_index
   USE mod_apply_operator
+  USE mod_coul_fv, only: coll_apply_species, coll_apply_total
 
   IMPLICIT NONE
 
@@ -317,13 +314,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   taum = 0.0_dp
 
   DO ib = 1, nbulk
-    CALL apply_operator(gammab(ib)*colin20_sp(:,:,ib), &
-                        gammab(ib)*colin02_sp(:,:,ib), &
-                        gammab(ib)*colin11_sp(:,:,ib), &
-                        gammab(ib)*colin10_sp(:,:,ib), &
-                        gammab(ib)*colin01_sp(:,:,ib), &
-                        gammab(ib)*colin00_sp(:,:,ib), &
-                        f, Lf)
+    CALL coll_apply_species(ib, f, Lf)
     CALL integrate_Lf(Lf, ncoll(ib))
   END DO
 

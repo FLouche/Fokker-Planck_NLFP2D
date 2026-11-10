@@ -345,7 +345,8 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads
+                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
+                i_cc, i_cc_wall
 
 
 !write(*,*) 'Read namelist'
@@ -377,6 +378,27 @@ if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
     write(*,'(A,I0,A)') 'ERROR: isc=', isc, ' requires a time-dependent run (ntimes > 0).'
     write(*,*) 'Steady-state solver cannot be used with a time-varying self-collision operator.'
     stop
+endif
+
+! Flux-form (Chang-Cooper) Coulomb operator, coul_fv.f90: first stage, so far
+! only for the Coulomb operator, in the linear time solver timefp_7pt.
+if (i_cc /= 0 .and. i_cc /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: i_cc=', i_cc, ' is not valid. Use 0 (7-point) or -1 (flux form).'
+    stop
+endif
+if (i_cc_wall /= 0 .and. i_cc_wall /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: i_cc_wall=', i_cc_wall, ' is not valid. Use -1 (zero flux) or 0 (f=0).'
+    stop
+endif
+if (i_cc == -1) then
+    if (irf == -1 .or. isc /= 0 .or. ntimes(1) == 0) then
+        write(*,*) 'ERROR: i_cc=-1 (flux-form Coulomb operator) needs, for now, irf=0, isc=0'
+        write(*,*) '       and a time-dependent run (ntimes > 0): RF and self-collisions'
+        write(*,*) '       are not yet available in flux form.'
+        stop
+    endif
+    write(*,'(A)') ' Coulomb operator: flux form, finite volumes, Chang-Cooper weights (i_cc = -1)'
+    write(*,'(A)') '   walls: '//trim(merge('zero flux (closed box)', 'Dirichlet f = 0       ', i_cc_wall == -1))
 endif
 
 ! Coherence checks for istart (only relevant for a fresh TD run)
