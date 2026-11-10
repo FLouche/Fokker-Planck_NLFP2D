@@ -179,7 +179,7 @@ file-unit registry under *Fortran Internals*. Time traces are written by both
 | moments | `density`, `energy`, `anisotropy`, `Teff`, `Tn` | always |
 | collision times | `tau_coll` (effective τ_ii, τ_ie) | always |
 | power balance | `power_coll_tot`, `power_coll_e`, `power_coll_ion<k>` (one per species), `power_coll_self` (`isc≠0`), `power_RF` (RF), `power_NBI` (NBI) | `iplot_pow=-1` |
-| density balance | `density_terms`: dn/dt split into total, coll per species, SC, RF, source, losses (m⁻³/s) | `iplot_pow=-1` |
+| density balance | `density_terms`: dn/dt split into total, coll per species, SC, RF, source, losses (m⁻³/s) | **switched off** (`84e54ac`, lines marked `!DTERMS-OFF!`); was `iplot_pow=-1` |
 | momentum balance | `momentum_coll_tot`, `momentum_coll_e`, `momentum_coll_ion<k>`, `momentum_coll_self`, `momentum_RF`, `momentum_NBI` (same conditions as power) | `iplot_mom=-1` |
 | Coulomb logs | `coulomb_log` (`nbulk>1`), `coulomb_log_self` (`isc=1,2,3` in `timefp_7pt`; `isc≠0` in `timefp_7pt_nl`) | — |
 | RF | `tau_rf` (RF tail formation time) | RF |
@@ -193,8 +193,17 @@ index and may carry a space (see *`--files` matching* below).
   `test_density_balance_7pt`, called from `analysis.f90`), always run;
 - momentum balance (`test_momentum_balance_7pt`), only with `iplot_mom=-1`
   (since `3f65b5f`);
-- domain adequacy check (`domain_check` block in `main-FP_Coll_2D.f90`),
-  always run: compares f at the Dirichlet walls with the final temperature.
+- domain adequacy check (`domain_adequacy_check`, module `mod_domain_check`
+  in `domain_check.f90`, called at the end of `main`), always run: from the
+  final Teff it gives f(wall)/f(peak) at `vperp_max` and min(|vpar_min|,
+  |vpar_max|) and the |v|max needed for 1e-12 (~7.4 vth), and flags a box
+  that is TOO SMALL — an error grid refinement cannot reduce.
+
+**Debug dumps kept in the sources, switched off** (`!DEBUG-OFF!` marker):
+`LF_RF_2D`, `LF_RF_fstix_2D`, `LF_col_fstix_2D`, `LF_col_2D`
+(`test_density_balance_7pt.f90`) and `theta2_along_vpar0`
+(`qlrfterm.f90`). Uncommented they write on every run, without casename
+suffix.
 
 **No longer written** (commented out in `main-FP_Coll_2D.f90`, ~line 738–764):
 the cuts `fout_at_vparmax`, `fout_at_vperpmax` and all four
@@ -302,7 +311,7 @@ New output files must use units not in this table:
 | 516 | tau_coll_vs_time (effective tau_ii, tau_ie) | always |
 | 518 | conv_diag_vs_time.csv (full convergence history) | `i_ss_check=-1` |
 | 519 | conv_eps_vs_time (time, eps, eps_tail) | `i_ss_check=-1` |
-| 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | `iplot_pow=-1` |
+| 520 | density_terms_vs_time (time, total, coll(1:nbulk), SC, RF, source, losses; dn/dt per operator term, m⁻³/s) | switched off (`!DTERMS-OFF!`); unit stays reserved |
 | 530 | vdf_snap_<step> (f every `n_snap` steps; opened and closed per snapshot) | `n_snap>0` |
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
