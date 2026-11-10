@@ -91,6 +91,45 @@ All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`). The solver selec
 
 The steady-state solver is always `FP_steady_state` ← `fd_stencil_2d` (in `mod_linear`).
 
+### Flux-form Coulomb operator (`i_cc = -1`, branch `chang_cooper`)
+
+Added 2026-11-10 (`441d5df`), first stage of a Chang–Cooper discretisation.
+All three operators are exact cylindrical divergences
+L f = (1/v⊥)∂⊥[v⊥ Γ⊥] + ∂∥Γ∥, Γ = A f + D·∇f; the six `**` arrays are this
+expanded. Checked term by term:
+- **Coulomb** (`cblin`): A = Ψ**v**, D⊥⊥ = Θ+v∥²Φ, D∥∥ = Θ+v⊥²Φ,
+  D⊥∥ = −v⊥v∥Φ (`c11` = 2D⊥∥). Since Ψ = (m_a/T_b)Θ, Γ_b = M_b D·∇(f/M_b),
+  M_b = exp(−κ_b v²), κ_b = `maonmb/(2 vt²)`.
+- **RF** (`qlrfterm`): A = 0, D = K|Θ|² **b**⊗**b**, **b** = (v_ph−v∥, v⊥),
+  K = `rfcte`·δ(v∥−v_res) — rank one, the hard part is its cross term.
+- **Nonlinear SC** (`main_nlterm`): D = coef·∇∇ψ, A = −coef·∇φ; flux form
+  needs no third derivatives of ψ.
+
+`coul_fv.f90` (`mod_coul_fv`): cells around the nodes, faces half way, axis
+cell [0, face₁] with zero flux at v⊥=0 (also when `ising=1` puts vperp(1)>0).
+Diagonal flux (D/h)[B(−s)f₊ − B(s)f₋], B(x)=x/(eˣ−1), s = jump of ln M;
+cross term by central differences of f/M on the face. Per-species matrices
+on a fixed 3×3 pattern, built once, rescaled by `gammab` each step
+(`cfv_fill`). `bc_row(iv,imu)` replaces the hard-coded boundary-row test in
+`timefp_7pt`. Diagnostics call `coll_apply_species` / `coll_apply_total`
+instead of `apply_operator(gammab*colin…)`; with `i_cc=0` they call exactly
+that, and the default is bit-identical to 3.2. Θ, Φ use series below
+u = v/(√2 vt) = 0.1 (closed form loses digits there).
+
+**Measured** (JET beam case 1 with `isc=0`; Maxwellian test 100², Te=Ti):
+- start-of-run self-check: L_b M_b = 0 to 1–3×10⁻¹⁵ per row;
+- closed box: Σ cell-volume × f constant to 7×10⁻¹³ over 200 steps (LU-reuse
+  residual level). `density_vs_time` uses Simpson weights, not the cell
+  volumes, so judge conservation on the printed finite-volume density;
+- 3× faster per step than the 7-point stencil (9 vs up to 49 entries);
+- **second order and much less accurate per point**: Teff error vs the
+  7-point result (converged already at 101²) 2.5% / 1.1% / 0.39% at
+  101² / 151² / 251²; Richardson extrapolation recovers the 7-point value.
+  Its gains are positivity, conservation, exact equilibrium and robustness
+  at high Péclet — not accuracy on smooth problems.
+- Not guaranteed positive (the cross term is not sign-definite), but f
+  stayed ≥ 0 in the beam case where the 7-point f dips to −8×10⁻¹⁸ of max.
+
 ### Sparse Matrix and PARDISO
 All sparse matrices are stored in 1-based CSR format. The `pardiso_solver` module (`pardiso_solver (2).f90`) wraps Intel MKL PARDISO with four entry points that exploit phased factorisation:
 - `pardiso_solve_steady` — phases 11+22+33 then release (used by steady-state solver)
@@ -138,6 +177,8 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
+| `i_cc` | 0 / -1 | Coulomb operator: expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; for now needs `irf=0`, `isc=0`, time-dependent) |
+| `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
 ### Output Files
