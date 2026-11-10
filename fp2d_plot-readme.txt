@@ -378,7 +378,13 @@ COMMON OPTIONS  (all three sub-commands)
 
   --logf            Logarithmic scale for the plotted QUANTITY: the colour
                     scale of a 2D contour map, the z of a 3D surface, the y of
-                    a 1D profile.  --log is an accepted alias.
+                    a 1D profile or of a time trace (e.g. Teff_vs_time), in
+                    plot and compare alike.  --log is an accepted alias.
+                    On a time trace it acts like --logy, with the same rule:
+                    a trace that crosses zero (a power that changes sign)
+                    stays linear, with a note saying so.  The composite
+                    figures (power_vs_time, coulomb_log_all_vs_time, ...)
+                    take --logy only.
 
   --logx            Logarithmic x-axis.
 

@@ -356,7 +356,7 @@ Three independent options, available to `plot` and `compare`:
 
 | Option | Scales | Mechanism |
 |--------|--------|-----------|
-| `--logf` (alias `--log`) | the plotted **quantity** — colour scale of a 2D map, z of a 3D surface, y of a 1D profile | the `log` argument threaded through each plot function |
+| `--logf` (alias `--log`) | the plotted **quantity** — colour scale of a 2D map, z of a 3D surface, y of a 1D profile or of a time trace (`ts`/`ts2`, in `plot` and `compare`; not the composites) | the `log` argument threaded through each plot function; for time traces it is passed on as `_finish(logy=...)`, so it gets the `--logy` zero-crossing rule |
 | `--logx` | the x-axis | `_LOGX` global, applied in `_finish` |
 | `--logy` | the y-axis | `_LOGY` global, applied in `_finish` |
 
