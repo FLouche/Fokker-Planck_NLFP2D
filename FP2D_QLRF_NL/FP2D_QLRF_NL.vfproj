@@ -60,13 +60,13 @@
 			</File>
 			<File RelativePath="..\Fortran sources\beam_source.f90">
 			</File>
-			<File RelativePath="..\Fortran sources\build_matrix_ss.f90"/>
 			<File RelativePath="..\Fortran sources\CBESSEL.F90"/>
 			<File RelativePath="..\Fortran sources\cblin_vperp.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\consts.f90"/>
 			<File RelativePath="..\Fortran sources\coulomb_log.f90"/>
 			<File RelativePath="..\Fortran sources\derivatives_2d.f90"/>
+			<File RelativePath="..\Fortran sources\domain_check.f90"/>
 			<File RelativePath="..\Fortran sources\fd_stencil_2d.f90"/>
 			<File RelativePath="..\Fortran sources\functions.f90"/>
 			<File RelativePath="..\Fortran sources\grid.f90"/>
@@ -82,7 +82,6 @@
 			<File RelativePath="..\Fortran sources\shared_data.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
-			<File RelativePath="..\Fortran sources\sparse_solve.f90"/>
 			<File RelativePath="..\Fortran sources\conv_diag.f90"/>
 			<File RelativePath="..\Fortran sources\steady_state.f90">
 			</File>

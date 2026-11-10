@@ -15,6 +15,22 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 3.2 - 10th November 2026 (FL)
+
+    ! Diagnostics and housekeeping; the solution is unchanged (bit-identical to
+    !   3.1 on one thread, ITER N=2 example, 900 steps).
+    !
+    !  1) Fewer outputs: density_terms_vs_time is switched off (!DTERMS-OFF!),
+    !     the end-of-run momentum balance runs only with iplot_mom = -1, and
+    !     the operator debug dumps (LF_*_2D.txt, theta2_along_vpar0.txt) stay
+    !     in the sources commented out (!DEBUG-OFF!).
+    !  2) The end-of-run domain adequacy check moves to domain_check.f90
+    !     (module mod_domain_check), unchanged.
+    !  3) The Coulomb logarithm of each background species is printed at start.
+    !  4) The unused original steady-state path moves to Fortran sources/Dead/.
+    !  5) fp2d_plot.py: compare takes --logx/--logy/--xrange/--yrange; --logf
+    !     also puts the y-axis of a time trace on a log scale.
+
     ! Version 3.1 - 21st October 2026 (FL)
 
     ! The parallelised version.  Same physics and equations as 3.0.  On one
@@ -191,6 +207,7 @@ use func_index
 !
 use mod_ncint
 use time_comps_mod        ! explicit interface for time_energy(..., teff=)
+use mod_domain_check      ! domain adequacy check at the end of the run
 !$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
@@ -709,65 +726,10 @@ call analysis(fout)
 
 !====================================================================
 !
-! Domain adequacy check
-! ---------------------
-!
-! The Dirichlet walls impose f=0, while the true solution there is
-!   f(wall)/f(peak) = exp(-(V/vth)^2/2).
-! Whatever that ratio is, it is the floor on the solution error, and it does
-! NOT improve with grid refinement.  The check must use the FINAL (heated)
-! temperature, not the cold background one: an RF or beam case can be perfectly
-! well sized for its initial Maxwellian and badly under-sized for the
-! distribution it actually evolves into.
-!
-! Target ratio 1e-12 (i.e. |v|max ~ 7.4 vth) was measured to give a shape error
-! ~2e-8, against ~3e-5 at 5 vth.
+! Domain adequacy check (domain_check.f90): is |v|max large enough for the
+! final, heated distribution?
 
-domain_check: block
-
-    double precision :: dens_chk, teff_chk, vth_chk, v_req
-    double precision :: r_perp, r_par
-    double precision, parameter :: f_target = 1.d-12
-
-    call time_density(fout, dens_chk)
-    call time_energy(fout, dens_chk, teff=teff_chk)
-
-    if (teff_chk > 0.d0) then
-
-        vth_chk = 9.79d3*dsqrt(teff_chk*1.d3/aa)
-        v_req   = vth_chk*dsqrt(2.d0*dlog(1.d0/f_target))
-
-        r_perp = vperp_max/vth_chk
-        r_par  = min(dabs(vpar_min), dabs(vpar_max))/vth_chk
-
-        write(*,*) ' '
-        write(*,*) 'DOMAIN ADEQUACY CHECK (Dirichlet wall)'
-        write(*,*) '--------------------------------------'
-        write(*,'(A,F9.3,A,ES10.3,A)') '  final Teff  = ', teff_chk, &
-             ' keV   ->  vth = ', vth_chk, ' m/s'
-        write(*,'(A,ES9.2,A,ES10.3,A)') '  for f(wall)/f(peak) < ', f_target, &
-             '  recommend |v|max > ', v_req, ' m/s'
-        write(*,'(A,ES10.3,A,F6.2,A,ES9.2,A)') '  vperp_max   = ', vperp_max, &
-             '  (', r_perp, ' vth)  f(wall)/f(peak) = ', &
-             dexp(-0.5d0*r_perp**2), '  '//trim(merge('OK       ', &
-             'TOO SMALL', vperp_max >= v_req))
-        write(*,'(A,ES10.3,A,F6.2,A,ES9.2,A)') '  |vpar|max   = ', &
-             min(dabs(vpar_min),dabs(vpar_max)), &
-             '  (', r_par, ' vth)  f(wall)/f(peak) = ', &
-             dexp(-0.5d0*r_par**2), '  '//trim(merge('OK       ', &
-             'TOO SMALL', min(dabs(vpar_min),dabs(vpar_max)) >= v_req))
-
-        if (vperp_max < v_req .or. &
-            min(dabs(vpar_min),dabs(vpar_max)) < v_req) then
-            write(*,*) ' '
-            write(*,'(A,ES10.3,A)') '  ==> the domain truncates the tail. '// &
-                 'Re-run with |v|max >= ', v_req, ' m/s;'
-            write(*,*) '      refining the grid will NOT reduce this error.'
-        end if
-
-    end if
-
-end block domain_check
+call domain_adequacy_check(fout)
 
 if(isc /= 0) deallocate(sc20,sc02,sc11,sc10,sc01,sc00)
 

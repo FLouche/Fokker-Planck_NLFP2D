@@ -53,7 +53,7 @@
        \normalsize 2D Fokker--Planck solver for ion velocity distribution
        functions in cylindrical velocity space}
 \author{F.~Louche\\LPP-ERM/KMS}
-\date{Version 3.1 -- 21 October 2026}
+\date{Version 3.2 -- 10 November 2026}
 % ============================================================
 
 \begin{document}
@@ -721,7 +721,8 @@ At each time step the following quantities are written to disk:
 \end{itemize}
 
 At the end of a run, balance diagnostics (power, density, and optionally
-momentum) are printed to standard output.
+momentum) and a check of the size of the velocity domain are printed to
+standard output (Section~\ref{sec:endofrun}).
 
 % ============================================================
 \section{Namelist Reference}
@@ -1180,9 +1181,9 @@ into an animation (Section~\ref{sec:plotting}).
 
 \subsection{1D Cuts of the VDF}
 
-\texttt{fout\_at\_vpar0.txt}, \texttt{fout\_at\_vperp0.txt},
-\texttt{fout\_at\_vperpmax.txt}, \texttt{fout\_at\_vparmax.txt}:
-values of $f$ along the four boundary slices of the domain.
+\texttt{fout\_at\_vpar0.txt}, \texttt{fout\_at\_vperp0.txt}: values of $f$
+along the lines $\vpa = 0$ and $\vp = 0$.  (The cuts at $\vpmax$ and $\vpamax$,
+and those of the Stix Maxwellian, are no longer written.)
 
 \subsection{Time Traces}
 
@@ -1219,8 +1220,9 @@ which are written once per \texttt{n\_ss\_window}-step window):
         self-collisions, RF, source, losses.  Each term is the velocity
         integral of its own part of $\mathcal{L}f$; every term is a divergence,
         so a non-zero value means particles leave through the Dirichlet walls
-        or the term is not conservative in its discrete form.  Written when
-        \texttt{iplot\_pow = -1}.
+        or the term is not conservative in its discrete form.  Switched off
+        since version~3.2 (the lines are kept, commented out, in both time
+        solvers).
   \item[\texttt{momentum\_coll\_*\_vs\_time.txt}] Momentum transfer rates
         (2 columns per file: $\perp$ and $\parallel$ components), written when
         \texttt{iplot\_mom = -1}.  The RF, NBI and self-collision rates go
@@ -1244,13 +1246,28 @@ which are written once per \texttt{n\_ss\_window}-step window):
         \texttt{casename}: every run overwrites it.
 \end{description}
 
-\subsection{End-of-Run Balance Diagnostics (stdout)}
+\subsection{End-of-Run Diagnostics (stdout)}
+\label{sec:endofrun}
 
-Power, particle density and momentum ($\perp$ and $\parallel$) balances are
-printed to standard output at the end of every run.  Values are given in
+\paragraph{Balances.}  The power and particle-density balances are printed to
+standard output at the end of every run, the momentum ($\perp$ and
+$\parallel$) balance only when \texttt{iplot\_mom = -1}.  Values are given in
 MW/m$^3$ for power, N/m$^3$ for momentum, and s$^{-1}$ for particle rates.
 (The former switch \texttt{idiag}, which selected them, has been removed; a
 namelist that still sets it is rejected at read time.)
+
+\paragraph{Domain adequacy check.}  The Dirichlet walls impose $f=0$, whereas
+the true solution there is $f(\text{wall})/f(\text{peak}) =
+\exp(-V^2/2v_\mathrm{th}^2)$, with $V$ the wall velocity.  That ratio is a floor
+on the error which grid refinement does not reduce.  At the end of every run the
+code takes the \emph{final} $T_\mathrm{eff}$ (an RF or beam case may suit its
+initial Maxwellian and still be too small for the heated distribution),
+computes $v_\mathrm{th}=\sqrt{T/m}$, and prints, for $\vpmax$ and for
+$\min(|\vpamin|,|\vpamax|)$, the ratio $f(\text{wall})/f(\text{peak})$ and a
+verdict \texttt{OK} or \texttt{TOO SMALL} against a target of $10^{-12}$
+($|v|_{\max}\approx 7.4\,v_\mathrm{th}$; this gave a shape error of
+${\sim}2\times10^{-8}$, against ${\sim}3\times10^{-5}$ at $5\,v_\mathrm{th}$).
+A box that is too small is reported with the $|v|_{\max}$ to re-run with.
 
 
 % ============================================================
@@ -1263,6 +1280,15 @@ strategy: 1000 coarse steps followed by 1000 finer steps. It lists \emph{every}
 \texttt{\&INPUT} parameter; the RF block is included for completeness but is only
 read when \texttt{irf=-1}, and the diagnostic/advanced flags are shown at their
 default (off) values.
+
+A second, fully commented example ships with the code as
+\texttt{example\_namelist\_ITER\_N2.txt} (project root): the ITER $N=2$ RF
+reference case on $150\times150$ with nonlinear self-collisions, which converges
+in 900 steps (about 21~s on 16 threads).  It is the quickest way to check a new
+build:
+\begin{lstlisting}
+FP2D_QLRF_NL.exe < example_namelist_ITER_N2.txt
+\end{lstlisting}
 
 \begin{lstlisting}
 &INPUT
@@ -1417,6 +1443,13 @@ The last line builds an animation of $f$, the kinetic-energy density and its
 perpendicular and parallel parts (a $2\times2$ array of panels) from the \texttt{vdf\_snap} files (requires \texttt{n\_snap > 0}); \texttt{--movie-scale
 frame} rescales each frame to its own maximum, and \texttt{--movie-format}
 selects AVI (default), MP4 or GIF.
+
+The axes of \texttt{plot} and \texttt{compare} figures can be set with
+\texttt{--logx}, \texttt{--logy} (logarithmic axes) and
+\texttt{--xrange xmin:xmax}, \texttt{--yrange ymin:ymax} (zoom).
+\texttt{--logf} puts the plotted quantity on a log scale: the colour scale of a
+2D map, and the $y$-axis of a 1D profile or of a time trace.  An axis on which
+the data really change sign ($\vpa$, or a power) is left linear, with a note.
 See \texttt{fp2d\_plot-readme.txt} for the full documentation of the
 plotting tool.
 

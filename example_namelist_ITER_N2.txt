@@ -1,6 +1,7 @@
 &INPUT
 ! ==========================================================================
-!  Typical namelist for the parallelised version (branch "parallelised").
+!  Typical namelist, version 3.2 (parallelised code).  Sets every &INPUT
+!  parameter.
 !
 !  ITER EDA, second-harmonic (N=2) ICRF heating of tritium, nonlinear
 !  self-collisions, 150 x 150 grid -- the reference case of
@@ -48,6 +49,9 @@
 !  icn=1: theta = 0.75.  isc=-1: nonlinear self-collisions.
    icn = 1, ntimes = 500, 1000, 1000, timestep = 5.d-3, 25.d-3, 50.d-3,
    iold = 0, istart = 1, isc = -1,
+!  core_frac: core fraction of the Tn log-slope fit, read by isc=3 only
+!  (default 4.d-3, calibrated on JET RF case 5).
+   core_frac = 4.d-3,
 
 ! ---- Linear solver (parallelised version) -----------------------------------
 !  i_lu_reuse=-1: reuse the last LU factorisation as preconditioner of a few
@@ -69,8 +73,9 @@
    i_conv_shape = -1,
 
 ! ---- Output ------------------------------------------------------------------
-!  iplot_pow=-1: power and per-term density traces every step.  n_snap=0: no
-!  VDF snapshots (set e.g. n_snap=20 for fp2d_plot.py --movie).
+!  iplot_pow=-1: power traces every step.  iplot_mom=-1 would add the
+!  momentum traces and the end-of-run momentum balance.  n_snap=0: no VDF
+!  snapshots (set e.g. n_snap=20 for fp2d_plot.py --movie).
    iplot_pow = -1, iplot_mom = 0, notxt = 0,
    i_upwind = 0, n_snap = 0
   /
