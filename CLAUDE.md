@@ -147,7 +147,7 @@ All output is written to the run directory. Key files:
 - `fstix.dat` — Stix reference Maxwellian
 - `density_vs_time.txt`, `energy_vs_time.txt` — time traces
 - `power_coll_*_vs_time.txt`, `power_RF_vs_time.txt` — power balance
-- `fout_at_vpar0.txt`, `fout_at_vperp0.txt`, etc. — 1D cuts of f at boundaries
+- `fout_at_vpar0.txt`, `fout_at_vperp0.txt` — 1D cuts of f along the two axes
 
 The full list is in **Diagnostics** below.
 
@@ -163,10 +163,10 @@ file-unit registry under *Fortran Internals*. Time traces are written by both
 | File | Content | Condition |
 |------|---------|-----------|
 | `fout.txt`, `xout.dat` | final f (text / restart) | always |
-| `fout_at_{vpar0,vparmax,vperp0,vperpmax}.txt` | 1D cuts of f | always |
-| `fstix.dat`, `fstix_at_{vpar0,vparmax,vperp0,vperpmax}.txt` | Stix reference Maxwellian and its cuts | always |
+| `fout_at_vpar0.txt`, `fout_at_vperp0.txt` | 1D cuts of f | always |
+| `fstix.dat` | Stix reference Maxwellian | always |
 | `vdf_snap_<step>.txt` | f every `n_snap` steps | `n_snap>0` |
-| `fsc_maxw.txt`, `fsc_maxw_at_vpar0.txt` | Maxwellian background of the SC operator | `isc=2,3` |
+| `fsc_maxw.txt`, `fsc_maxw_at_vpar0.txt` | Maxwellian background of the SC operator | `isc=2,3` (`timefp_7pt` only) |
 | `beam.txt` | NBI source | NBI |
 
 **Energy maps** (`analysis.f90`, end of run): `Ekin.txt`, `Ekin_perp.txt`,
@@ -181,22 +181,31 @@ file-unit registry under *Fortran Internals*. Time traces are written by both
 | power balance | `power_coll_tot`, `power_coll_e`, `power_coll_ion<k>` (one per species), `power_coll_self` (`isc≠0`), `power_RF` (RF), `power_NBI` (NBI) | `iplot_pow=-1` |
 | density balance | `density_terms`: dn/dt split into total, coll per species, SC, RF, source, losses (m⁻³/s) | `iplot_pow=-1` |
 | momentum balance | `momentum_coll_tot`, `momentum_coll_e`, `momentum_coll_ion<k>`, `momentum_coll_self`, `momentum_RF`, `momentum_NBI` (same conditions as power) | `iplot_mom=-1` |
-| Coulomb logs | `coulomb_log` (`nbulk>1`), `coulomb_log_self` (`isc=1,2`) | — |
+| Coulomb logs | `coulomb_log` (`nbulk>1`), `coulomb_log_self` (`isc=1,2,3` in `timefp_7pt`; `isc≠0` in `timefp_7pt_nl`) | — |
 | RF | `tau_rf` (RF tail formation time) | RF |
 | convergence | `conv_eps_vs_time.txt` (time, eps, eps_tail), `conv_diag_vs_time.csv` (full history; `conv_diag.f90`) | `i_ss_check=-1` |
 
 The `power_coll_ion<k>` / `momentum_coll_ion<k>` names are built from the species
 index and may carry a space (see *`--files` matching* below).
 
-**End-of-run balance checks** (`analysis.f90`, stdout only): power, particle
-density and momentum balance (`test_power_balance_7pt`,
-`test_density_balance_7pt`, `test_momentum_balance_7pt`), always run.
+**End-of-run checks** (stdout only):
+- power and particle-density balance (`test_power_balance_7pt`,
+  `test_density_balance_7pt`, called from `analysis.f90`), always run;
+- momentum balance (`test_momentum_balance_7pt`), only with `iplot_mom=-1`
+  (since `3f65b5f`);
+- domain adequacy check (`domain_check` block in `main-FP_Coll_2D.f90`),
+  always run: compares f at the Dirichlet walls with the final temperature.
+
+**No longer written** (commented out in `main-FP_Coll_2D.f90`, ~line 738–764):
+the cuts `fout_at_vparmax`, `fout_at_vperpmax` and all four
+`fstix_at_{vpar0,vparmax,vperp0,vperpmax}`. `fp2d_plot.py` still has entries
+for them, which only matter for old run directories.
 
 **Cache, not a diagnostic:** `phi_kern-<case>.dat`, the compressed φ-kernel of
 `timefp_7pt_nl` (`mod_phi_kernel`), reused when the grid matches.
 
 **Not routed through `outfile()`** (no casename, overwritten by every run):
-`qlrfterm.f90` writes `RF_dirac.txt` (`notxt=0`).
+`qlrfterm.f90` writes `RF_dirac.txt` (RF on and `notxt=0`).
 
 **Removed 2026-10-05 (branch `last-dev`, after `1845cf1`):** the namelist
 parameter `idiag` and everything it switched on — `sc_density_map.txt`,
@@ -285,9 +294,9 @@ New output files must use units not in this table:
 | 490 | power_NBI_vs_time | NBI |
 | 500 | power_coll_self_vs_time | `isc≠0` |
 | 505 | coulomb_log_vs_time | `nbulk>1` |
-| 506 | coulomb_log_self_vs_time | `isc=1,2` |
+| 506 | coulomb_log_self_vs_time | `isc=1,2,3` (`timefp_7pt_nl`: `isc≠0`) |
 | 507 | Teff_vs_time | always |
-| 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2` |
+| 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2,3` |
 | 514 | Tn_vs_time | always |
 | 515 | tau_rf_vs_time (RF tail formation time) | RF |
 | 516 | tau_coll_vs_time (effective tau_ii, tau_ie) | always |
