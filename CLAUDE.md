@@ -150,6 +150,28 @@ The SC power does not vanish in either scheme (Maxwellian-background SC does
 not conserve energy when f is not that Maxwellian); the flux form converges
 to the 7-point value.
 
+**NBI source** (`470941b`): `beam_source` normalises S analytically, so its
+cell sum was 4.6×10⁻⁵ too high at 151²; with `i_cc=-1`,
+`cfv_normalise_source` (called in `main` after `beam_source`) rescales
+`source`/`source_v` to Σ V S = npart/taus exactly. The closed-box balance is
+then exact: JET beam 1 ends at npart·(1 − 4.026×10⁻⁶), the θ-scheme fill-up
+factor [(1 − 0.25 dt/τ)/(1 + 0.75 dt/τ)]⁵⁰⁰.
+
+**Nonlinear self-collisions** (`isc=-1`, `e885ca4`): `main_nlterm` returns,
+as optional outputs, the nodal D = coef·∇∇ψ and A = −coef·∇φ;
+`cfv_set_nl` builds each step a finite-volume operator with Chang–Cooper
+fluxes in local form (s = A h/D from face averages; upwind drag if D ≤ 0,
+warned once — not seen so far), cross term central. `timefp_7pt_nl` has the
+same flux-form path as `timefp_7pt` (3×3 pattern, `bc_row`, density
+column 3, `cfv_nl_off` during the NBI fill-up skip). Measured: **particle
+conservation exact** — JET beam 1 (`isc=-1`) ends at npart·(1 − 4.026×10⁻⁶),
+identical to 14 digits to the `isc=0` run; closed-box Maxwellians drift
+~1×10⁻¹³/s vs +9.3×10⁻⁶/s (7-point, large box) and −5.6×10⁻³/s (7-point,
+small box, Dirichlet walls). But the Maxwellian is **not** an exact steady
+state of this operator (no M to weight with): Teff drifts −0.009% in 4 s
+(large box) where the 7-point stays flat — energy, not particles. Teff on
+the beam case +1.2% vs 7-point at 151² (second order); 2× faster.
+
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
 same build already differ (PARDISO), so compare default-mode builds on one
 thread.
@@ -201,7 +223,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
-| `i_cc` | 0 / -1 | Coulomb operator (and Maxwellian self-collisions): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; for now needs `irf=0`, `isc` = 0, 1, 2 or 3, time-dependent) |
+| `i_cc` | 0 / -1 | Collision operators (Coulomb and self-collisions, any `isc`): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; for now needs `irf=0`, time-dependent) |
 | `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
