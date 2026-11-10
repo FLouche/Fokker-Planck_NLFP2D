@@ -189,8 +189,11 @@ FILE_META = {
     #                         "ylabel": "φ",
     #                         "title":  "Rosenbluth potential φ at v∥ = 0", "sci_y": True},
     # Simple time series -------------------------------------------------------
-    "density_vs_time":         {"ptype": "ts",  "ylabel": "Density (m⁻³)",
-                                "title": "Particle density vs time"},
+    # 2 columns, or 3 with i_cc = -1 (density on the finite-volume cells)
+    "density_vs_time":         {"ptype": "ts2", "ylabel": "Density (m⁻³)",
+                                "title": "Particle density vs time",
+                                "labels": ["n (Simpson weights)",
+                                           "n (finite-volume cells)"]},
     "anisotropy_vs_time":      {"ptype": "ts",  "ylabel": "Perp. anisotropy (%, 50=Maxwell)",
                                 "title": "Anisotropy factor vs time"},
     "power_coll_tot_vs_time":  {"ptype": "ts",

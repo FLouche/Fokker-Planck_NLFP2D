@@ -534,7 +534,13 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     !--- Diagnostics (identical to TimeFP3) -----------------------
     CALL time_density(fout, dens_tmp)
   !  WRITE(*,*)  'Unnormalised density is ', dens_tmp
-    WRITE(45,*) time, dens_tmp
+    ! i_cc = -1: third column, the density on the scheme's own finite-volume
+    ! cells (conserved exactly by the flux form; dens_tmp uses Simpson weights)
+    IF (i_cc == -1) THEN
+      WRITE(45,*) time, dens_tmp, cfv_density(x_vec)
+    ELSE
+      WRITE(45,*) time, dens_tmp
+    END IF
     
     CALL time_energy(fout, dens_tmp, tk, tkperp, tkpar, teff)
     WRITE(46,*) time, tk, tkperp

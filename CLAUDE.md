@@ -118,9 +118,15 @@ u = v/(√2 vt) = 0.1 (closed form loses digits there).
 
 **Measured** (JET beam case 1 with `isc=0`; Maxwellian test 100², Te=Ti):
 - start-of-run self-check: L_b M_b = 0 to 1–3×10⁻¹⁵ per row;
-- closed box: Σ cell-volume × f constant to 7×10⁻¹³ over 200 steps (LU-reuse
-  residual level). `density_vs_time` uses Simpson weights, not the cell
-  volumes, so judge conservation on the printed finite-volume density;
+- closed box: Σ cell-volume × f constant to ~10⁻¹³ over 400 steps (drift
+  linear in time, LU-reuse residual level), against +7.6×10⁻⁶/s for the
+  7-point scheme in the same large box (non-conservative expanded form). In a
+  small box (4.3 v_th) the 7-point loss, −5.3×10⁻³/s, is matched to three
+  digits by the flux form with Dirichlet walls: it is the wall, not the
+  stencil. With `i_cc=-1`, `density_vs_time` has a **third column**, the
+  density on the finite-volume cells (`cfv_density`); column 2 uses Simpson
+  weights, which differ by ~10⁻⁴ when f is far from Maxwellian (beam case),
+  so judge conservation on column 3. `fp2d_plot.py` draws both (`ts2`);
 - 3× faster per step than the 7-point stencil (9 vs up to 49 entries);
 - **second order and much less accurate per point**: Teff error vs the
   7-point result (converged already at 101²) 2.5% / 1.1% / 0.39% at
