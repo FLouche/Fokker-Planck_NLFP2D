@@ -15,6 +15,22 @@ program FP_Coll_2D
 !
 ! ====================================================
 !
+    ! Version 3.2 - 10th November 2026 (FL)
+
+    ! Diagnostics and housekeeping; the solution is unchanged (bit-identical to
+    !   3.1 on one thread, ITER N=2 example, 900 steps).
+    !
+    !  1) Fewer outputs: density_terms_vs_time is switched off (!DTERMS-OFF!),
+    !     the end-of-run momentum balance runs only with iplot_mom = -1, and
+    !     the operator debug dumps (LF_*_2D.txt, theta2_along_vpar0.txt) stay
+    !     in the sources commented out (!DEBUG-OFF!).
+    !  2) The end-of-run domain adequacy check moves to domain_check.f90
+    !     (module mod_domain_check), unchanged.
+    !  3) The Coulomb logarithm of each background species is printed at start.
+    !  4) The unused original steady-state path moves to Fortran sources/Dead/.
+    !  5) fp2d_plot.py: compare takes --logx/--logy/--xrange/--yrange; --logf
+    !     also puts the y-axis of a time trace on a log scale.
+
     ! Version 3.1 - 21st October 2026 (FL)
 
     ! The parallelised version.  Same physics and equations as 3.0.  On one
