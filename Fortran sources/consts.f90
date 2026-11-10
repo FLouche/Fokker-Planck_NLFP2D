@@ -101,6 +101,7 @@ do ib=1,nbulk
 		vt(ib)=9.79d3*dsqrt(t(ib)/ab(ib-1))
         
         call coulomb_log_ab(za, aa, t(2), npart, zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab)
+        write(*,*) 'Coulomb log at start = ',lnab
         
         cte0=gamma0*lnab*(za/aa)**2 ! strictly speaking this formula is only valid for thermal ions
         ! we use it for the steady-state solution

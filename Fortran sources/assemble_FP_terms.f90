@@ -20,7 +20,7 @@ module assemble_FP_lin
     
     double precision, dimension(nperp,npar), intent(out) :: all00,all10,all01,all20,all11,all02
     
-    integer ib
+    integer ib,ipe
     
     ! =========================================================
     ! Linear collision terms: accumulate gammab*colin**_sp without
@@ -28,6 +28,9 @@ module assemble_FP_lin
 
     colin20 = 0.d0; colin02 = 0.d0; colin11 = 0.d0
     colin10 = 0.d0; colin01 = 0.d0; colin00 = 0.d0
+    
+  !      open(444,file='colin_D.txt',status='unknown')
+
 
     do ib = 1, nbulk
         colin20 = colin20 + gammab(ib)*colin20_sp(:,:,ib)
@@ -36,7 +39,17 @@ module assemble_FP_lin
         colin10 = colin10 + gammab(ib)*colin10_sp(:,:,ib)
         colin01 = colin01 + gammab(ib)*colin01_sp(:,:,ib)
         colin00 = colin00 + gammab(ib)*colin00_sp(:,:,ib)
+                
     enddo
+    
+   !         do ipe=1,nperp
+  !          write(444,*) vperp(ipe),gammab(2)*colin20_sp(ipe,imid,2)
+  !      enddo
+
+    
+  !  close(444)
+    
+ !   write(*,*) 'Gamma for D ',gammab(2)
     
     ! =========================================================
     ! RF heating term is added 
@@ -59,9 +72,8 @@ module assemble_FP_lin
     all02 = colin02
     all11 = colin11
 
-endif
-
-
+    endif
+            
     end subroutine assemble_FP_terms
     
 end module assemble_FP_lin

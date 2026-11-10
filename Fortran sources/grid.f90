@@ -113,6 +113,8 @@ enddo
 
 !close(40)
 
+!write(*,*) 'Vperp (imid) = ',vperp(imid)
+
 end subroutine make_grid
 
 
