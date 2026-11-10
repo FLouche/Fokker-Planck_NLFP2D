@@ -345,7 +345,8 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads
+                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
+                i7pt         ! TEMPORARY 3-point stencil option (comparison only)
 
 
 !write(*,*) 'Read namelist'
@@ -371,6 +372,20 @@ namelist /INPUT/ casename, &
 core_frac = 4.0d-3
 
 read(5,INPUT)
+
+! TEMPORARY 3-point stencil option (comparison only): -1 = 7-point Fornberg
+! (default, production), 0 = 3-point centred.  See fd_stencil_sel.f90.
+if (i7pt /= -1 .and. i7pt /= 0) then
+    write(*,'(A,I0,A)') 'ERROR: i7pt=', i7pt, &
+                        ' is not valid. Use -1 (7-point, default) or 0 (3-point).'
+    stop 1
+end if
+if (i7pt == 0) then
+    write(*,'(A)') ' Finite-difference stencil: 3-point centred (i7pt = 0)'
+    write(*,'(A)') ' *** 3-POINT STENCIL ACTIVE (comparison only, not production) ***'
+else
+    write(*,'(A)') ' Finite-difference stencil: 7-point Fornberg (i7pt = -1)'
+end if
 
 ! isc=-1, isc=2 and isc=3 require a time-dependent run
 if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
