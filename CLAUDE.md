@@ -82,7 +82,19 @@ The velocity domain must contain not just the beam injection point but the full 
 **Rule of thumb:** set vpar_max ≥ v_beam × cos(θ) + 3 × max(beam_dvpar, v_th_bulk), and similarly for vperp_max. Always verify SC energy conservation via Psc_perp + Psc_par ≈ 0 in power_coll_self_vs_time.txt when running near-parallel or near-perpendicular beam cases.
 
 ### Solver Path
-All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`). The solver selected by `isc`:
+All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`).
+
+**Branch `3points_test` only (not on `main`/`parallelised`):** a temporary,
+comparison-only 3-point centred stencil, selected by namelist `i7pt`
+(`-1` = 7-point, default; `0` = 3-point; anything else stops the run). Every
+caller goes through the dispatcher `fd_stencil_sel` (`fd_stencil_sel.f90`,
+same arguments as `fd_stencil_2d`), which calls `fd_stencil_2d` or
+`fd_stencil_2d_3` (`fd_stencil_2d_3.f90`, recovered from branches
+`stencil-3pt-study` / `stencil3-filippo`, `9080baf`); the choice is printed at
+start. With `i7pt = -1` results are those of 3.2. Removing the option is a
+rename of `fd_stencil_sel` back to `fd_stencil_2d`. Never merge it into `main`.
+
+The solver selected by `isc`:
 
 | `isc` | Time-dependent solver |
 |-------|-----------------------|
@@ -138,6 +150,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
+| `i7pt` | -1 / 0 | Branch `3points_test` only: 7-point Fornberg stencil (default) / 3-point centred, comparison only (see *Solver Path*) |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
 ### Output Files
