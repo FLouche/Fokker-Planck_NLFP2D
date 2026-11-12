@@ -217,6 +217,21 @@ bit-identical. Measured Teff error vs converged 7-point: ITER N=2 `isc=0`
 +5.2% → +1.2%, 18 s vs 12 s (7-point 23 s); null 6×10⁻¹⁴, f ≥ 0. JET beam 1
 slightly worse, −0.44% → −0.68% (151²), −0.16% → −0.25% (251²): another
 second-order error dominates there. Use it for RF-tail cases.
+
+**Beam-case error = ion-ion cross term** (investigated after `916234c`).
+Not the source: point-sampled, the Gaussian source injects the exact energy
+per particle to <10⁻⁶ % even at h/σ ≈ 0.5 (cell averages would be worse,
++0.003%), and the Teff error is unchanged (−0.44%) with the beam widths ×2,
+×4. Not the walls (closed vs Dirichlet identical). Operators applied to the
+converged 7-point f (151²; harness run on **one thread** — it was the first
+caller of `fd_stencil_2d`, and the parallel cache build raced, see the
+thread-safety rule): energy-loss error electrons +0.11% (2-pt) / −0.001%
+(`i_cc_ho`), D ions −0.73% / −1.10%; ions carry 89% of the loss, and the
+weighted −0.64% / −0.98% match the Teff errors −0.44% / −0.68% in ratio.
+The ion error is the two-point cross term: D⊥∥/D⊥⊥ ~ v⊥v∥/v⊥² for u ≫ 1,
+and the Teff error is −0.11% / −0.23% at 5°, −0.44% / −0.68% at 45°,
+−0.03% / −0.15% at 85° (2-pt / `i_cc_ho`). A higher-order cross term would
+need a 5×5 row stencil.
 `check_null` works with M ratios (M itself underflows at κv² > 745).
 
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
