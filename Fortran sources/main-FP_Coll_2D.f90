@@ -347,7 +347,7 @@ namelist /INPUT/ casename, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
-                i_cc, i_cc_wall
+                i_cc, i_cc_wall, i_cc_ho
 
 
 !write(*,*) 'Read namelist'
@@ -400,6 +400,11 @@ if (i_cc == -1) then
     endif
     write(*,'(A)') ' Coulomb operator: flux form, finite volumes, Chang-Cooper weights (i_cc = -1)'
     write(*,'(A)') '   walls: '//trim(merge('zero flux (closed box)', 'Dirichlet f = 0       ', i_cc_wall == -1))
+    if (i_cc_ho == -1) write(*,'(A)') '   background species: four-point exponentially fitted fluxes (i_cc_ho = -1)'
+endif
+if (i_cc_ho /= 0 .and. i_cc_ho /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: i_cc_ho=', i_cc_ho, ' is not valid. Use 0 or -1.'
+    stop
 endif
 
 ! Coherence checks for istart (only relevant for a fresh TD run)

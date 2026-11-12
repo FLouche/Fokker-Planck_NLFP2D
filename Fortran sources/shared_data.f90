@@ -49,9 +49,14 @@ integer :: i_cc = 0       ! Coulomb operator discretisation:
                           !  0: expanded form, 7-point Fornberg (default)
                           ! -1: flux form, finite volumes with Chang-Cooper
                           !     weights (coul_fv.f90), with the self-
-                          !     collisions (any isc); needs irf = 0
+                          !     collisions (any isc) and RF
 integer :: i_cc_wall = -1 ! walls with i_cc = -1: -1 zero flux (closed box),
                           !  0 Dirichlet f = 0 at vperp_max and vpar_min/max
+integer :: i_cc_ho = 0    ! with i_cc = -1, Coulomb operators of the
+                          ! background species (diagonal fluxes):
+                          !  0 two-point Chang-Cooper fluxes (default)
+                          ! -1 four-point exponentially fitted fluxes
+                          !    (4th order at the faces; coul_fv.f90)
 
 integer :: n_snap = 0     ! VDF snapshots: write f every n_snap steps to
                           ! vdf_snap_<step>.txt (0 = off, the default).  Meant
