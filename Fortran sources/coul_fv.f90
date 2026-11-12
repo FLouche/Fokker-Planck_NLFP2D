@@ -81,7 +81,8 @@ module mod_coul_fv
   real(dp), allocatable, save :: n_dpp(:,:), n_dpa(:,:), n_daa(:,:), n_ap(:,:), n_aa(:,:)
   ! Background species with four-point fitted fluxes (i_cc_ho = -1);
   ! Gauss-Legendre nodes for their weights
-  logical,  save :: e4 = .false.
+  logical,  save :: e4 = .false.     ! i_cc_ho /= 0: high-order diagonal fluxes
+  logical,  save :: e4x = .false.    ! i_cc_ho = -2: high-order cross terms too
   integer,  parameter :: ngl = 32
   real(dp), save :: glx(ngl), glw(ngl)
   ! Quasilinear RF (irf = -1): matrix built once by cfv_set_rf
@@ -154,16 +155,18 @@ contains
   ! Flux through the v_perp face between (i,j) and (i+1,j), for a
   ! Maxwellian background of thermal speed vth and mass ratio mrat:
   ! G = sum c(a,l) f(i+a, j+l), a = 0,1, l = -1..1; with ho, the diagonal
-  ! part from nodes a = -1..2 (fit4_weights) where they exist
+  ! part from nodes a = -1..2 (fit4_weights) where they exist; with hx,
+  ! the cross part from a = -1..2, l = -2..2 (fitn_weights + interpolation)
   !------------------------------------------------------------------
-  subroutine perp_face(i, j, vth, mrat, c, ho)
+  subroutine perp_face(i, j, vth, mrat, c, ho, hx)
     integer,  intent(in)  :: i, j
     real(dp), intent(in)  :: vth, mrat
-    real(dp), intent(out) :: c(-1:2,-1:1)
-    logical,  intent(in)  :: ho
-    real(dp) :: kap, h, th, ph, dpp, dpa, s, lb, lm0, w(-1:1), ws(-1:1), x4(4), w4(4)
-    integer  :: a
-    logical  :: ok
+    real(dp), intent(out) :: c(-1:2,-2:2)
+    logical,  intent(in)  :: ho, hx
+    real(dp) :: kap, h, th, ph, dpp, dpa, s, lb, lm0, w(-1:1), ws(-1:1), x4(4), w4(4), &
+                w5(5), li(4)
+    integer  :: a, ai
+    logical  :: ok, okx
     c   = 0.0_dp
     kap = mrat / (2.0_dp * vth**2)
     h   = vperp(i+1) - vperp(i)
@@ -196,14 +199,36 @@ contains
       c(1,0) = c(1,0) + dpp/h * exp(lb + lm0 - lnM(i+1, j, kap))
       c(0,0) = c(0,0) - dpp/h * exp(lb)
     end if
-    ! cross: D_pa M d(f/M)/dva at the two nodes of the face, averaged;
-    ! Scharfetter-Gummel weights along va (see sg_weights)
-    call dva_weights(j, w)
-    do a = 0, 1
-      call sg_weights(w, [lnM(i+a, max(j-1,1), kap), lnM(i+a, j, kap), &
-                          lnM(i+a, min(j+1,npar), kap)], ws)
-      c(a,:) = c(a,:) + 0.5_dp * dpa * ws
-    end do
+    ! cross, high order: M d(f/M)/dva at nodes i-1..i+2 (five-point fitted,
+    ! the same weights for every i), interpolated to the face in vp
+    okx = .false.
+    if (hx .and. i+2 <= nperp .and. j >= 3 .and. j+2 <= npar) then
+      if (i == 1) then
+        x4 = [-vperp(1), vperp(1), vperp(2), vperp(3)]
+      else
+        x4 = vperp(i-1:i+2)
+      end if
+      if (maxval(kap * abs(x4**2 - eface(i)**2)) <= 30.0_dp) &
+        call fitn_weights(5, vpar(j-2:j+2), vpar(j), kap, w5, okx)
+      if (okx) then
+        call lagr4(x4, eface(i), li)
+        do a = -1, 2
+          ai = a
+          if (i + a == 0) ai = 0                   ! mirror of node 1
+          c(ai,-2:2) = c(ai,-2:2) + dpa * li(a+2) * w5
+        end do
+      end if
+    end if
+    if (.not. okx) then
+      ! cross: D_pa M d(f/M)/dva at the two nodes of the face, averaged;
+      ! Scharfetter-Gummel weights along va (see sg_weights)
+      call dva_weights(j, w)
+      do a = 0, 1
+        call sg_weights(w, [lnM(i+a, max(j-1,1), kap), lnM(i+a, j, kap), &
+                            lnM(i+a, min(j+1,npar), kap)], ws)
+        c(a,-1:1) = c(a,-1:1) + 0.5_dp * dpa * ws
+      end do
+    end if
   end subroutine perp_face
 
   !------------------------------------------------------------------
@@ -301,18 +326,91 @@ contains
   end subroutine swap_rows
 
   !------------------------------------------------------------------
+  ! n-point version of fit4_weights at any point xf (a node, for the cross
+  ! terms): exact for f = M and for M d(f/M)/dx = t^k, k = 0..n-2,
+  ! t = (x - xf)/H, H the mean spacing.  Order n-1 for a derivative at a
+  ! node (4 for n = 5).  Same guard: ok = .false. beyond kap|x^2-xf^2| = 30.
+  !------------------------------------------------------------------
+  subroutine fitn_weights(n, x, xf, kap, w, ok)
+    integer,  intent(in)  :: n
+    real(dp), intent(in)  :: x(n), xf, kap
+    real(dp), intent(out) :: w(n)
+    logical,  intent(out) :: ok
+    real(dp) :: hh, a(n,n), r(n), tmp(n), tr, tk, t, e, piv, fac, sc
+    integer  :: k, m, q, p, ip
+    ok = .false.;  w = 0.0_dp
+    if (maxval(kap * abs(x**2 - xf**2)) > 30.0_dp) return
+    hh = (x(n) - x(1)) / real(n-1, dp)
+    do k = 1, n
+      tk = (x(k) - xf) / hh
+      a(1,k) = 1.0_dp
+      a(2:n,k) = 0.0_dp
+      do q = 1, ngl
+        t = 0.5_dp * tk * (1.0_dp + glx(q))
+        e = 0.5_dp * tk * glw(q) * exp(kap * hh * t * (2.0_dp*xf + hh*t))
+        do m = 2, n
+          a(m,k) = a(m,k) + e * t**(m-2)
+        end do
+      end do
+      a(2:n,k) = hh * a(2:n,k)
+    end do
+    r = 0.0_dp;  r(2) = 1.0_dp
+    do m = 1, n
+      sc = maxval(abs(a(m,:)))
+      a(m,:) = a(m,:) / sc;  r(m) = r(m) / sc
+    end do
+    do m = 1, n
+      ip = m - 1 + maxloc(abs(a(m:n,m)), 1)
+      if (ip /= m) then
+        tmp = a(m,:);  a(m,:) = a(ip,:);  a(ip,:) = tmp
+        tr = r(m);  r(m) = r(ip);  r(ip) = tr
+      end if
+      piv = a(m,m)
+      if (abs(piv) < 1.0e-14_dp) return
+      do p = m+1, n
+        fac = a(p,m) / piv
+        a(p,m:n) = a(p,m:n) - fac * a(m,m:n)
+        r(p) = r(p) - fac * r(m)
+      end do
+    end do
+    do m = n, 1, -1
+      r(m) = (r(m) - sum(a(m,m+1:n) * r(m+1:n))) / a(m,m)
+    end do
+    do k = 1, n
+      w(k) = r(k) * exp(kap * (x(k)**2 - xf**2))
+    end do
+    ok = .true.
+  end subroutine fitn_weights
+
+  ! four-point Lagrange interpolation weights at xf
+  subroutine lagr4(x, xf, li)
+    real(dp), intent(in)  :: x(4), xf
+    real(dp), intent(out) :: li(4)
+    integer :: k, m
+    do k = 1, 4
+      li(k) = 1.0_dp
+      do m = 1, 4
+        if (m /= k) li(k) = li(k) * (xf - x(m)) / (x(k) - x(m))
+      end do
+    end do
+  end subroutine lagr4
+
+  !------------------------------------------------------------------
   ! Flux through the v_par face between (i,j) and (i,j+1):
   ! G = sum c(k,m) f(i+k, j+m), k = -1..1, m = 0,1; with ho, the diagonal
-  ! part from m = -1..2 where those nodes exist
+  ! part from m = -1..2 where those nodes exist; with hx, the cross part
+  ! from k = -2..2, m = -1..2
   !------------------------------------------------------------------
-  subroutine par_face(i, j, vth, mrat, c, ho)
+  subroutine par_face(i, j, vth, mrat, c, ho, hx)
     integer,  intent(in)  :: i, j
     real(dp), intent(in)  :: vth, mrat
-    real(dp), intent(out) :: c(-1:1,-1:2)
-    logical,  intent(in)  :: ho
-    real(dp) :: kap, vf, th, ph, daa, dpa, s, lb, lm0, w(-1:1), ws(-1:1), w4(4)
-    integer  :: m
-    logical  :: ok
+    real(dp), intent(out) :: c(-2:2,-1:2)
+    logical,  intent(in)  :: ho, hx
+    real(dp) :: kap, vf, th, ph, daa, dpa, s, lb, lm0, w(-1:1), ws(-1:1), w4(4), &
+                x5(5), w5(5)
+    real(dp), parameter :: li(-1:2) = [-1.0_dp, 9.0_dp, 9.0_dp, -1.0_dp] / 16.0_dp
+    integer  :: m, k, n, ki
+    logical  :: ok, okx
     c   = 0.0_dp
     kap = mrat / (2.0_dp * vth**2)
     vf  = 0.5_dp * (vpar(j) + vpar(j+1))
@@ -331,14 +429,38 @@ contains
       c(0,1) = c(0,1) + daa/dvpar * exp(lb + lm0 - lnM(i, j+1, kap))
       c(0,0) = c(0,0) - daa/dvpar * exp(lb)
     end if
-    ! cross: D_pa M d(f/M)/dvp at the two nodes of the face, averaged
-    ! (at i = 1 the mirror node -vp(1) is node 1 itself: same M)
-    call dvp_weights(i, w)
-    do m = 0, 1
-      call sg_weights(w, [lnM(max(i-1,1), j+m, kap), lnM(i, j+m, kap), &
-                          lnM(min(i+1,nperp), j+m, kap)], ws)
-      c(:,m) = c(:,m) + 0.5_dp * dpa * ws
-    end do
+    ! cross, high order: M d(f/M)/dvp at nodes j-1..j+2 (five-point fitted
+    ! in vp, nodes below the axis mirrored), interpolated to the face in va
+    okx = .false.
+    if (hx .and. i+2 <= nperp .and. j >= 2 .and. j+2 <= npar) then
+      do k = -2, 2
+        n = i + k
+        if (n >= 1) then
+          x5(k+3) = vperp(n)
+        else
+          x5(k+3) = -vperp(1-n)                    ! mirror of node 1-n
+        end if
+      end do
+      call fitn_weights(5, x5, vperp(i), kap, w5, okx)
+      if (okx) then
+        do k = -2, 2
+          n = i + k
+          ki = k
+          if (n <= 0) ki = (1 - n) - i             ! column of the mirrored node
+          c(ki,-1:2) = c(ki,-1:2) + dpa * w5(k+3) * li
+        end do
+      end if
+    end if
+    if (.not. okx) then
+      ! cross: D_pa M d(f/M)/dvp at the two nodes of the face, averaged
+      ! (at i = 1 the mirror node -vp(1) is node 1 itself: same M)
+      call dvp_weights(i, w)
+      do m = 0, 1
+        call sg_weights(w, [lnM(max(i-1,1), j+m, kap), lnM(i, j+m, kap), &
+                            lnM(min(i+1,nperp), j+m, kap)], ws)
+        c(-1:1,m) = c(-1:1,m) + 0.5_dp * dpa * ws
+      end do
+    end if
   end subroutine par_face
 
   !------------------------------------------------------------------
@@ -436,17 +558,19 @@ contains
   ! nonlinear self-collision operator from the nodal n_* arrays (vth and
   ! mrat unused).  Rows are independent.
   !------------------------------------------------------------------
-  subroutine op_values(vth, mrat, v, nl, ho)
+  subroutine op_values(vth, mrat, v, nl, ho, hx)
     real(dp), intent(in)  :: vth, mrat
     real(dp), intent(out) :: v(:)
-    logical,  intent(in), optional :: nl, ho
+    logical,  intent(in), optional :: nl, ho, hx
     integer  :: i, j, row, p, ip, jp, a, m
-    real(dp) :: acc(-2:2,-2:2), cp(-1:2,-1:1), ca(-1:1,-1:2), ri, wj
-    logical  :: use_nl, use_ho
+    real(dp) :: acc(-2:2,-2:2), cp(-1:2,-2:2), ca(-2:2,-1:2), ri, wj
+    logical  :: use_nl, use_ho, use_hx
     use_nl = .false.
     if (present(nl)) use_nl = nl
     use_ho = .false.
     if (present(ho)) use_ho = ho
+    use_hx = .false.
+    if (present(hx)) use_hx = hx
     !$OMP PARALLEL DO SCHEDULE(STATIC) &
     !$OMP   PRIVATE(i, j, row, p, ip, jp, a, m, acc, cp, ca, ri, wj)
     do i = 1, nperp
@@ -463,45 +587,45 @@ contains
         if (i < nperp) then                         ! outer v_perp face
           if (use_nl) then
             cp = 0.0_dp
-            call perp_face_nl(i, j, cp(0:1,:))
+            call perp_face_nl(i, j, cp(0:1,-1:1))
           else
-            call perp_face(i, j, vth, mrat, cp, use_ho)
+            call perp_face(i, j, vth, mrat, cp, use_ho, use_hx)
           end if
           do a = -1, 2
-            acc(a,-1:1) = acc(a,-1:1) + eface(i)/ri * cp(a,:)
+            acc(a,:) = acc(a,:) + eface(i)/ri * cp(a,:)
           end do
         end if
         if (i > 1) then                             ! inner v_perp face
           if (use_nl) then
             cp = 0.0_dp
-            call perp_face_nl(i-1, j, cp(0:1,:))
+            call perp_face_nl(i-1, j, cp(0:1,-1:1))
           else
-            call perp_face(i-1, j, vth, mrat, cp, use_ho)
+            call perp_face(i-1, j, vth, mrat, cp, use_ho, use_hx)
           end if
           do a = -1, 2
-            acc(a-1,-1:1) = acc(a-1,-1:1) - eface(i-1)/ri * cp(a,:)
+            acc(a-1,:) = acc(a-1,:) - eface(i-1)/ri * cp(a,:)
           end do
         end if
         if (j < npar) then                          ! upper v_par face
           if (use_nl) then
             ca = 0.0_dp
-            call par_face_nl(i, j, ca(:,0:1))
+            call par_face_nl(i, j, ca(-1:1,0:1))
           else
-            call par_face(i, j, vth, mrat, ca, use_ho)
+            call par_face(i, j, vth, mrat, ca, use_ho, use_hx)
           end if
           do m = -1, 2
-            acc(-1:1,m) = acc(-1:1,m) + ca(:,m)/wj
+            acc(:,m) = acc(:,m) + ca(:,m)/wj
           end do
         end if
         if (j > 1) then                             ! lower v_par face
           if (use_nl) then
             ca = 0.0_dp
-            call par_face_nl(i, j-1, ca(:,0:1))
+            call par_face_nl(i, j-1, ca(-1:1,0:1))
           else
-            call par_face(i, j-1, vth, mrat, ca, use_ho)
+            call par_face(i, j-1, vth, mrat, ca, use_ho, use_hx)
           end if
           do m = -1, 2
-            acc(-1:1,m-1) = acc(-1:1,m-1) - ca(:,m)/wj
+            acc(:,m-1) = acc(:,m-1) - ca(:,m)/wj
           end do
         end if
         do p = cfv_ia(row), cfv_ia(row+1)-1
@@ -563,7 +687,8 @@ contains
     character(len=16) :: lab
 
     if (built) return
-    e4 = (i_cc_ho == -1)
+    e4  = (i_cc_ho /= 0)
+    e4x = (i_cc_ho == -2)
     call gauss_legendre_std(ngl, glx, glw)
     allocate(eface(0:nperp))
     eface(0) = 0.0_dp
@@ -612,7 +737,7 @@ contains
     built = .true.
 
     do b = 1, nbulk
-      call op_values(vt(b), maonmb(b), val(:,b), ho = e4)
+      call op_values(vt(b), maonmb(b), val(:,b), ho = e4, hx = e4x)
       write(lab,'(A,I0)') 'species ', b
       call check_null(val(:,b), vt(b), maonmb(b), trim(lab))
     end do
@@ -625,6 +750,7 @@ contains
     logical :: near
     near = abs(ip-i) <= 1 .and. abs(jp-j) <= 1
     if (e4) near = near .or. (abs(ip-i) == 2 .and. jp == j) .or. (ip == i .and. abs(jp-j) == 2)
+    if (e4x) near = abs(ip-i) <= 2 .and. abs(jp-j) <= 2
     if (.not. near) then
       keep = .false.
     else if (bc_row(i, j)) then

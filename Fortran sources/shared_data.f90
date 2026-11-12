@@ -57,6 +57,8 @@ integer :: i_cc_ho = 0    ! with i_cc = -1, Coulomb operators of the
                           !  0 two-point Chang-Cooper fluxes (default)
                           ! -1 four-point exponentially fitted fluxes
                           !    (4th order at the faces; coul_fv.f90)
+                          ! -2 the same, and high-order cross terms
+                          !    (5x5 stencil)
 
 integer :: n_snap = 0     ! VDF snapshots: write f every n_snap steps to
                           ! vdf_snap_<step>.txt (0 = off, the default).  Meant

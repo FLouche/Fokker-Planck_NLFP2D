@@ -401,9 +401,10 @@ if (i_cc == -1) then
     write(*,'(A)') ' Coulomb operator: flux form, finite volumes, Chang-Cooper weights (i_cc = -1)'
     write(*,'(A)') '   walls: '//trim(merge('zero flux (closed box)', 'Dirichlet f = 0       ', i_cc_wall == -1))
     if (i_cc_ho == -1) write(*,'(A)') '   background species: four-point exponentially fitted fluxes (i_cc_ho = -1)'
+    if (i_cc_ho == -2) write(*,'(A)') '   background species: fitted fluxes and cross terms, 5x5 stencil (i_cc_ho = -2)'
 endif
-if (i_cc_ho /= 0 .and. i_cc_ho /= -1) then
-    write(*,'(A,I0,A)') 'ERROR: i_cc_ho=', i_cc_ho, ' is not valid. Use 0 or -1.'
+if (i_cc_ho /= 0 .and. i_cc_ho /= -1 .and. i_cc_ho /= -2) then
+    write(*,'(A,I0,A)') 'ERROR: i_cc_ho=', i_cc_ho, ' is not valid. Use 0, -1 or -2.'
     stop
 endif
 
