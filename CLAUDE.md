@@ -246,6 +246,21 @@ ITER N=2 `isc=0`: 150² +7.16 / +2.38 / +2.06 %, 250² +3.31 / +0.89 / +0.34 %.
 ITER N=2 reference (`isc=-1`, 150²): +5.2 / +1.2 / +1.4 % — now limited by
 the second-order RF and nonlinear-SC operators; 12 / 18 / 26 s (7-point 23 s).
 Recommended: `-2` for beams (any pitch), `-1` or `-2` for RF tails.
+
+**What limits the ITER N=2 reference with `i_cc_ho=-2`** (measured after
+`98aad5d`): every operator, flux form and 7-point, applied to the converged
+7-point steady f (150², one thread; harness removed). Energy-rate errors
+δP = P_flux − P_7pt, MW/m³ (cell-volume and Simpson weights agree):
+electron Coulomb +0.0078 (+0.0116 Simpson), nonlinear SC +0.0042 (true value
+of P_SC is 0; the 7-point gives 0.0002), RF +0.0025, ion Coulomb −0.0003;
+total +0.0142 = 0.78% of P_RF. So SC dominates RF (1.7×), but the electron
+term is the largest: 83% of the electron loss and all of its error sit at
+v⊥ > 1.2×10⁷ m/s, the far RF tail, where the electron cell Péclet number is
+~50. The exponential fitting assumes f ≈ M_b × polynomial, which fails for a
+tail much hotter than the background: fitted and two-point fluxes both tend
+to upwinded drag there (raising the κ|v²−v_f²| guard from 30 to 80 changed
+nothing). The tail itself is resolved (~10 cells per thermal speed), so
+central high-order fluxes where f is far from M_b are the likely fix.
 `check_null` works with M ratios (M itself underflows at κv² > 745).
 
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
