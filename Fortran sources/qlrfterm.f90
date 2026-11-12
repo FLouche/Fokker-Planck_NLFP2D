@@ -202,4 +202,28 @@ deallocate(dn,ddndvperp)
 
 end subroutine qlrfterm
 
+!=========================================================
+! |Theta|^2 = |E+ J(n-1) + E- J(n+1)|^2 at an arbitrary v_perp, the dn of
+! qlrfterm (same formula).  Used by the flux-form RF operator (i_cc = -1,
+! coul_fv.f90), which needs it on the cell faces rather than the nodes.
+!=========================================================
+double precision function rf_theta2(vp)
+
+use shared_rf
+use Complex_Bessel
+
+implicit none
+
+double precision, intent(in) :: vp
+complex*16 :: cy(nharm+3), jnm1, jnp1
+integer    :: nz, ierr
+
+call cbesj(eta*vp, 0.d0, 1, nharm+3, cy, nz, ierr)
+if (ierr /= 0) write(*,*) 'Error in CBESJ #', ierr, ' (rf_theta2)'
+jnm1 = cy(nharm)          ! cy(n+1) = J_n
+jnp1 = cy(nharm+2)
+rf_theta2 = dreal((eplus*jnm1 + emin*jnp1) * (ceplus*dconjg(jnm1) + cemin*dconjg(jnp1)))
+
+end function rf_theta2
+
 end module mod_qlrfterm

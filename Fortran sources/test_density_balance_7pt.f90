@@ -20,7 +20,7 @@ use shared_FPterms
 use mod_ncint
 use func_index
 use mod_apply_operator
-use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
+use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply, rf_apply
 
 INTEGER, PARAMETER :: dp = KIND(1.0D0)
 
@@ -52,10 +52,7 @@ if (isc /= 0) then
 end if
 
 if (irf == -1) then
-    allocate(rf00(nperp,npar))
-    rf00 = 0.d0
-    call apply_operator(rf20, rf02, rf11, rf10, rf01, rf00, fin, Lf_RF)
-    deallocate(rf00)
+    call rf_apply(fin, Lf_RF)   ! 7-point or flux form (i_cc)
 !DEBUG-OFF!     ! DEBUG: the whole RF term L_RF[f] on the grid (vperp, vpar, L_RF, L_RF*jacob)
 !DEBUG-OFF!     open(125,file='LF_RF_2D.txt',status='unknown')
 !DEBUG-OFF!     do iv = 1, nperp

@@ -208,7 +208,7 @@ use func_index
 use mod_ncint
 use time_comps_mod        ! explicit interface for time_energy(..., teff=)
 use mod_domain_check      ! domain adequacy check at the end of the run
-use mod_coul_fv, only: cfv_normalise_source   ! i_cc = -1 source normalisation
+use mod_coul_fv, only: cfv_normalise_source, cfv_set_rf   ! i_cc = -1: source normalisation, RF
 !$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
@@ -383,7 +383,7 @@ endif
 
 ! Flux-form (Chang-Cooper) collision operators, coul_fv.f90: the Coulomb
 ! operator and the self-collisions (isc = 1, 2, 3 in timefp_7pt, isc = -1 in
-! timefp_7pt_nl); RF not yet.
+! timefp_7pt_nl) and the quasilinear RF term.
 if (i_cc /= 0 .and. i_cc /= -1) then
     write(*,'(A,I0,A)') 'ERROR: i_cc=', i_cc, ' is not valid. Use 0 (7-point) or -1 (flux form).'
     stop
@@ -393,10 +393,9 @@ if (i_cc_wall /= 0 .and. i_cc_wall /= -1) then
     stop
 endif
 if (i_cc == -1) then
-    if (irf == -1 .or. ntimes(1) == 0) then
-        write(*,*) 'ERROR: i_cc=-1 (flux-form collision operators) needs, for now, irf=0'
-        write(*,*) '       and a time-dependent run (ntimes > 0): RF is not yet available'
-        write(*,*) '       in flux form.'
+    if (ntimes(1) == 0) then
+        write(*,*) 'ERROR: i_cc=-1 (flux-form operators) needs, for now, a time-dependent'
+        write(*,*) '       run (ntimes > 0): the steady-state solver has no flux form.'
         stop
     endif
     write(*,'(A)') ' Coulomb operator: flux form, finite volumes, Chang-Cooper weights (i_cc = -1)'
@@ -541,6 +540,7 @@ if (irf == -1) then
     allocate(rf01,rf10,rf20,rf11,rf02,mold=colin00)
     
     call qlrfterm
+    if (i_cc == -1) call cfv_set_rf()     ! flux form of the same operator
     
 endif
 

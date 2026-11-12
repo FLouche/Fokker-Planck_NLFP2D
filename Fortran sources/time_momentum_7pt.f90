@@ -26,7 +26,7 @@ SUBROUTINE time_momentum_7pt(f, dens, &
   USE shared_timer
   USE func_index
   USE mod_apply_operator
-  USE mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
+  USE mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply, rf_apply
 
   IMPLICIT NONE
 
@@ -114,10 +114,7 @@ SUBROUTINE time_momentum_7pt(f, dens, &
   !================================================================
   IF (irf == -1) THEN
 
-    ALLOCATE(rf00(nperp,npar))
-    rf00 = 0.0_dp
-    CALL apply_operator(rf20, rf02, rf11, rf10, rf01, rf00, f, Lf)
-    DEALLOCATE(rf00)
+    CALL rf_apply(f, Lf)   ! 7-point or flux form (i_cc)
 
     DO iv = 1, nperp
       DO ip = 1, npar

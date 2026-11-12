@@ -40,6 +40,10 @@
 !   gammaa (self_coll_max).  For isc = 2, 3 vteff_t follows Teff or Tn, so
 !   cfv_set_sc recomputes that matrix whenever vteff_t changes.
 !
+!   The quasilinear RF operator (cfv_set_rf) is a rank-one diffusion with
+!   no drag, discretised at the cell corners by a symmetric scheme: see
+!   there.  It does not change in time and is built once.
+!
 !====================================================================
 module mod_coul_fv
 
@@ -50,7 +54,7 @@ module mod_coul_fv
   private
   public :: cfv_build, cfv_fill, cfv_apply_species, cfv_density, bc_row, &
             coll_apply_species, coll_apply_total, cfv_set_sc, sc_apply, &
-            cfv_normalise_source, cfv_set_nl, cfv_nl_off
+            cfv_normalise_source, cfv_set_nl, cfv_nl_off, cfv_set_rf, rf_apply
   public :: cfv_nnz, cfv_ia, cfv_ja
 
   integer, parameter :: dp = kind(1.d0)
@@ -69,6 +73,8 @@ module mod_coul_fv
   logical,  save :: nl_on = .false.
   real(dp), allocatable, save :: val_nl(:)
   real(dp), allocatable, save :: n_dpp(:,:), n_dpa(:,:), n_daa(:,:), n_ap(:,:), n_aa(:,:)
+  ! Quasilinear RF (irf = -1): matrix built once by cfv_set_rf
+  real(dp), allocatable, save :: val_rf(:)
 
 contains
 
@@ -517,6 +523,173 @@ contains
     end if
   end subroutine cfv_set_nl
 
+  !------------------------------------------------------------------
+  ! Quasilinear RF operator (irf = -1) in flux form.  qlrfterm's rf**
+  ! arrays are, expanded, the exact cylindrical divergence
+  !   L f = (1/vp) d/dvp [vp G_p] + d/dva G_a ,  G = K T b (b . grad f),
+  !   b = (vph - va, vp),  K = rfcte delta(va - vres),  T = |Theta|^2,
+  ! a rank-one diffusion with no drag.  Face-centred differences of the
+  ! cross term (as for the collisions) would not keep this operator
+  ! dissipative, so it is discretised at the cell corners c = (e_i, j+1/2),
+  ! i = 1..nperp-1, j = 1..npar-1 (symmetric scheme, Guenter et al. 2005):
+  ! - corner gradient from its four nodes,
+  !     G_p f = [(f(i+1,j) - f(i,j)) + (f(i+1,j+1) - f(i,j+1))] / (2 hp),
+  !     G_a f = [rp (f(i,j+1) - f(i,j)) + rm (f(i+1,j+1) - f(i+1,j))] / om,
+  !   rp = (e_i^2 - vp_i^2)/2, rm = (vp_i+1^2 - e_i^2)/2 the two halves of
+  !   int vp dvp, om = e_i hp dva (= (rp + rm) dva);
+  ! - corner flux G_c = K_c T_c b_c (b_c . G f), delivered to the four
+  !   quarter faces that meet at c (v_perp faces: e_i dva/2 each; v_par
+  !   faces: rp and rm).
+  ! These weights give, exactly,
+  !   sum_cells V g (L f) = - sum_c om_c K_c T_c (b.G g)(b.G f),
+  ! so V L is symmetric and negative semidefinite: conservative and
+  ! dissipative for any grid and any anisotropy.  T is evaluated on the
+  ! v_perp faces, K is the mean of the Gaussian delta over [va_j, va_j+1]
+  ! (so sum_c dva K_c = rfcte int delta exactly).  The walls carry no flux
+  ! (corners are interior); the strip [0, vp_1] of the first cell's v_par
+  ! faces is not covered (empty when vp_1 = 0; G_a ~ vp there anyway).
+  !------------------------------------------------------------------
+  subroutine cfv_set_rf()
+    use shared_rf,    only: rfcte, vph, vres, delta_rf
+    use mod_qlrfterm, only: rf_theta2
+    real(dp), allocatable :: beta(:,:,:,:), wc(:,:), tf(:), kc(:)
+    real(dp) :: hp, e, rp, rm, om, bp, ba, ri, wj, vr, acc(-1:1,-1:1)
+    integer  :: i, j, ic, jc, a, l, a2, l2, row, p, ip, jp, nneg
+
+    call cfv_build()
+    if (.not. allocated(val_rf)) allocate(val_rf(cfv_nnz))
+    allocate(beta(0:1,0:1,nperp-1,npar-1), wc(nperp-1,npar-1), tf(nperp-1), kc(npar-1))
+
+    do ic = 1, nperp-1
+      tf(ic) = rf_theta2(eface(ic))                ! serial: CBESJ
+    end do
+    do jc = 1, npar-1
+      kc(jc) = rfcte * (erf((vpar(jc+1) - vres)/delta_rf) - erf((vpar(jc) - vres)/delta_rf)) &
+               / (2.0_dp * dvpar)
+    end do
+
+    do jc = 1, npar-1
+      do ic = 1, nperp-1
+        hp = vperp(ic+1) - vperp(ic)
+        e  = eface(ic)
+        rp = 0.5_dp * (e**2 - vperp(ic)**2)
+        rm = 0.5_dp * (vperp(ic+1)**2 - e**2)
+        om = e * hp * dvpar
+        bp = vph - 0.5_dp * (vpar(jc) + vpar(jc+1))
+        ba = e
+        beta(0,0,ic,jc) = -bp/(2.0_dp*hp) - ba*rp/om
+        beta(1,0,ic,jc) =  bp/(2.0_dp*hp) - ba*rm/om
+        beta(0,1,ic,jc) = -bp/(2.0_dp*hp) + ba*rp/om
+        beta(1,1,ic,jc) =  bp/(2.0_dp*hp) + ba*rm/om
+        wc(ic,jc) = om * kc(jc) * tf(ic)
+      end do
+    end do
+    nneg = count(wc < 0.0_dp)
+    if (nneg > 0) write(*,'(A,I0,A)') '  RF flux form: WARNING, ', nneg, &
+          ' corners with K |Theta|^2 < 0 (operator not dissipative there)'
+
+    !$OMP PARALLEL DO SCHEDULE(STATIC) &
+    !$OMP   PRIVATE(i, j, ic, jc, a, l, a2, l2, row, p, ip, jp, ri, wj, vr, acc)
+    do i = 1, nperp
+      ri = 0.5_dp * (eface(i)**2 - eface(i-1)**2)
+      do j = 1, npar
+        row = (i-1)*npar + j
+        if (bc_row(i, j)) then
+          val_rf(cfv_ia(row):cfv_ia(row+1)-1) = 0.0_dp
+          cycle
+        end if
+        wj = dvpar
+        if (j == 1 .or. j == npar) wj = 0.5_dp * dvpar
+        vr = ri * wj                                ! cell volume / 2 pi
+        acc = 0.0_dp
+        do ic = max(1, i-1), min(nperp-1, i)
+          do jc = max(1, j-1), min(npar-1, j)
+            a = i - ic;  l = j - jc                 ! this node's place in corner c
+            do a2 = 0, 1
+              do l2 = 0, 1
+                acc(ic+a2-i, jc+l2-j) = acc(ic+a2-i, jc+l2-j) &
+                    - wc(ic,jc) * beta(a,l,ic,jc) * beta(a2,l2,ic,jc) / vr
+              end do
+            end do
+          end do
+        end do
+        do p = cfv_ia(row), cfv_ia(row+1)-1
+          ip = (cfv_ja(p)-1)/npar + 1
+          jp = cfv_ja(p) - (ip-1)*npar
+          val_rf(p) = acc(ip-i, jp-j)
+        end do
+      end do
+    end do
+    !$OMP END PARALLEL DO
+
+    deallocate(beta, wc, tf, kc)
+    call check_rf()
+  end subroutine cfv_set_rf
+
+  !------------------------------------------------------------------
+  ! Start-of-run check of the RF matrix: V L symmetric, and (closed box)
+  ! its columns sum to zero, i.e. sum V L f = 0 for any f
+  !------------------------------------------------------------------
+  subroutine check_rf()
+    real(dp), allocatable :: colsum(:), colabs(:)
+    real(dp) :: asym, scl, vrow, x, y
+    integer  :: row, col, p, q, i, j, ic, jcol
+    allocate(colsum(nbig), colabs(nbig))
+    colsum = 0.0_dp;  colabs = 0.0_dp
+    asym = 0.0_dp;  scl = 0.0_dp
+    do row = 1, nbig
+      i = (row-1)/npar + 1
+      j = row - (i-1)*npar
+      if (bc_row(i, j)) cycle
+      vrow = vol(row)
+      do p = cfv_ia(row), cfv_ia(row+1)-1
+        col = cfv_ja(p)
+        x = vrow * val_rf(p)
+        colsum(col) = colsum(col) + x
+        colabs(col) = colabs(col) + abs(x)
+        scl = max(scl, abs(x))
+        ! transposed entry (col, row)
+        ic = (col-1)/npar + 1
+        jcol = col - (ic-1)*npar
+        if (bc_row(ic, jcol)) cycle
+        y = 0.0_dp
+        do q = cfv_ia(col), cfv_ia(col+1)-1
+          if (cfv_ja(q) == row) then
+            y = vol(col) * val_rf(q);  exit
+          end if
+        end do
+        asym = max(asym, abs(x - y))
+      end do
+    end do
+    if (scl > 0.0_dp) then
+      write(*,'(A,ES9.2)') '  RF flux form: max |V L - (V L)^T| / max |V L| = ', asym/scl
+      if (i_cc_wall == -1) write(*,'(A,ES9.2)') &
+          '  RF flux form: max |sum_rows V L| / sum |terms| per column = ', &
+          maxval(abs(colsum) / max(colabs, tiny(1.0_dp)))
+    end if
+    deallocate(colsum, colabs)
+  end subroutine check_rf
+
+  !------------------------------------------------------------------
+  ! RF operator applied to f, through the scheme in use: what the
+  ! diagnostics call instead of apply_operator(rf**)
+  !------------------------------------------------------------------
+  subroutine rf_apply(f, Lf)
+    use mod_apply_operator, only: apply_operator
+    use shared_FPterms
+    real(dp), intent(in)  :: f(nbig)
+    real(dp), intent(out) :: Lf(nbig)
+    real(dp), allocatable :: rf00(:,:)
+    if (i_cc == -1) then
+      call csr_apply(val_rf, 1.0_dp, f, Lf)
+    else
+      allocate(rf00(nperp,npar))
+      rf00 = 0.0_dp
+      call apply_operator(rf20, rf02, rf11, rf10, rf01, rf00, f, Lf)
+      deallocate(rf00)
+    end if
+  end subroutine rf_apply
+
   ! no nonlinear self-collision term this step (NBI fill-up from f = 0)
   subroutine cfv_nl_off()
     nl_on = .false.
@@ -530,8 +703,9 @@ contains
     real(dp), intent(out) :: aa(:)
     real(dp), intent(in)  :: taum
     integer :: p, b, row, i, j
-    logical :: sc
+    logical :: sc, rf
     sc = allocated(val_sc)
+    rf = allocated(val_rf)
     !$OMP PARALLEL DO SCHEDULE(STATIC) PRIVATE(p, b)
     do p = 1, cfv_nnz
       aa(p) = 0.0_dp
@@ -540,6 +714,7 @@ contains
       end do
       if (sc) aa(p) = aa(p) + gam_sc * val_sc(p)
       if (nl_on) aa(p) = aa(p) + val_nl(p)
+      if (rf) aa(p) = aa(p) + val_rf(p)
     end do
     !$OMP END PARALLEL DO
     do row = 1, nbig

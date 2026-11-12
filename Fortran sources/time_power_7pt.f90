@@ -32,7 +32,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
 
   use mod_apply_operator
 
-  use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
+  use mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply, rf_apply
   
   IMPLICIT NONE
 
@@ -149,12 +149,7 @@ SUBROUTINE time_power_7pt(f, dens, pcoll, pRF, psource, plosses, &
   !================================================================
   IF (irf == -1) THEN
 
-    ALLOCATE(rf00(nperp,npar))
-    rf00 = 0.0_dp
-
-    CALL apply_operator(rf20, rf02, rf11, rf10, rf01, rf00, f, Lf)
-
-    DEALLOCATE(rf00)
+    CALL rf_apply(f, Lf)   ! 7-point or flux form (i_cc)
 
     DO iv = 1, nperp
       DO imu = 1, npar
@@ -294,7 +289,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   USE shared_timer          ! isc
   USE func_index
   USE mod_apply_operator
-  USE mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply
+  USE mod_coul_fv, only: coll_apply_species, coll_apply_total, sc_apply, rf_apply
 
   IMPLICIT NONE
 
@@ -326,10 +321,7 @@ SUBROUTINE time_density_terms_7pt(f, ncoll, nsc, nRF, nsource, nlosses)
   END IF
 
   IF (irf == -1) THEN
-    ALLOCATE(rf00(nperp,npar))
-    rf00 = 0.0_dp
-    CALL apply_operator(rf20, rf02, rf11, rf10, rf01, rf00, f, Lf)
-    DEALLOCATE(rf00)
+    CALL rf_apply(f, Lf)   ! 7-point or flux form (i_cc)
     CALL integrate_Lf(Lf, nRF)
   ELSE
     nRF = 0.0_dp
