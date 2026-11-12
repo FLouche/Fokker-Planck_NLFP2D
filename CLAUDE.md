@@ -185,8 +185,17 @@ cell mean of the Gaussian δ, |Θ|² on the ⊥ faces (`rf_theta2` in
 `qlrfterm.f90`). Diagnostics call `rf_apply`. Measured (JET RF case 1,
 `isc=0`, 100², 3×10⁷ box): runs to steady state; closed-box FV density
 conserved to 10⁻¹⁴; f ≥ 0 (7-point −7.8×10⁻⁷ of max); Teff at 0.05 s within
-0.1% of 7-point, steady Teff 648 vs 626 keV, P_RF +4% (second order). Not
-yet tested with self-collisions (`isc≠0`) together with RF.
+0.1% of 7-point, steady Teff 648 vs 626 keV, P_RF +4% (second order).
+ITER N=2 reference (`isc=-1`, 150², `ising=1`): 900 steps, 12 s vs 23 s;
+FV density conserved to 2×10⁻¹⁵; min f −1.6×10⁻¹⁶ of max (7-point
+−2.8×10⁻¹¹); closed and Dirichlet walls identical; Teff 34.27 vs 32.59 keV
+(+5.2%), P_RF +2.6%, P_SC 0.0045 MW/m³ (0.24% of P_RF; the NL-SC energy
+error) vs 2×10⁻⁵. Convergence (`isc=0`, same case; 7-point converged at
+79.56 keV): flux form 85.27 / 82.20 keV at 150² / 250² with `ising=1`
+(error ratio 0.46, order ~1.5; Richardson 80.47), 88.95 / 83.32 with
+`ising=0` (ratio 0.40; Richardson 80.15). The non-uniform v⊥ grid slows
+convergence: faces half way between nodes are first order there.
+`check_null` works with M ratios (M itself underflows at κv² > 745).
 
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
 same build already differ (PARDISO), so compare default-mode builds on one
