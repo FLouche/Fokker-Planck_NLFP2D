@@ -263,6 +263,21 @@ nothing). The tail itself is resolved (~10 cells per thermal speed), so
 central high-order fluxes where f is far from M_b are the likely fix.
 `check_null` works with M ratios (M itself underflows at κv² > 745).
 
+**Central fluxes on the hot tail** (`cc_pe_central`, `333df13`): with
+`i_cc_ho ≠ 0` and `cc_pe_central > 0`, faces whose background Péclet number
+2κ_b|v|·max(h⊥, h∥) exceeds it use central Lagrange weights for
+M∂(f/M) = ∂f + 2κx f (4-point diagonal, 5-point cross with `-2`) instead of
+fitted ones. M_b is then not a null vector on those faces (it is ~e^(−hundreds)
+there); `check_null` skips the rows they touch. Default 0 = off, bit-identical.
+Measured, `i_cc_ho=-2`, Teff error vs converged 7-point (79.56 / 32.59 keV),
+before → with switch at 2: ITER N=2 `isc=0` 150² +2.06 → +0.76 %, 250² +0.35 →
++0.28 %; ITER reference (`isc=-1`, 150²) +1.42 → +0.70 %. Thresholds 1, 2, 4
+agree to 0.01 keV (in ITER the bulk is at Péclet ≲ 0.6). JET beam 1 (5°, 45°,
+85°) unchanged to 0.002 keV. FV density conserved as before; min f −1.6×10⁻¹²
+of max (7-point −2.8×10⁻¹¹; before ≥ −10⁻¹⁶), at the v⊥ wall. Same run time.
+Recommended for RF tails: `i_cc_ho=-2, cc_pe_central=2`. What remains at
+150² is mostly the second-order RF and NL-SC operators.
+
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
 same build already differ (PARDISO), so compare default-mode builds on one
 thread.
@@ -316,6 +331,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
 | `i_cc` | 0 / -1 | Collision operators (Coulomb and self-collisions, any `isc`): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; RF too since `4498e8e`; time-dependent only) |
 | `i_cc_ho` | 0 / -1 / -2 | With `i_cc=-1`, background-species Coulomb operators: two-point Chang–Cooper fluxes (default) / four-point fitted diagonal fluxes (13 per row) / also high-order cross terms (5×5 stencil, most accurate, ~2× time) |
+| `cc_pe_central` | real | With `i_cc_ho≠0`: faces with background Péclet number above it use central 4th-order fluxes (hot RF tails); 0 = off (default); 2 recommended for RF |
 | `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
