@@ -231,7 +231,21 @@ weighted −0.64% / −0.98% match the Teff errors −0.44% / −0.68% in ratio.
 The ion error is the two-point cross term: D⊥∥/D⊥⊥ ~ v⊥v∥/v⊥² for u ≫ 1,
 and the Teff error is −0.11% / −0.23% at 5°, −0.44% / −0.68% at 45°,
 −0.03% / −0.15% at 85° (2-pt / `i_cc_ho`). A higher-order cross term would
-need a 5×5 row stencil.
+need a 5×5 row stencil — done, `i_cc_ho=-2` below.
+
+**High-order cross terms** (`i_cc_ho=-2`, `8f34359`): the cross flux D⊥∥·M∂_t(f/M)
+at a face from a five-point fitted derivative at the nodes (`fitn_weights`:
+exact on M and for M∂(f/M) = 1, t, t², t³; nodes below the axis mirrored),
+interpolated to the face — four-point Lagrange in v⊥, (−1,9,9,−1)/16 in v∥.
+Null exact (each node derivative vanishes on M). Wall faces and κ|v²−v_f²| > 30
+keep the two-point cross term. Full 5×5 pattern (25 per row). Modes 0 and −1
+bit-identical to before. Teff error vs converged 7-point (two-point / −1 / −2):
+JET beam 1 at 151², 5° −0.112 / −0.234 / −0.006 %, 45° −0.441 / −0.678 /
++0.002 %, 85° −0.034 / −0.153 / +0.006 %; 45° at 251² −0.161 / −0.248 / +0.001 %.
+ITER N=2 `isc=0`: 150² +7.16 / +2.38 / +2.06 %, 250² +3.31 / +0.89 / +0.34 %.
+ITER N=2 reference (`isc=-1`, 150²): +5.2 / +1.2 / +1.4 % — now limited by
+the second-order RF and nonlinear-SC operators; 12 / 18 / 26 s (7-point 23 s).
+Recommended: `-2` for beams (any pitch), `-1` or `-2` for RF tails.
 `check_null` works with M ratios (M itself underflows at κv² > 745).
 
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
@@ -286,7 +300,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
 | `i_cc` | 0 / -1 | Collision operators (Coulomb and self-collisions, any `isc`): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; RF too since `4498e8e`; time-dependent only) |
-| `i_cc_ho` | 0 / -1 | With `i_cc=-1`: two-point Chang–Cooper fluxes (default) / four-point exponentially fitted fluxes for the background species (better for RF tails, +50% time) |
+| `i_cc_ho` | 0 / -1 / -2 | With `i_cc=-1`, background-species Coulomb operators: two-point Chang–Cooper fluxes (default) / four-point fitted diagonal fluxes (13 per row) / also high-order cross terms (5×5 stencil, most accurate, ~2× time) |
 | `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
