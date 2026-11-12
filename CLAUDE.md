@@ -204,6 +204,19 @@ The ~1.5 apparent order of Teff is pre-asymptotic. Side finding: the
 7-point RF row at i=2 (next to the axis), v∥≈0 gives L f ~ 3×10¹⁴ on a smooth
 f at 150² `ising=1` (not at 100, 250, 400) — 7-point axis stencil, harmless
 in the converged ITER result.
+
+**High-order fluxes** (`i_cc_ho=-1`, `b758b0d`): for the
+background species, `fit4_weights` gives the diagonal face flux D·M∂(f/M)
+from four nodes, exact for f = M and for M∂(f/M) = 1, t, t² near the face
+(4th order at the face; 32-point Gauss–Legendre integrals, built once).
+Wall faces and faces with κ|v² − v_f²| > 30 on the stencil keep the two-point
+flux; the axis face uses the mirror node. Pattern 13 per row (second
+neighbours along each axis) only with the flag; the default stays
+bit-identical. Measured Teff error vs converged 7-point: ITER N=2 `isc=0`
+7.2% → 2.4% (150²), 3.3% → 0.9% (250²); ITER N=2 reference (`isc=-1`, 150²)
++5.2% → +1.2%, 18 s vs 12 s (7-point 23 s); null 6×10⁻¹⁴, f ≥ 0. JET beam 1
+slightly worse, −0.44% → −0.68% (151²), −0.16% → −0.25% (251²): another
+second-order error dominates there. Use it for RF-tail cases.
 `check_null` works with M ratios (M itself underflows at κv² > 745).
 
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
@@ -258,6 +271,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
 | `i_cc` | 0 / -1 | Collision operators (Coulomb and self-collisions, any `isc`): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; RF too since `4498e8e`; time-dependent only) |
+| `i_cc_ho` | 0 / -1 | With `i_cc=-1`: two-point Chang–Cooper fluxes (default) / four-point exponentially fitted fluxes for the background species (better for RF tails, +50% time) |
 | `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
