@@ -108,7 +108,10 @@ expanded. Checked term by term:
 `coul_fv.f90` (`mod_coul_fv`): cells around the nodes, faces half way, axis
 cell [0, face₁] with zero flux at v⊥=0 (also when `ising=1` puts vperp(1)>0).
 Diagonal flux (D/h)[B(−s)f₊ − B(s)f₋], B(x)=x/(eˣ−1), s = jump of ln M;
-cross term by central differences of f/M on the face. Per-species matrices
+cross term M∂(f/M) at the face's two nodes by Scharfetter–Gummel two-point
+weights [B(−s)f_hi − B(s)f_lo]/H (`sg_weights`, since `37442ed`; before, central
+differences of f/M, whose weights ~e^|s| made L unstable at cell Péclet ≳ 1 —
+Re λ ≈ +1.2×10⁷/s in the JET RF box). Per-species matrices
 on a fixed 3×3 pattern, built once, rescaled by `gammab` each step
 (`cfv_fill`). `bc_row(iv,imu)` replaces the hard-coded boundary-row test in
 `timefp_7pt`. Diagnostics call `coll_apply_species` / `coll_apply_total`
@@ -172,6 +175,19 @@ state of this operator (no M to weight with): Teff drifts −0.009% in 4 s
 (large box) where the 7-point stays flat — energy, not particles. Teff on
 the beam case +1.2% vs 7-point at 151² (second order); 2× faster.
 
+**RF** (`irf=-1`, `4498e8e`): `cfv_set_rf`, built once. Rank-one diffusion
+D = K|Θ|²**b**⊗**b**, discretised at the cell corners (e_i, j+½) by a symmetric
+(Günter-type) scheme: corner gradient from four nodes, corner flux shared by
+the four quarter faces (⊥ faces e_i h∥/2, ∥ faces r± = halves of ∫v⊥dv⊥). Then
+Σ V g Lf = −Σ_c ω_c K_c|Θ_c|² (**b**·G g)(**b**·G f) exactly: V L symmetric,
+negative semidefinite, conservative (start-of-run check ~3×10⁻¹⁶). K is the
+cell mean of the Gaussian δ, |Θ|² on the ⊥ faces (`rf_theta2` in
+`qlrfterm.f90`). Diagnostics call `rf_apply`. Measured (JET RF case 1,
+`isc=0`, 100², 3×10⁷ box): runs to steady state; closed-box FV density
+conserved to 10⁻¹⁴; f ≥ 0 (7-point −7.8×10⁻⁷ of max); Teff at 0.05 s within
+0.1% of 7-point, steady Teff 648 vs 626 keV, P_RF +4% (second order). Not
+yet tested with self-collisions (`isc≠0`) together with RF.
+
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
 same build already differ (PARDISO), so compare default-mode builds on one
 thread.
@@ -223,7 +239,7 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `ising` | 0 / -1 / +1 | Uniform / two-domain / quadratic v⊥ grid |
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
-| `i_cc` | 0 / -1 | Collision operators (Coulomb and self-collisions, any `isc`): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; for now needs `irf=0`, time-dependent) |
+| `i_cc` | 0 / -1 | Collision operators (Coulomb and self-collisions, any `isc`): expanded form, 7-point (default) / flux form, finite volumes with Chang–Cooper weights (`coul_fv.f90`; branch `chang_cooper`; RF too since `4498e8e`; time-dependent only) |
 | `i_cc_wall` | -1 / 0 | With `i_cc=-1`: zero-flux walls, closed box (default) / Dirichlet f=0 at `vperp_max`, `vpar_min/max` |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
 
