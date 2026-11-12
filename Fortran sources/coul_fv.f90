@@ -403,13 +403,13 @@ contains
     real(dp), intent(in) :: v(:), vth, mrat
     character(*), intent(in) :: label
     real(dp), allocatable :: fm(:)
-    real(dp) :: kap, res, scl, rmax
+    real(dp) :: kap, res, scl, rmax, x
     integer  :: i, j, row, p
-    allocate(fm(nbig))
+    allocate(fm(nbig))                               ! ln M
     kap = mrat / (2.0_dp * vth**2)
     do i = 1, nperp
       do j = 1, npar
-        fm((i-1)*npar + j) = exp(lnM(i, j, kap))
+        fm((i-1)*npar + j) = lnM(i, j, kap)
       end do
     end do
     rmax = 0.0_dp
@@ -418,10 +418,13 @@ contains
       j = row - (i-1)*npar
       if (bc_row(i, j)) cycle
       if (i_cc_wall == 0 .and. (i >= nperp-1 .or. j <= 2 .or. j >= npar-1)) cycle
+      ! (L M)_row / M_row: ratios of M only, which do not underflow where
+      ! M itself does (kappa v^2 > ~745 in large boxes)
       res = 0.0_dp;  scl = 0.0_dp
       do p = cfv_ia(row), cfv_ia(row+1)-1
-        res = res + v(p) * fm(cfv_ja(p))
-        scl = scl + abs(v(p) * fm(cfv_ja(p)))
+        x = v(p) * exp(fm(cfv_ja(p)) - fm(row))
+        res = res + x
+        scl = scl + abs(x)
       end do
       if (scl > 0.0_dp) rmax = max(rmax, abs(res)/scl)
     end do
