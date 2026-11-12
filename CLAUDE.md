@@ -193,8 +193,17 @@ FV density conserved to 2×10⁻¹⁵; min f −1.6×10⁻¹⁶ of max (7-point
 error) vs 2×10⁻⁵. Convergence (`isc=0`, same case; 7-point converged at
 79.56 keV): flux form 85.27 / 82.20 keV at 150² / 250² with `ising=1`
 (error ratio 0.46, order ~1.5; Richardson 80.47), 88.95 / 83.32 with
-`ising=0` (ratio 0.40; Richardson 80.15). The non-uniform v⊥ grid slows
-convergence: faces half way between nodes are first order there.
+`ising=0` (ratio 0.40; Richardson 80.15). **Not** the stretched grid:
+operator-by-operator truncation tests (each flux-form operator vs the 7-point
+one on a smooth bi-Maxwellian, energy moments, 100²–400²) are cleanly second
+order (~1.95) on both grids, with `ising=1` about half the error of
+`ising=0` (its mapping is smooth: node-to-centroid offset v_max/(n−1)²). The
+leading term is the electron Coulomb drag: its energy loss is ~1.6% low at
+150² (0.6% at 250²); ion-ion nets ~0.2%, RF 0.17% at 100² and 0.03% at 250².
+The ~1.5 apparent order of Teff is pre-asymptotic. Side finding: the
+7-point RF row at i=2 (next to the axis), v∥≈0 gives L f ~ 3×10¹⁴ on a smooth
+f at 150² `ising=1` (not at 100, 250, 400) — 7-point axis stencil, harmless
+in the converged ITER result.
 `check_null` works with M ratios (M itself underflows at κv² > 745).
 
 **Bit-identity checks need `n_threads = 1`**: on 4 threads two runs of the
