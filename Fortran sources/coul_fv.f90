@@ -166,10 +166,11 @@ contains
     real(dp) :: kap, h, th, ph, dpp, dpa, s, lb, lm0, w(-1:1), ws(-1:1), x4(4), w4(4), &
                 w5(5), li(4)
     integer  :: a, ai
-    logical  :: ok, okx
+    logical  :: ok, okx, cen
     c   = 0.0_dp
     kap = mrat / (2.0_dp * vth**2)
     h   = vperp(i+1) - vperp(i)
+    cen = cen_face(eface(i), vpar(j), h, kap)
     call theta_phi(eface(i), vpar(j), vth, th, ph)
     dpp = th + vpar(j)**2 * ph
     dpa = -eface(i) * vpar(j) * ph
@@ -184,7 +185,11 @@ contains
       else
         x4 = vperp(i-1:i+2)
       end if
-      call fit4_weights(x4, eface(i), kap, w4, ok)
+      if (cen) then
+        call cent_weights(4, x4, eface(i), kap, w4);  ok = .true.
+      else
+        call fit4_weights(x4, eface(i), kap, w4, ok)
+      end if
       if (ok) then
         if (i == 1) then
           c(0,0) = c(0,0) + dpp * w4(1)
@@ -208,8 +213,11 @@ contains
       else
         x4 = vperp(i-1:i+2)
       end if
-      if (maxval(kap * abs(x4**2 - eface(i)**2)) <= 30.0_dp) &
+      if (cen) then
+        call cent_weights(5, vpar(j-2:j+2), vpar(j), kap, w5);  okx = .true.
+      else if (maxval(kap * abs(x4**2 - eface(i)**2)) <= 30.0_dp) then
         call fitn_weights(5, vpar(j-2:j+2), vpar(j), kap, w5, okx)
+      end if
       if (okx) then
         call lagr4(x4, eface(i), li)
         do a = -1, 2
@@ -382,6 +390,59 @@ contains
     ok = .true.
   end subroutine fitn_weights
 
+  !------------------------------------------------------------------
+  ! Faces where the fitted fluxes are replaced by central ones
+  ! (cc_pe_central > 0): Peclet number 2 kappa |v| h of the background
+  ! at the face above cc_pe_central, h the larger of the local spacings.
+  ! There f is the RF-heated tail, far from M_b x polynomial, and the
+  ! fitted / Chang-Cooper fluxes degrade to upwinded drag (first order,
+  ! numerical diffusion ~ A h/2 >> D); central fluxes are 4th order when
+  ! f is resolved.  M_b is no longer an exact null vector on these faces
+  ! (it is ~exp(-pe^2/(4 kappa h^2)) there, i.e. negligible).
+  !------------------------------------------------------------------
+  logical function cen_face(vp, va, hp, kap)
+    real(dp), intent(in) :: vp, va, hp, kap
+    cen_face = .false.
+    if (cc_pe_central <= 0.0_dp) return
+    cen_face = 2.0_dp * kap * sqrt(vp*vp + va*va) * max(hp, dvpar) > cc_pe_central
+  end function cen_face
+
+  ! local v_perp spacing at row i
+  real(dp) function hperp(i)
+    integer, intent(in) :: i
+    if (i < nperp) then
+      hperp = vperp(i+1) - vperp(i)
+    else
+      hperp = vperp(i) - vperp(i-1)
+    end if
+  end function hperp
+
+  !------------------------------------------------------------------
+  ! Central (Lagrange) n-point approximation of M d(f/M)/dx = df/dx
+  ! + 2 kap x f at xf (a face or a node): no exponential fitting.
+  !------------------------------------------------------------------
+  subroutine cent_weights(n, x, xf, kap, w)
+    integer,  intent(in)  :: n
+    real(dp), intent(in)  :: x(n), xf, kap
+    real(dp), intent(out) :: w(n)
+    real(dp) :: li, dl, pr
+    integer  :: k, m, q
+    do k = 1, n
+      li = 1.0_dp;  dl = 0.0_dp
+      do m = 1, n
+        if (m == k) cycle
+        li = li * (xf - x(m)) / (x(k) - x(m))
+        pr = 1.0_dp / (x(k) - x(m))
+        do q = 1, n
+          if (q == k .or. q == m) cycle
+          pr = pr * (xf - x(q)) / (x(k) - x(q))
+        end do
+        dl = dl + pr
+      end do
+      w(k) = dl + 2.0_dp * kap * xf * li
+    end do
+  end subroutine cent_weights
+
   ! four-point Lagrange interpolation weights at xf
   subroutine lagr4(x, xf, li)
     real(dp), intent(in)  :: x(4), xf
@@ -410,10 +471,11 @@ contains
                 x5(5), w5(5)
     real(dp), parameter :: li(-1:2) = [-1.0_dp, 9.0_dp, 9.0_dp, -1.0_dp] / 16.0_dp
     integer  :: m, k, n, ki
-    logical  :: ok, okx
+    logical  :: ok, okx, cen
     c   = 0.0_dp
     kap = mrat / (2.0_dp * vth**2)
     vf  = 0.5_dp * (vpar(j) + vpar(j+1))
+    cen = cen_face(vperp(i), vf, hperp(i), kap)
     call theta_phi(vperp(i), vf, vth, th, ph)
     daa = th + vperp(i)**2 * ph
     dpa = -vperp(i) * vf * ph
@@ -422,7 +484,11 @@ contains
     lb  = log_bern(s)
     ok = .false.
     if (ho .and. j >= 2 .and. j+2 <= npar) then
-      call fit4_weights(vpar(j-1:j+2), vf, kap, w4, ok)
+      if (cen) then
+        call cent_weights(4, vpar(j-1:j+2), vf, kap, w4);  ok = .true.
+      else
+        call fit4_weights(vpar(j-1:j+2), vf, kap, w4, ok)
+      end if
       if (ok) c(0,-1:2) = c(0,-1:2) + daa * w4
     end if
     if (.not. ok) then
@@ -441,7 +507,11 @@ contains
           x5(k+3) = -vperp(1-n)                    ! mirror of node 1-n
         end if
       end do
-      call fitn_weights(5, x5, vperp(i), kap, w5, okx)
+      if (cen) then
+        call cent_weights(5, x5, vperp(i), kap, w5);  okx = .true.
+      else
+        call fitn_weights(5, x5, vperp(i), kap, w5, okx)
+      end if
       if (okx) then
         do k = -2, 2
           n = i + k
@@ -662,6 +732,7 @@ contains
       j = row - (i-1)*npar
       if (bc_row(i, j)) cycle
       if (i_cc_wall == 0 .and. (i >= nperp-1-nreach .or. j <= 2+nreach .or. j >= npar-1-nreach)) cycle
+      if (e4 .and. cen_face(vperp(i), abs(vpar(j)) + dvpar, hperp(max(i-1,1)) + hperp(i), kap)) cycle
       ! (L M)_row / M_row: ratios of M only, which do not underflow where
       ! M itself does (kappa v^2 > ~745 in large boxes)
       res = 0.0_dp;  scl = 0.0_dp

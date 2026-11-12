@@ -59,6 +59,11 @@ integer :: i_cc_ho = 0    ! with i_cc = -1, Coulomb operators of the
                           !    (4th order at the faces; coul_fv.f90)
                           ! -2 the same, and high-order cross terms
                           !    (5x5 stencil)
+double precision :: cc_pe_central = 0.d0 ! with i_cc_ho /= 0: faces whose
+                          ! Peclet number 2 kappa_b |v| h exceeds this use
+                          ! central 4th-order fluxes (f far from M_b on hot
+                          ! tails, where fitted fluxes turn into upwind drag);
+                          ! 0 = off (default)
 
 integer :: n_snap = 0     ! VDF snapshots: write f every n_snap steps to
                           ! vdf_snap_<step>.txt (0 = off, the default).  Meant

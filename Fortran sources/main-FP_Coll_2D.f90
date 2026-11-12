@@ -347,7 +347,7 @@ namelist /INPUT/ casename, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
-                i_cc, i_cc_wall, i_cc_ho
+                i_cc, i_cc_wall, i_cc_ho, cc_pe_central
 
 
 !write(*,*) 'Read namelist'
@@ -402,6 +402,8 @@ if (i_cc == -1) then
     write(*,'(A)') '   walls: '//trim(merge('zero flux (closed box)', 'Dirichlet f = 0       ', i_cc_wall == -1))
     if (i_cc_ho == -1) write(*,'(A)') '   background species: four-point exponentially fitted fluxes (i_cc_ho = -1)'
     if (i_cc_ho == -2) write(*,'(A)') '   background species: fitted fluxes and cross terms, 5x5 stencil (i_cc_ho = -2)'
+    if (i_cc_ho /= 0 .and. cc_pe_central > 0.d0) write(*,'(A,F6.2)') &
+        '   central 4th-order fluxes on faces with Peclet number above cc_pe_central = ', cc_pe_central
 endif
 if (i_cc_ho /= 0 .and. i_cc_ho /= -1 .and. i_cc_ho /= -2) then
     write(*,'(A,I0,A)') 'ERROR: i_cc_ho=', i_cc_ho, ' is not valid. Use 0, -1 or -2.'
