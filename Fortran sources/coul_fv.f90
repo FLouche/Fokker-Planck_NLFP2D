@@ -21,8 +21,9 @@
 !   - diagonal part of each face flux: Chang-Cooper / Scharfetter-Gummel,
 !       G = (D/h) [B(-s) f_+ - B(s) f_-],  B(x) = x/(e^x-1),
 !     s = ln M_- - ln M_+ the jump of ln M across the face;
-!   - cross part: central differences of g = f/M, averaged onto the face,
-!     scaled by the same face value of M (B(s) M_-).
+!   - cross part: M d(f/M)/dv at the two nodes of the face, averaged, by
+!     Scharfetter-Gummel two-point weights in the transverse direction
+!     (zero on M; bounded at high cell Peclet number, see sg_weights).
 !   So the discrete flux vanishes exactly on the nodal M_b (cross term
 !   included), and the scheme is conservative: the net fluxes telescope.
 !   The cross term is not sign-definite: positivity is not guaranteed.
@@ -148,8 +149,8 @@ contains
     integer,  intent(in)  :: i, j
     real(dp), intent(in)  :: vth, mrat
     real(dp), intent(out) :: c(0:1,-1:1)
-    real(dp) :: kap, h, th, ph, dpp, dpa, s, lb, lm0, w(-1:1)
-    integer  :: a, l
+    real(dp) :: kap, h, th, ph, dpp, dpa, s, lb, lm0, w(-1:1), ws(-1:1)
+    integer  :: a
     c   = 0.0_dp
     kap = mrat / (2.0_dp * vth**2)
     h   = vperp(i+1) - vperp(i)
@@ -162,15 +163,39 @@ contains
     ! diagonal (Chang-Cooper): (D/h) M~ (g+ - g-), M~ = B(s) M_-
     c(1,0) = c(1,0) + dpp/h * exp(lb + lm0 - lnM(i+1, j, kap))
     c(0,0) = c(0,0) - dpp/h * exp(lb)
-    ! cross: D_pa M~ dg/dva, dg/dva averaged over the two nodes of the face
+    ! cross: D_pa M d(f/M)/dva at the two nodes of the face, averaged;
+    ! Scharfetter-Gummel weights along va (see sg_weights)
     call dva_weights(j, w)
     do a = 0, 1
-      do l = -1, 1
-        if (w(l) == 0.0_dp) cycle
-        c(a,l) = c(a,l) + 0.5_dp * dpa * w(l) * exp(lb + lm0 - lnM(i+a, j+l, kap))
-      end do
+      call sg_weights(w, [lnM(i+a, max(j-1,1), kap), lnM(i+a, j, kap), &
+                          lnM(i+a, min(j+1,npar), kap)], ws)
+      c(a,:) = c(a,:) + 0.5_dp * dpa * ws
     end do
   end subroutine perp_face
+
+  !------------------------------------------------------------------
+  ! Two-point difference w (weights -1/H at node lo, +1/H at node hi)
+  ! turned into the Scharfetter-Gummel approximation of M d(f/M)/dv:
+  !   [B(-s) f_hi - B(s) f_lo] / H,   s = ln M_lo - ln M_hi,
+  ! zero on M exactly, -> the central difference as s -> 0.  The former
+  ! form M~ (g_hi - g_lo)/H, g = f/M, has weights exp(ln M~ - ln M_node)
+  ! ~ e^|s| at high cell Peclet number; these grow only like |s|.
+  !------------------------------------------------------------------
+  subroutine sg_weights(w, lm, ws)
+    real(dp), intent(in)  :: w(-1:1), lm(-1:1)
+    real(dp), intent(out) :: ws(-1:1)
+    integer  :: lo, hi, k
+    real(dp) :: s
+    lo = 0;  hi = 0
+    do k = -1, 1
+      if (w(k) < 0.0_dp) lo = k
+      if (w(k) > 0.0_dp) hi = k
+    end do
+    s = lm(lo) - lm(hi)
+    ws = 0.0_dp
+    ws(hi) = w(hi) * exp(log_bern(-s))
+    ws(lo) = w(lo) * exp(log_bern(s))
+  end subroutine sg_weights
 
   !------------------------------------------------------------------
   ! Flux through the v_par face between (i,j) and (i,j+1):
@@ -180,8 +205,8 @@ contains
     integer,  intent(in)  :: i, j
     real(dp), intent(in)  :: vth, mrat
     real(dp), intent(out) :: c(-1:1,0:1)
-    real(dp) :: kap, vf, th, ph, daa, dpa, s, lb, lm0, w(-1:1)
-    integer  :: k, m
+    real(dp) :: kap, vf, th, ph, daa, dpa, s, lb, lm0, w(-1:1), ws(-1:1)
+    integer  :: m
     c   = 0.0_dp
     kap = mrat / (2.0_dp * vth**2)
     vf  = 0.5_dp * (vpar(j) + vpar(j+1))
@@ -193,12 +218,13 @@ contains
     lb  = log_bern(s)
     c(0,1) = c(0,1) + daa/dvpar * exp(lb + lm0 - lnM(i, j+1, kap))
     c(0,0) = c(0,0) - daa/dvpar * exp(lb)
+    ! cross: D_pa M d(f/M)/dvp at the two nodes of the face, averaged
+    ! (at i = 1 the mirror node -vp(1) is node 1 itself: same M)
     call dvp_weights(i, w)
     do m = 0, 1
-      do k = -1, 1
-        if (w(k) == 0.0_dp) cycle
-        c(k,m) = c(k,m) + 0.5_dp * dpa * w(k) * exp(lb + lm0 - lnM(i+k, j+m, kap))
-      end do
+      call sg_weights(w, [lnM(max(i-1,1), j+m, kap), lnM(i, j+m, kap), &
+                          lnM(min(i+1,nperp), j+m, kap)], ws)
+      c(:,m) = c(:,m) + 0.5_dp * dpa * ws
     end do
   end subroutine par_face
 
