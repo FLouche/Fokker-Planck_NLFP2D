@@ -252,6 +252,15 @@ save
 
 integer :: nharm
 
+! i_rf_tilt: QL RF diffusion tensor (qlrfterm)
+!   -1 (default): full Kennel-Engelmann tensor; the diffusion direction at the
+!       resonance is tilted in v_par by k_par v_perp/omega (D_perp-par, D_par-par kept)
+!    0: perpendicular-only limit, (1/vperp) d/dvperp (vperp D dvperp), the tilt
+!       neglected (k_par kept in the resonance and in (v_ph - v_par)); valid for
+!       k_par v_perp/omega << 1.  Reproduces the N=2 BECHSI results of
+!       PPCF 53 (2011) 092001 (see PRF_scan, 2026-11-13)
+integer :: i_rf_tilt = -1
+
 double precision :: b0,frek,kpar,delta_rf
 double precision :: omega,vph,omc,vres,rfcte
 

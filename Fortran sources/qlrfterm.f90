@@ -175,6 +175,16 @@ rf02(i,j) = rfcte*dirac(j)*vperp(i)**2*dn(i)
 
 rf11(i,j) = rfcte*dirac(j)*2.d0*comfac1*vperp(i)*dn(i)
 
+! i_rf_tilt = 0: perpendicular-only limit, Q = (1/vperp) d/dvperp (vperp G comfac1^2 df/dvperp),
+! G = rfcte dirac dn.  Drops the v_par component k_par vperp/omega of the diffusion direction
+! (and with it the delta' terms, which only come from the outer d/dvpar); still conservative.
+if (i_rf_tilt == 0) then
+   rf10(i,j) = rfcte*dirac(j)*comfac1**2*(dn(i)/vperp(i)+ddndvperp(i))
+   rf01(i,j) = 0.d0
+   rf02(i,j) = 0.d0
+   rf11(i,j) = 0.d0
+endif
+
 ! Saving the tensor components
 !
 !if(j==jmid) then

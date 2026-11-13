@@ -340,7 +340,7 @@ namelist /INPUT/ casename, &
                 isource,beam_ekin,beam_angle_deg, & 
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
-                kpar,frek,delta_RF,b0,nharm, &
+                kpar,frek,delta_RF,b0,nharm,i_rf_tilt, &
                 icn, ntimes, timestep, iold, istart, isc, core_frac, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
@@ -398,6 +398,14 @@ twopi=2.d0*pi
 ! namelist sets both and overrides the environment.  Otherwise MKL takes the
 ! user's MKL_NUM_THREADS / OMP_NUM_THREADS if set, else mkl_threads_default
 ! (capped at what MKL would use), and the OpenMP loops follow MKL.
+if (i_rf_tilt /= -1 .and. i_rf_tilt /= 0) then
+    write(*,'(A,I0,A)') 'ERROR: i_rf_tilt=', i_rf_tilt, &
+                        ' is not valid. Use -1 (full QL tensor, default) or 0 (perpendicular only).'
+    stop
+endif
+if (irf == -1 .and. i_rf_tilt == 0) write(*,*) &
+    'RF: perpendicular-only QL tensor (i_rf_tilt=0, k_par v_perp/omega tilt neglected)'
+
 if (n_threads < 0) then
     write(*,'(A,I0,A)') 'ERROR: n_threads=', n_threads, &
                         ' is not valid. Use 0 (default) or a positive thread count.'
