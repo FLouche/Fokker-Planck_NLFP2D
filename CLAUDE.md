@@ -139,6 +139,27 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 | `n_snap` | 0 / N>0 | No snapshots (default) / write f every N steps to `vdf_snap_<step>.txt` (both time solvers) |
 | `i_lu_reuse` | -1 / 0 | Reuse the last LU as CGS preconditioner, refactorise only on rejection (default) / refactorise every step |
 | `lu_reuse_tol` | real | Residual bound for LU reuse (default 1e-10; effective bound is max(tol, 10 × last direct residual), so values below ~1e-11 just refactorise every step) |
+| `i_rf_tilt` | -1 / 0 | Full Kennel–Engelmann QL tensor (default) / perpendicular-only limit, tilt k∥v⊥/ω of the diffusion direction neglected (see *QL RF tensor* below) |
+
+### QL RF tensor (`i_rf_tilt`, 2026-11-13)
+
+`qlrfterm` builds (1/v⊥)·L[v⊥·G·L f] with L ∝ (v_ph−v∥)∂_{v⊥} + v⊥∂_{v∥} and
+G = rfcte·δ_Gauss(v∥−v_res; `delta_RF`)·|E+J_{N−1}+E−J_{N+1}|² (checked term by term
+against the expansion, δ′ terms included). With `i_rf_tilt=0` only the ∂_{v⊥} part is
+kept (rf01 = rf02 = rf11 = 0); still conservative. **Dropping only the δ′ terms is not
+an option**: the operator then loses particles (40–100% drained in tests).
+
+Why it matters (JET minority, `PRF_scan` in `x64/Release`, vs PPCF 53 (2011) 092001
+Sec. 6): with k∥ = 8 m⁻¹ (v_ph = 4×10⁷ m/s) the tilt moves N=2 tail ions out of the
+resonance band near v⊥ ≈ 2×10⁷ m/s; collisions are too slow at MeV to bring them back,
+so the tail stays below v_te and Teff ≈ 445 keV per MW/m³ for every polarisation
+(Stix line). Not numerical: a 2× finer grid and a larger box change nothing; the
+result does depend on `delta_RF` (Teff 251/394/792 keV for 1.25/2.5/10 ×10⁶ m/s at
+fixed E+). The paper's N=2 BECHSI values (≈ 760 / 1060 keV per MW/m³ for E−/E+ = 3 / 6)
+are reproduced only with `i_rf_tilt=0` **and** kperp = 15 m⁻¹ (the paper's N=2 T_N
+curve corresponds to kperp = 15, i.e. half our 30, or a Bessel argument k⊥v⊥/ω).
+N=1 is insensitive (tail near 10⁷ m/s). The domain check overflags these RF cases: it
+assumes an isotropic Maxwellian at Teff; check the real f at the walls.
 
 ### Output Files
 All output is written to the run directory. Key files:
