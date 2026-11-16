@@ -470,6 +470,8 @@ program cold_dispersion
       write(iu,'(a)') '# cold-plasma dispersion, radial scan B = b0*r0/R, uniform density; case ' // trim(casename)
       write(iu,'(a,f8.4,a,f8.4,a,f9.4,a,f8.3,a,es10.3)') '# b0 = ', b0, ' T  r0 = ', r0, ' m  f = ', &
          frek/1d6, ' MHz  kpar = ', kpar, ' 1/m  nu/omega = ', nu_omega
+      write(iu,'(a,f9.3,a,f9.3,a,i0,a,f8.4)') '# namelist kperp = ', real(kperp), '  |emin/eplus| = ', &
+         merge(abs(emin/eplus), 0.d0, abs(eplus) > 0.d0), '  nharm = ', nharm, '  minority A/Z = ', aa/za
       write(iu,'(a)') '# columns: 1 R(m) 2 B(T) 3 omega/Omega_min 4-5 Re,Im nperp2 fast 6-7 Re,Im nperp2 slow' // &
          ' 8-9 Re,Im kperp fast(1/m) 10 |E-/E+| fast 11 Re nperp2 fast (bulk only) 12 |E-/E+| fast (bulk only)' // &
          ' 13 Re(S-npar2) 14 Re(L-npar2) 15 Re(R-npar2) 16 Re P'
