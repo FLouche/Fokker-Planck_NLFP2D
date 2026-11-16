@@ -281,6 +281,22 @@ namelist, compare with `fp2d_plot.py compare`). Points to know:
   next to the reports stay ignored.
 - The folder is ~2.9 GB; adding more results grows the clone size for good.
 
+### `Tools/cold_dispersion/` — cold-plasma dispersion for an FP2D namelist
+
+Standalone Fortran program (not part of the `.vfproj`), built by `build.bat`
+(ifx from a plain cmd; uses `vcvars64.bat` + the oneAPI 2025.2 directories, since
+`setvars.bat` fails here without `vswhere.exe`). Run
+`cold_dispersion.exe <FP2D namelist> [<&COLD file>]`. It pulls only the variables it
+needs out of `&INPUT` (text extraction, then an internal namelist read), so any FP2D
+namelist works unchanged. Solves the Stix biquadratic for n⊥² at fixed n∥ = c k∥/ω,
+gives k⊥, E−/E+ = (L−n²)/(R−n²), Ey/Ex, Ez/Ex for both roots, with and without the
+minority in the dielectric, and compares with the namelist `kperp` and `|emin/eplus|`.
+`&COLD nscan>1` adds a radial scan (B = b0·r0/R, uniform density) written to
+`cold_dispersion-<casename>.txt`, with S = n∥² / L = n∥² / R = n∥² crossings listed
+(zero vs pole). Checked against an independent numpy 3×3 determinant (2026-11-16).
+JET namelists: N=1 bulk-only fast wave k⊥ = 29.4 m⁻¹, |E−/E+| = 3.75; N=2 (1.725 T)
+k⊥ ≈ 58–61 m⁻¹, |E−/E+| ≈ 1.9.
+
 ## Fortran Internals
 
 ### Shared variable semantics
