@@ -378,3 +378,75 @@ CONTAINS
   END SUBROUTINE integrate_Lf
 
 END SUBROUTINE time_density_terms_7pt
+
+!*******************************************************
+!* Power density of the energy-confinement loss L_E    *
+!*******************************************************
+!
+! P_E = INT( ekin * (L_E f) d3v ), with the discrete operator the solver uses
+! (fd_stencil_2d), same ekin normalisation as time_power_7pt.  In the continuum
+! P_E = -W/tau_E, W = INT(ekin f d3v); the ratio -P_E*tau_E/W, also returned,
+! measures the discretisation error of the term (1 = exact).
+!
+! Multispecies extension, 20/11/2026.
+!*******************************************************
+
+SUBROUTINE time_power_lossE(f, dens, pE, ratio)
+
+  USE shared_grid
+  USE mod_ncint
+  USE shared_plasma
+  USE shared_beam
+  USE shared_multi, ONLY: tau_E
+  USE func_index
+  USE mod_apply_operator
+  USE assemble_FP_lin, ONLY: add_lossE_terms
+
+  IMPLICIT NONE
+
+  INTEGER, PARAMETER :: dp = KIND(1.0D0)
+  REAL(dp), INTENT(IN)  :: f(nbig), dens
+  REAL(dp), INTENT(OUT) :: pE, ratio
+
+  REAL(dp), PARAMETER :: pmass = 1.6726d-27
+  REAL(dp) :: ekin(nperp,npar), fint(nperp,npar), Lf(nbig)
+  REAL(dp) :: c00(nperp,npar), c10(nperp,npar), c01(nperp,npar), zero(nperp,npar)
+  REAL(dp) :: normfac, taum_save, wkin
+  INTEGER  :: iv, ip, ix
+
+  pE = 0.0_dp;  ratio = 0.0_dp
+  IF (tau_E <= 0.0_dp) RETURN
+
+  taum_save = taum
+  taum = 0.0_dp
+
+  IF (isource == 0) THEN
+    normfac = npart / dens
+  ELSE
+    normfac = 1.0_dp
+  END IF
+
+  c00 = 0.0_dp;  c10 = 0.0_dp;  c01 = 0.0_dp;  zero = 0.0_dp
+  CALL add_lossE_terms(c00, c10, c01)
+  CALL apply_operator(zero, zero, zero, c10, c01, c00, f, Lf)
+
+  DO iv = 1, nperp
+    DO ip = 1, npar
+      ix = index_mat(iv, ip)
+      ekin(iv,ip) = 0.5_dp * pmass * aa * (vperp(iv)**2 + vpar(ip)**2) * normfac
+      fint(iv,ip) = ekin(iv,ip) * Lf(ix) * jacob(iv,ip)
+    END DO
+  END DO
+  CALL ncint_2d(fint, pE)
+
+  DO iv = 1, nperp
+    DO ip = 1, npar
+      fint(iv,ip) = ekin(iv,ip) * f(index_mat(iv,ip)) * jacob(iv,ip)
+    END DO
+  END DO
+  CALL ncint_2d(fint, wkin)
+  IF (wkin > 0.0_dp) ratio = -pE * tau_E / wkin
+
+  taum = taum_save
+
+END SUBROUTINE time_power_lossE

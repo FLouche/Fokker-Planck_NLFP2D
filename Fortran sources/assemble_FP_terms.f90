@@ -73,8 +73,43 @@ module assemble_FP_lin
     all11 = colin11
 
     endif
-            
+
+    ! =========================================================
+    ! Energy-confinement loss L_E (multispecies extension, namelist tau_E;
+    ! main sets tau_E = 0 when there is no source, so this is skipped then).
+    call add_lossE_terms(all00, all10, all01)
+
     end subroutine assemble_FP_terms
+
+    !-----------------------------------------------------------------
+    ! L_E f = (1/2 tau_E) [ (1/vperp) d(vperp^2 f)/dvperp + d(vpar f)/dvpar ]
+    !       = (1/2 tau_E) [ 3 f + vperp df/dvperp + vpar df/dvpar ]
+    ! i.e.  A += 3/(2 tau_E),  B += vperp/(2 tau_E),  C += vpar/(2 tau_E).
+    ! Conserves particles; dW/dt = -W/tau_E.  Nothing is added when
+    ! tau_E = 0, so the default reproduces v3.2 to the bit.
+    !-----------------------------------------------------------------
+    subroutine add_lossE_terms(a00, a10, a01)
+
+    use shared_grid
+    use shared_multi, only: tau_E
+
+    implicit none
+
+    double precision, dimension(nperp,npar), intent(inout) :: a00, a10, a01
+    double precision :: r
+    integer :: i, j
+
+    if (tau_E <= 0.d0) return
+    r = 0.5d0 / tau_E
+    do j = 1, npar
+        do i = 1, nperp
+            a00(i,j) = a00(i,j) + 3.d0 * r
+            a10(i,j) = a10(i,j) + vperp(i) * r
+            a01(i,j) = a01(i,j) + vpar(j) * r
+        enddo
+    enddo
+
+    end subroutine add_lossE_terms
     
 end module assemble_FP_lin
 

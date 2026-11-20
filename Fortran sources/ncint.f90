@@ -97,7 +97,11 @@ contains
 ! special-casing is needed.
 !
 ! The weights depend only on the grid, so they are built once and cached; the
-! cache is rebuilt automatically if nperp or npar changes.
+! cache is rebuilt automatically if the grid changes.  The test compares the
+! grid VALUES, not only nperp/npar: the multispecies extension switches between
+! species grids of the same size but different boxes (select_species), and a
+! size-only key silently reused the first grid's weights (background densities
+! off by up to 500x, 20/11/2026).  O(nperp+npar) per call, negligible.
 !===============================================================================
 subroutine ncint_2D(f,s)
 
@@ -112,19 +116,25 @@ double precision, intent(in) :: f(nperp,npar)
 double precision, intent(out):: s
 
 double precision, allocatable, save :: wperp(:), wpar(:)
+double precision, allocatable, save :: vperp_cached(:), vpar_cached(:)
 integer, save :: n_perp_cached = -1, n_par_cached = -1
+logical :: rebuild
 
 double precision :: col
 integer i,j
 
 ! ===========================================================================
 
-if (n_perp_cached /= nperp .or. n_par_cached /= npar) then
-    if (allocated(wperp)) deallocate(wperp)
-    if (allocated(wpar))  deallocate(wpar)
-    allocate(wperp(nperp), wpar(npar))
+rebuild = (n_perp_cached /= nperp .or. n_par_cached /= npar)
+if (.not. rebuild) rebuild = any(vperp_cached /= vperp) .or. any(vpar_cached /= vpar)
+if (rebuild) then
+    if (allocated(wperp)) deallocate(wperp, vperp_cached)
+    if (allocated(wpar))  deallocate(wpar, vpar_cached)
+    allocate(wperp(nperp), wpar(npar), vperp_cached(nperp), vpar_cached(npar))
     call simpson_weights(vperp, nperp, wperp)
     call simpson_weights(vpar,  npar,  wpar)
+    vperp_cached = vperp
+    vpar_cached  = vpar
     n_perp_cached = nperp
     n_par_cached  = npar
 end if

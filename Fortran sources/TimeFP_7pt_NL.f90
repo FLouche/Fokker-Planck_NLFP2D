@@ -37,6 +37,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   USE shared_FPterms
   USE shared_timer
   USE shared_beam
+  USE shared_multi, ONLY: tau_E
   USE shared_RF
   USE func_index
   USE nlterm
@@ -92,6 +93,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: tau_rf            ! RF tail formation time [s]
   REAL(dp) :: tau_ii, tau_ie    ! effective collisional times [s]
   REAL(dp) :: pcoll_self_perp, pcoll_self_par
+  REAL(dp) :: pE_loss, pE_ratio      ! energy-confinement loss power, check ratio
   REAL(dp) :: t_start, t_end
 
   INTEGER :: ndof, i, j, k, row, ptr, itime, itime_global, iphase, iv, imu, ix
@@ -115,6 +117,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   REAL(dp) :: mloss_perp, mloss_par, mSC_perp, mSC_par
 
   EXTERNAL :: time_power_7pt, time_momentum_7pt, time_density_terms_7pt
+  EXTERNAL :: time_power_lossE
 
   real(dp) :: anisotropy
   type(conv_diag_t) :: cdiag        ! Jacobian-weighted convergence diagnostics
@@ -323,6 +326,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='unknown')
       IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
       IF (isc /= 0)     OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
+      IF (tau_E > 0.d0) OPEN(495,file=TRIM(outfile('power_lossE_vs_time.txt')), status='unknown')
       !DTERMS-OFF! OPEN(520,file=TRIM(outfile('density_terms_vs_time.txt')),   status='unknown')
       !DTERMS-OFF! WRITE(520,'(A)') '# time  total  coll(1:nbulk; 1=e)  self-coll  RF  source  losses   [m^-3 s^-1]'
     END IF
@@ -365,6 +369,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='old', access='append')
       IF (isource== -1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
       IF (isc /= 0)     OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
+      IF (tau_E > 0.d0) OPEN(495,file=TRIM(outfile('power_lossE_vs_time.txt')), status='old', access='append')
       !DTERMS-OFF! OPEN(520,file=TRIM(outfile('density_terms_vs_time.txt')),   status='old', access='append')
     END IF
     IF (iplot_mom == -1) THEN
@@ -597,6 +602,10 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
       IF (isource== -1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
       IF (isc /= 0)     WRITE(500,*) time, pcoll_self/1.d6, &
                                          pcoll_self_perp/1.d6, pcoll_self_par/1.d6
+      IF (tau_E > 0.d0) THEN
+        CALL time_power_lossE(x_vec, dens_tmp, pE_loss, pE_ratio)
+        WRITE(495,*) time, pE_loss/1.d6, pE_ratio
+      END IF
       !DTERMS-OFF! CALL time_density_terms_7pt(x_vec, ncoll_d, nsc_d, nRF_d, nsrc_d, nloss_d)
       !DTERMS-OFF! WRITE(520,'(ES16.8,*(ES16.7))') time, SUM(ncoll_d)+nsc_d+nRF_d+nsrc_d+nloss_d, &
                                      !DTERMS-OFF! ncoll_d, nsc_d, nRF_d, nsrc_d, nloss_d
@@ -653,6 +662,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     CLOSE(516)
     IF (isource == -1) CLOSE(490)
     IF (isc /= 0)      CLOSE(500)
+    IF (tau_E > 0.d0) CLOSE(495)
     !DTERMS-OFF! CLOSE(520)
     CLOSE(470)
     DO ib = 1, nbulk; CLOSE(470+ib); END DO

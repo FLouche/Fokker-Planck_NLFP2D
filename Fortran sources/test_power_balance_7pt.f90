@@ -17,6 +17,7 @@ use shared_timer
 use shared_FPterms
 use mod_ncint
 use func_index
+use shared_multi, only: tau_E
 
 implicit none
 
@@ -26,10 +27,13 @@ double precision, dimension(nbulk) :: pcoll
 integer  :: ib
 double precision :: plosses, psource, pRF, pSC, pSC_perp, pSC_par
 double precision :: tau_rf, tau_ii, tau_ie
+double precision :: pE, pE_ratio
+external time_power_lossE
 
 taum = 0.d0
 
 call time_power_7pt(fin, npart, pcoll, pRF, psource, plosses, pSC, pSC_perp, pSC_par, tau_rf, tau_ii, tau_ie)
+call time_power_lossE(fin, npart, pE, pE_ratio)   ! 0 when tau_E = 0
 
 write(*,'(/,A)')    'POWER DENSITY BALANCE:'
 write(*,'(A)')      '----------------------'
@@ -72,13 +76,20 @@ write(*,'(A,ES12.5,A)') &
 write(*,'(A)')      ''
 write(*,'(A)')      '==========================='
 write(*,'(A)')      ''
+if (tau_E > 0.d0) then
+    write(*,'(A,ES12.5,A)') &
+        '  Energy-confinement loss:      ', pE/1d6, ' MW/m**3'
+    write(*,'(A,F9.6,A)') &
+        '     (-P_E*tau_E/W = ', pE_ratio, ';  1 = exact discretisation)'
+    write(*,'(A)')      ''
+end if
 write(*,'(A,ES12.5,A)') &
     '  RF power:                     ', pRF/1d6, ' MW/m**3'
 write(*,'(A)')      ''
 write(*,'(A)')      '  --------------------------------------------'
 write(*,'(A,ES12.5,A)') &
     '  Total balance:                ', &
-    (SUM(pcoll)+pSC+plosses+psource+pRF)/1d6, ' MW/m**3'
+    (SUM(pcoll)+pSC+plosses+psource+pRF+pE)/1d6, ' MW/m**3'
 write(*,'(A)')      ''
 
 end subroutine test_power_balance_7pt

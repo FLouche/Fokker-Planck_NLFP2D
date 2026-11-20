@@ -163,6 +163,11 @@ integer :: iplot_mom = 0         ! -1: write momentum vs time files; 0: skip
 integer :: notxt     = 0         ! .txt output: 0=write all; 1=suppress all; 2=keep only the minimal test/diagnostic set
 double precision, dimension(:,:), allocatable :: fstix
 character(len=64) :: casename = ''
+character(len=8)  :: species_tag = ''  ! multispecies: tag of the species whose grid is
+                                       ! loaded (mod_species, select_species).  Empty for
+                                       ! the heated species, so its files keep the v3.2
+                                       ! names; 'e', 'i1', 'i2', ... for the backgrounds,
+                                       ! which outfile appends to the case name.
 !
 contains
 
@@ -174,6 +179,7 @@ contains
     integer :: idot
     logical :: keep
     character(len=64) :: stem
+    character(len=80) :: suffix
     ! .txt output control via notxt: 0 = write all; 1 = suppress all; 2 = keep
     ! only the minimal test/diagnostic set below.  Suppressed .txt files are
     ! routed to the OS null device.  (.dat restart/kernel files are unaffected.)
@@ -195,14 +201,24 @@ contains
         end if
       end if
     end if
-    if (len_trim(casename) == 0) then
+    ! Suffix = casename, plus '_<species_tag>' for a background species
+    ! (or the tag alone when casename is empty).
+    suffix = casename
+    if (len_trim(species_tag) > 0) then
+      if (len_trim(suffix) > 0) then
+        suffix = trim(suffix) // '_' // trim(species_tag)
+      else
+        suffix = species_tag
+      end if
+    end if
+    if (len_trim(suffix) == 0) then
       fname = trim(name)
     else
       idot = index(name, '.', back=.true.)
       if (idot > 0) then
-        fname = name(1:idot-1) // '-' // trim(casename) // name(idot:len_trim(name))
+        fname = name(1:idot-1) // '-' // trim(suffix) // name(idot:len_trim(name))
       else
-        fname = trim(name) // '-' // trim(casename)
+        fname = trim(name) // '-' // trim(suffix)
       end if
     end if
   end function outfile
@@ -244,6 +260,36 @@ double precision , dimension(:,:), allocatable :: rf11,rf20,rf02
 !! ***************************************
 
     
+module shared_multi
+!
+! Multispecies extension (docs/Multispecies_design.pdf).  Defaults reproduce v3.2.
+!
+implicit none
+
+save
+
+integer :: i_multi = 0              ! 0: single species, the backgrounds are fixed
+                                    !    Maxwellians (v3.2).
+                                    ! -1: multispecies.  Every background species gets
+                                    !    its own grid and distribution (mod_species).
+                                    !    Stage 1: built and written, still frozen.
+double precision :: tau_E = 0.d0    ! Energy confinement time [s] of the loss term
+                                    !   L_E f = (1/2 tau_E) div(v f),
+                                    ! applied to every species, and only when there is a
+                                    ! source (irf=-1 or isource=-1).  0 = no loss term.
+
+! Background-species grids, indexed like the bulk species (1 = electrons, 2.. = ions).
+! The box is |v| <= vbox_b * sqrt(T_b/m_b) at the initial temperature, in both v_perp
+! and v_par; the v_perp grid type (ising, p_grid, nsing) is the heated species' one.
+integer,          dimension(10) :: nperp_b = 0    ! 0 -> nperp of the heated species
+integer,          dimension(10) :: npar_b  = 0    ! 0 -> npar  of the heated species
+double precision, dimension(10) :: vbox_b  = 0.d0 ! 0 -> vbox_default
+double precision, parameter     :: vbox_default = 8.d0  ! f(wall)/f(0) = exp(-32) = 1.3e-14
+
+end module shared_multi
+
+! ***************************************
+
 module shared_rf
 
 implicit none

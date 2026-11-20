@@ -208,6 +208,8 @@ use func_index
 use mod_ncint
 use time_comps_mod        ! explicit interface for time_energy(..., teff=)
 use mod_domain_check      ! domain adequacy check at the end of the run
+use shared_multi          ! multispecies namelist (i_multi, tau_E, background grids)
+use mod_species           ! species containers (multispecies extension)
 !$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
@@ -345,7 +347,8 @@ namelist /INPUT/ casename, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
-                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads
+                i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
+                i_multi, tau_E, nperp_b, npar_b, vbox_b
 
 
 !write(*,*) 'Read namelist'
@@ -371,6 +374,23 @@ namelist /INPUT/ casename, &
 core_frac = 4.0d-3
 
 read(5,INPUT)
+
+! Multispecies extension: checks on the new namelist entries
+if (i_multi /= 0 .and. i_multi /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: i_multi=', i_multi, ' is not valid. Use 0 (single species) or -1.'
+    stop
+endif
+if (tau_E < 0.d0) then
+    write(*,*) 'ERROR: tau_E must be >= 0 (0 = no energy-confinement loss).'
+    stop
+endif
+! The energy-confinement loss applies only when there is a source (RF or beam).
+if (tau_E > 0.d0 .and. irf /= -1 .and. isource /= -1) then
+    write(*,'(A)') ' WARNING: tau_E > 0 ignored: the energy loss is applied only with a source'
+    write(*,'(A)') '          (irf = -1 or isource = -1).'
+    tau_E = 0.d0
+endif
+if (tau_E > 0.d0) write(*,'(A,ES12.4,A)') ' Energy-confinement loss L_E on, tau_E = ', tau_E, ' s'
 
 ! isc=-1, isc=2 and isc=3 require a time-dependent run
 if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
@@ -440,6 +460,10 @@ allocate(vperp(nperp),vpar(npar),jacob(nperp,npar))
 call make_grid
 
 call consts
+
+! Multispecies: one grid and distribution per species (stage 1: built and
+! written, backgrounds still frozen).  Leaves the heated species' grid loaded.
+if (i_multi == -1) call species_setup
 
 !====================================================================
 !

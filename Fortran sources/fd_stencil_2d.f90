@@ -6,7 +6,7 @@ MODULE mod_fd_stencil_2d
 
   IMPLICIT NONE
   PRIVATE
-  PUBLIC :: fd_stencil_2d
+  PUBLIC :: fd_stencil_2d, fd_wcache_sync
 
   ! Cache of the interior-row Fornberg weights.  They depend only on the grid,
   ! yet were recomputed for every row at every time step (~10% of a step).
@@ -42,6 +42,22 @@ CONTAINS
       CALL fornberg_weights(0.0_dp, x, 7, 2, wc_wj(:,:,j))
     END DO
   END SUBROUTINE wcache_build
+
+  !------------------------------------------------------------------
+  ! Bring the weight cache in line with the grid now in shared_grid, in
+  ! serial.  Called by select_species (mod_species) after every grid
+  ! switch, so that the first fd_stencil_2d call on the new grid -- which
+  ! may come from an OpenMP loop -- finds the cache already built (see the
+  ! thread-safety rule in CLAUDE.md).  No-op when the grid is unchanged.
+  !------------------------------------------------------------------
+  SUBROUTINE fd_wcache_sync(nperp, npar, vperp, dvpar)
+    INTEGER,  INTENT(IN) :: nperp, npar
+    REAL(dp), INTENT(IN) :: vperp(nperp), dvpar
+    LOGICAL :: rebuild
+    rebuild = (wc_nperp /= nperp .OR. wc_npar /= npar .OR. wc_dvpar /= dvpar)
+    IF (.NOT. rebuild) rebuild = ANY(wc_vperp /= vperp)
+    IF (rebuild) CALL wcache_build(nperp, npar, vperp, dvpar)
+  END SUBROUTINE fd_wcache_sync
 
 SUBROUTINE fd_stencil_2d(i, j, nperp, npar, vperp, dvpar, &
                           A_ij, B_ij, C_ij, D_ij, E_ij, F_ij, &
