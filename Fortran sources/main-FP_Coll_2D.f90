@@ -210,6 +210,7 @@ use time_comps_mod        ! explicit interface for time_energy(..., teff=)
 use mod_domain_check      ! domain adequacy check at the end of the run
 use shared_multi          ! multispecies namelist (i_multi, tau_E, background grids)
 use mod_species           ! species containers (multispecies extension)
+use mod_ms_checks         ! stage-2 checks (i_ms_check = -1)
 !$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
@@ -348,7 +349,8 @@ namelist /INPUT/ casename, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
-                i_multi, tau_E, nperp_b, npar_b, vbox_b
+                i_multi, tau_E, nperp_b, npar_b, vbox_b, &
+                lmax_leg, nr_leg, nxi_leg, i_ms_check
 
 
 !write(*,*) 'Read namelist'
@@ -380,6 +382,14 @@ if (i_multi /= 0 .and. i_multi /= -1) then
     write(*,'(A,I0,A)') 'ERROR: i_multi=', i_multi, ' is not valid. Use 0 (single species) or -1.'
     stop
 endif
+if (i_ms_check == -1 .and. i_multi /= -1) then
+    write(*,'(A)') ' WARNING: i_ms_check = -1 needs i_multi = -1; checks skipped.'
+    i_ms_check = 0
+end if
+if (lmax_leg < 0 .or. lmax_leg > 48) then
+    write(*,*) 'ERROR: lmax_leg must be in 0..48.'
+    stop
+end if
 if (tau_E < 0.d0) then
     write(*,*) 'ERROR: tau_E must be >= 0 (0 = no energy-confinement loss).'
     stop
@@ -464,6 +474,7 @@ call consts
 ! Multispecies: one grid and distribution per species (stage 1: built and
 ! written, backgrounds still frozen).  Leaves the heated species' grid loaded.
 if (i_multi == -1) call species_setup
+if (i_ms_check == -1) call ms_check_cblin
 
 !====================================================================
 !

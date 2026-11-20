@@ -37,7 +37,8 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   USE shared_FPterms
   USE shared_timer
   USE shared_beam
-  USE shared_multi, ONLY: tau_E
+  USE shared_multi, ONLY: tau_E, i_ms_check
+  USE mod_ms_checks, ONLY: ms_check_kernel
   USE shared_RF
   USE func_index
   USE nlterm
@@ -652,6 +653,9 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
 
   CALL pardiso_solve_finalize(handle_lhs, ia_lhs, ja_lhs, error)
   WRITE(*,*) 'Solve completed.'
+
+  ! Stage-2 check: Legendre potentials of the final f against the kernel.
+  IF (i_ms_check == -1) CALL ms_check_kernel(fstart, teff)
 
   DEALLOCATE(phi_kern)
   IF (ALLOCATED(phi_khat)) DEALLOCATE(phi_khat)

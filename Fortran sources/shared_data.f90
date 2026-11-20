@@ -286,6 +286,13 @@ integer,          dimension(10) :: npar_b  = 0    ! 0 -> npar  of the heated spe
 double precision, dimension(10) :: vbox_b  = 0.d0 ! 0 -> vbox_default
 double precision, parameter     :: vbox_default = 8.d0  ! f(wall)/f(0) = exp(-32) = 1.3e-14
 
+! Legendre potentials (mod_legendre_pot), stage 2.
+integer :: lmax_leg = 16     ! highest harmonic of the heated species' potentials
+integer :: nr_leg   = 0      ! radial intervals of the expansion (0: auto, step dvpar/4)
+integer :: nxi_leg  = 0      ! Gauss points in cos(theta) (0: auto, max(64, 4 lmax_leg + 8))
+integer :: i_ms_check = 0    ! -1: stage-2 checks (Legendre pair coefficients vs cblin at
+                             !     start; vs the phi kernel at the end of timefp_7pt_nl)
+
 end module shared_multi
 
 ! ***************************************
