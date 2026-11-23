@@ -57,6 +57,15 @@ module mod_timefp_ms
   real(dp), parameter :: pmass = 1.6726d-27      ! proton mass [kg]
   real(dp), parameter :: qe    = 1.60218d-19     ! J per eV
 
+  ! Wall-clock profile of the coupled step (printed at the end of the run).
+  integer, parameter :: nt_prof = 10
+  real(dp)   :: tprof(nt_prof) = 0.d0
+  integer(8) :: tclk(nt_prof) = 0
+  character(len=24), parameter :: tname(nt_prof) = [character(len=24) :: &
+       'moments', 'Legendre build', 'main_nlterm (a<-a)', 'pair_coefs (cross)', &
+       'theta step (solve)', 'projection responses', 'pair rates on f^theta', &
+       'RF / L_E rates', 'select_species', 'total']
+
   ! Per-species workspace: operator, LHS, PARDISO handle, coefficients,
   ! quadrature weights and the axis elimination.
   type ms_ws_t
@@ -67,6 +76,7 @@ module mod_timefp_ms
     real(dp), allocatable, dimension(:,:) :: c20, c02, c11, c10, c01, c00
     real(dp), allocatable :: pc(:,:,:,:)     ! coefficients of every pair (s <- j): (i,j,1:6,j)
     real(dp), allocatable :: g(:,:), fth(:)  ! projection: responses to the unit operators, f^theta
+    real(dp), allocatable :: uval(:,:)       ! CSR values of the dilation and shift (constant)
     real(dp) :: cproj(3) = 0.d0              ! projection amplitudes [1/s, 1/s, m/s^2]
     real(dp), allocatable :: q(:,:)          ! trapezoidal weights times 2 pi v_perp
     real(dp) :: ax(7) = 0.d0                 ! f(1,j) = sum_{k=2..7} ax(k) f(k,j)
@@ -74,6 +84,26 @@ module mod_timefp_ms
   end type ms_ws_t
 
 contains
+
+subroutine tic(k)
+  integer, intent(in) :: k
+  call system_clock(tclk(k))
+end subroutine tic
+
+subroutine toc(k)
+  integer, intent(in) :: k
+  integer(8) :: c, r
+  call system_clock(c, r)
+  tprof(k) = tprof(k) + dble(c - tclk(k)) / dble(r)
+end subroutine toc
+
+subroutine sel(s)
+  use mod_species, only: select_species
+  integer, intent(in) :: s
+  call tic(9)
+  call select_species(s)
+  call toc(9)
+end subroutine sel
 
 !=======================================================================
 subroutine timefp_ms(fstart_a, fout_a, otime)
@@ -131,7 +161,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
 
   !--- initial distribution of the heated species: from main (istart), or a
   !    Maxwellian at ta_init
-  call select_species(1)
+  call sel(1)
   if (ta_init > 0.d0) then
     call maxwellian_on_grid(spec(1)%aa, spec(1)%dens, ta_init, spec(1)%f)
   else
@@ -142,13 +172,13 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   taum_save = taum
   taum = 0.d0
   do s = 1, ns
-    call select_species(s)
+    call sel(s)
     call ws_setup(ws(s), s, ns, theta, timestep(1))
   end do
   taum = taum_save
 
   !--- phi kernel of the heated species' grid (main_nlterm) -------------
-  call select_species(1)
+  call sel(1)
   call phi_kernel_prepare
 
   call open_outputs()
@@ -165,18 +195,19 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
 
     time_loop: do itime = 1, ntimes(iphase)
       itime_global = itime_global + 1
+      call tic(10)
 
       ! f* (at which potentials, coefficients and corrections are evaluated):
       ! f^n, then theta f^(n+1,k) + (1-theta) f^n for n_picard iterations.
       do s = 1, ns
-        call select_species(s)
+        call sel(s)
         ws(s)%fs = spec(s)%f
         ws(s)%fn = vec(spec(s)%f)
       end do
       pres = 0.d0
       picard: do ip = 0, n_picard
         !--- 1. moments and Coulomb logarithms of f^n ----------------------
-        call all_moments()
+        call tic(1); call all_moments(); call toc(1)
         do s = 1, ns
           do j = 1, ns
             lnl(s,j) = coulomb_log_pair(s, j, tev(s), tev(j))
@@ -186,15 +217,17 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
 
         !--- 2. Legendre potentials of every species -------------------------
         do j = 1, ns
-          call select_species(j)
+          call sel(j)
+          call tic(2)
           call legpot_build(pot(j), ws(j)%fs, merge(lmax_leg, lmax_bulk, spec(j)%kind == 0), nr_leg, nxi_leg)
+          call toc(2)
         end do
 
         !--- 3. coefficients of every pair (s <- j), stored per pair --------
         taum_save = taum
         taum = 0.d0                    ! operators below are collisional only
         do s = 1, ns
-          call select_species(s)
+          call sel(s)
           allocate(t20(nperp,npar), t02(nperp,npar), t11(nperp,npar), t10(nperp,npar), &
                    t01(nperp,npar), t00(nperp,npar))
           ws(s)%f = vec(ws(s)%fs)
@@ -206,12 +239,16 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
               if (sc_skip) then
                 t20 = 0.d0; t02 = 0.d0; t11 = 0.d0; t10 = 0.d0; t01 = 0.d0; t00 = 0.d0
               else
+                call tic(3)
                 call main_nlterm(ws(1)%f, tev(1) * 1.d-3, t00, t10, t01, t20, t11, t02)
+                call toc(3)
               end if
             else
               mu  = spec(s)%aa / spec(j)%aa
               kap = pair_coef_factor(spec(s)%za, spec(s)%aa, spec(j)%za, lnl(s,j))
+              call tic(4)
               call pair_coefs(pot(j), mu, kap, t20, t02, t11, t10, t01, t00)
+              call toc(4)
             end if
             ws(s)%pc(:,:,1,j) = t20;  ws(s)%pc(:,:,2,j) = t02;  ws(s)%pc(:,:,3,j) = t11
             ws(s)%pc(:,:,4,j) = t10;  ws(s)%pc(:,:,5,j) = t01;  ws(s)%pc(:,:,6,j) = t00
@@ -234,10 +271,12 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
         !--- 4. one theta step per species ----------------------------------
         pres = 0.d0
         do s = 1, ns
-          call select_species(s)
+          call sel(s)
           if (s /= 1) taum = 0.d0   ! the particle loss -f/tau_p acts on the heated species only
           ws(s)%xprev = ws(s)%x
+          call tic(5)
           call ws_step(ws(s), s, theta, dt, itime_global)
+          call toc(5)
           taum = taum_save
           if (ip > 0) then
             pres_s = maxval(abs(ws(s)%x - ws(s)%xprev)) / max(maxval(abs(ws(s)%x)), tiny(1.d0))
@@ -269,18 +308,23 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
       pnrl = 0.d0;  pE = 0.d0;  pRF = 0.d0
       nk = merge(3, 1, i_ms_cons == 2)
       do s = 1, ns
-        call select_species(s)
+        call sel(s)
         allocate(zero2(nperp,npar), t00(nperp,npar), t10(nperp,npar), t01(nperp,npar))
         zero2 = 0.d0
         ws(s)%fth = theta * ws(s)%x + (1.d0 - theta) * ws(s)%fn
         ws(s)%f = ws(s)%fth
         active(s) = (i_ms_cons >= 1 .and. dens(s) > 1.d-6 * spec(s)%dens)
+        call tic(6)
         if (active(s)) call responses(ws(s), s, theta, dt, nk, uu(:,:,s))
+        call toc(6)
         do j = 1, ns
+          call tic(7)
           call pair_rates(ws(s), s, ws(s)%pc(:,:,:,j), merge(nk, 0, active(s)), rr(:,0:,j,s))
+          call toc(7)
           npair(s,j) = rr(1,0,j,s);  ppair(s,j) = rr(2,0,j,s);  rpair(s,j) = rr(3,0,j,s)
           if (s /= j) pnrl(s,j) = p_nrl(s, j, tev(s), tev(j), lnl(s,j))
         end do
+        call tic(8)
         if (s == 1 .and. irf == -1) &
           call op_rates(ws(s), s, rf20, rf02, rf11, rf10, rf01, zero2, rdum, pRF, rdum)
         if (tau_E > 0.d0) then
@@ -288,6 +332,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
           call add_lossE_terms(t00, t10, t01)
           call op_rates(ws(s), s, zero2, zero2, zero2, t10, t01, t00, rdum, pE(s), rdum)
         end if
+        call toc(8)
         deallocate(zero2, t00, t10, t01)
       end do
       dNc = 0.d0;  dPc = 0.d0;  dRc = 0.d0
@@ -367,12 +412,13 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
       taum = taum_save
       call write_rates(time)
       do s = 1, ns
-        call select_species(s)
+        call sel(s)
         spec(s)%f = reshape_vec(ws(s)%x)
       end do
       if (n_picard > 0 .and. mod(itime_global, 50) == 0) write(*,'(A,I0,A,ES10.3)') &
         '  step ', itime_global, ': last Picard change of f^(n+1) (relative) = ', pres
 
+      call toc(10)
       time = time + dt
     end do time_loop
   end do phase_loop
@@ -384,6 +430,15 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   call all_moments()
   call write_moments(time)
   call close_outputs()
+
+  !--- profile -------------------------------------------------------------
+  if (itime_global > 0) then
+    write(*,'(/,A,I0,A)') ' COUPLED LOOP PROFILE (wall clock per step, ', itime_global, ' steps)'
+    do k = 1, nt_prof
+      write(*,'(4X,A24,F10.4,A,F6.1,A)') tname(k), tprof(k) / itime_global, ' s  (', &
+           100.d0 * tprof(k) / max(tprof(nt_prof), tiny(1.d0)), ' %)'
+    end do
+  end if
 
   !--- summary -------------------------------------------------------------
   write(*,'(/,A)') ' COUPLED MULTISPECIES RUN (i_coupled = -1): final state'
@@ -401,7 +456,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   if (allocated(phi_khat)) deallocate(phi_khat)
 
   do s = ns, 1, -1                 ! ends with the heated species selected
-    call select_species(s)
+    call sel(s)
     open(40, file=trim(outfile('fout.txt')), status='unknown')
     open(42, file=trim(outfile('xout.dat')), status='unknown')
     write(42,*) time, nstep_restart + itime_global
@@ -479,7 +534,7 @@ contains
   subroutine all_moments()
     integer :: s1
     do s1 = 1, ns
-      call select_species(s1)
+      call sel(s1)
       call moments(ws(s1), s1, ws(s1)%fs, dens(s1), wkin(s1), wperp(s1), ppar(s1))
       if (dens(s1) > 1.d-6 * spec(s1)%dens) then
         tev(s1)   = (2.d0/3.d0) * wkin(s1) / dens(s1) / qe
@@ -668,6 +723,25 @@ subroutine ws_setup(w, s, nsp, theta, dt0)
     if (i >= 2 .and. i <= 7) w%ax(i) = -coeff(k) / w1
   end do
 
+  ! constant unit operators of the projection: dilation (1/2) div(v f), shift df/dv_par
+  allocate(w%uval(w%nnz,2))
+  block
+    real(dp), allocatable, dimension(:,:) :: z, u10, u01, u00
+    allocate(z(nperp,npar), u10(nperp,npar), u01(nperp,npar), u00(nperp,npar))
+    z = 0.d0
+    do jj = 1, npar
+      do i = 1, nperp
+        u00(i,jj) = 1.5d0;  u10(i,jj) = 0.5d0 * vperp(i);  u01(i,jj) = 0.5d0 * vpar(jj)
+      end do
+    end do
+    call fill_vals(w, z, z, z, u10, u01, u00)
+    w%uval(:,1) = w%vals(1:w%nnz)
+    u01 = 1.d0
+    call fill_vals(w, z, z, z, z, u01, z)
+    w%uval(:,2) = w%vals(1:w%nnz)
+    deallocate(z, u10, u01, u00)
+  end block
+
   call lhs_from_L(w, theta, dt0)
   call pardiso_solve_init(w%h, w%n, w%alhs, w%ialhs, w%jalhs, a_constant=.false., mtype=11, &
                           msglvl=0, error=error, &
@@ -808,37 +882,53 @@ subroutine responses(w, s, theta, dt, nk, uk)
   integer,       intent(in)    :: s, nk
   real(dp),      intent(in)    :: theta, dt
   real(dp),      intent(out)   :: uk(3,3)
-  real(dp), allocatable, dimension(:,:) :: z, u10, u01, u00
   integer :: k, i, jj, error
+  real(dp) :: mx(3), lr(3), dum
+  real(dp), allocatable :: g2(:,:)
 
-  allocate(z(nperp,npar), u10(nperp,npar), u01(nperp,npar), u00(nperp,npar))
-  z = 0.d0;  uk = 0.d0
+  allocate(g2(nperp,npar))
+  uk = 0.d0
   do k = 1, nk
-    u10 = 0.d0;  u01 = 0.d0;  u00 = 0.d0
-    select case (k)
-    case (1)
-      u00 = 1.d0
-    case (2)
-      do jj = 1, npar
-        do i = 1, nperp
-          u00(i,jj) = 1.5d0;  u10(i,jj) = 0.5d0 * vperp(i);  u01(i,jj) = 0.5d0 * vpar(jj)
-        end do
-      end do
-    case (3)
-      u01 = 1.d0
-    end select
-    call fill_vals(w, z, z, z, u10, u01, u00)
-    call csr_matvec(w%n, w%ia, w%ja, w%vals, w%fth, w%Lf)
-    call lf_rates(w, s, uk(1,k), uk(2,k), uk(3,k))
+    ! U_1 = identity (interior rows); U_2, U_3 from the CSR values cached at setup
+    if (k == 1) then
+      w%Lf = w%fth
+    else
+      call csr_matvec(w%n, w%ia, w%ja, w%uval(:,k-1), w%fth, w%Lf)
+    end if
     w%rhs = dt * w%Lf
     do i = 1, nperp
       do jj = 1, npar
         if (i == 1 .or. i == nperp .or. jj == 1 .or. jj == npar) w%rhs((i-1)*npar + jj) = 0.0_dp
       end do
     end do
-    call pardiso_solve_step(w%h, w%alhs, w%ialhs, w%jalhs, w%rhs, w%g(:,k), a_changed=.true., error=error)
+    ! one back-substitution with the current factors (approximate when LU
+    ! reuse has kept older factors): the projection only needs a good
+    ! response direction, since it uses what g_k actually does (below)
+    call pardiso_solve_fixed(w%h, w%alhs, w%ialhs, w%jalhs, w%rhs, w%g(:,k), error=error)
+    ! constraints exactly: Dirichlet walls 0, axis row from the interior
+    do jj = 1, npar
+      w%g((nperp-1)*npar + jj, k) = 0.d0
+      if (jj == 1 .or. jj == npar) then
+        do i = 1, nperp
+          w%g((i-1)*npar + jj, k) = 0.d0
+        end do
+      else
+        w%g(jj, k) = sum(w%ax(2:7) * w%g((/ (((i-1)*npar + jj), i = 2, 7) /), k))
+      end if
+    end do
+    ! effective unit rate: moment change of g_k per dt, minus the part the
+    ! step operator produces on it, = X(U_k f^theta) for an exact solve
+    do i = 1, nperp
+      do jj = 1, npar
+        g2(i,jj) = w%g((i-1)*npar + jj, k)
+      end do
+    end do
+    call moments(w, s, g2, mx(1), mx(2), dum, mx(3))
+    call csr_matvec(w%n, w%ia, w%ja, w%aL, w%g(:,k), w%Lf)
+    call lf_rates(w, s, lr(1), lr(2), lr(3))
+    uk(:,k) = mx / dt - theta * lr
   end do
-  deallocate(z, u10, u01, u00)
+  deallocate(g2)
 end subroutine responses
 
 !-----------------------------------------------------------------------

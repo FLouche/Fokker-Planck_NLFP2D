@@ -50,6 +50,7 @@ MODULE pardiso_solver
   PUBLIC :: pardiso_solve_init
   PUBLIC :: pardiso_solve_step
   PUBLIC :: pardiso_solve_finalize
+  PUBLIC :: pardiso_solve_fixed
 
   !-- Opaque handle that carries all PARDISO internal state --------------------
   TYPE :: pardiso_handle_t
@@ -390,6 +391,30 @@ CONTAINS
 
 99  IF (PRESENT(error)) error = ierr
   END SUBROUTINE pardiso_solve_step
+
+  !-----------------------------------------------------------------------------
+  ! pardiso_solve_fixed: phase 33 only, with the factors as they are (they may
+  ! be those of an earlier matrix when LU reuse accepted CGS steps since the
+  ! last factorisation).  An approximate solve for callers that do not need
+  ! A x = b exactly (the moment projection of the coupled multispecies loop,
+  ! which measures what its responses actually do).  Leaves the step
+  ! statistics and res_direct_last untouched.
+  !-----------------------------------------------------------------------------
+  SUBROUTINE pardiso_solve_fixed(h, a, ia, ja, b, x, error)
+    TYPE(pardiso_handle_t), INTENT(INOUT) :: h
+    REAL(dp), INTENT(INOUT) :: a(*)
+    INTEGER,  INTENT(INOUT) :: ia(*), ja(*)
+    REAL(dp), INTENT(INOUT) :: b(*)
+    REAL(dp), INTENT(INOUT) :: x(*)
+    INTEGER,  INTENT(OUT), OPTIONAL :: error
+    INTEGER :: ierr, nref
+    nref = h%iparm(8)
+    h%iparm(8) = 0          ! one back-substitution: refinement against older
+                            ! factors would iterate to iparm(8) for nothing
+    CALL phase_solve(h, a, ia, ja, b, x, ierr)
+    h%iparm(8) = nref
+    IF (PRESENT(error)) error = ierr
+  END SUBROUTINE pardiso_solve_fixed
 
   !-----------------------------------------------------------------------------
   ! pardiso_solve_finalize
