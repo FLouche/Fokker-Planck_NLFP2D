@@ -82,7 +82,7 @@ contains
   ! Coulomb logarithm for ion species a with thermal ion species b
   !
   ! NRL formula (unlike-ion collisions):
-  !   lnab = 23 - ln[ Za^2*Zb^2*(ma+mb) / (ma*Tb + mb*Ta)
+  !   lnab = 23 - ln[ Za*Zb*(ma+mb) / (ma*Tb + mb*Ta)
   !                   * sqrt( na*Za^2/Ta + nb*Zb^2/Tb ) ]
   !
   ! Inputs:
@@ -130,7 +130,9 @@ contains
     na_cgs = na * m3_to_cm3   ! convert to cm^-3 for NRL formula
     nb_cgs = nb * m3_to_cm3
 
-    mass_factor = Za2 * Zb2 * (ma + mb) / (ma * Tb + mb * Ta)
+    ! Za*Zb, not Za^2*Zb^2 (NRL formulary): the squares appear only in the
+    ! density terms under the square root.  Identical for Z = 1.
+    mass_factor = Za_r * Zb_r * (ma + mb) / (ma * Tb + mb * Ta)
     inner_sum   = sqrt( na_cgs * Za2 / Ta  +  nb_cgs * Zb2 / Tb )
 
     lnab = 23.0d0 - log( mass_factor * inner_sum )
