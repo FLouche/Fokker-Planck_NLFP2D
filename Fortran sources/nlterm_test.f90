@@ -31,7 +31,9 @@
     use derivatives_2d
     
     use coulomb_log_mod
-    
+
+    use shared_multi, only: i_sc00
+
     double precision, intent(in), dimension (nbig):: xout
     double precision, intent(in) :: teff
     double precision, dimension (nperp,npar):: fout,psi,dpsidpe,d2psidpe2,d2psidpepa
@@ -185,7 +187,11 @@ cte0=gamma0*lnaa*(za/aa)**2
 
         do ipe=1,nperp
 
-            sc00(ipe,ipa) = -coef*(dphidpe(ipe,ipa)/vperp(ipe)+d2phidpe2(ipe,ipa)+d2phidpa2(ipe,ipa))
+            if (i_sc00 == -1) then
+               sc00(ipe,ipa) = -coef*fout(ipe,ipa)      ! laplacian(phi) = f exactly
+            else
+               sc00(ipe,ipa) = -coef*(dphidpe(ipe,ipa)/vperp(ipe)+d2phidpe2(ipe,ipa)+d2phidpa2(ipe,ipa))
+            endif
             sc10(ipe,ipa) = coef*(d2psidpe2(ipe,ipa)/vperp(ipe)+d3psidpe3(ipe,ipa)+d3psidpepa2(ipe,ipa)-dphidpe(ipe,ipa))
             sc01(ipe,ipa) = coef*(d2psidpepa(ipe,ipa)/vperp(ipe)+d3psidpe2pa(ipe,ipa)+d3psidpa3(ipe,ipa)-dphidpa(ipe,ipa))
            !!

@@ -293,6 +293,11 @@ integer :: nxi_leg  = 0      ! Gauss points in cos(theta) (0: auto, max(64, 4 lm
 integer :: i_ms_check = 0    ! -1: stage-2 checks (Legendre pair coefficients vs cblin at
                              !     start; vs the phi kernel at the end of timefp_7pt_nl)
 
+! f*f term of the nonlinear self-collisions (main_nlterm), c00 = -coef laplacian(phi).
+integer :: i_sc00 = 0        !  0: finite-difference laplacian(phi) after the axis
+                             !     regularisation (v3.2)
+                             ! -1: exact laplacian(phi) = f, i.e. c00 = -coef f
+
 end module shared_multi
 
 ! ***************************************

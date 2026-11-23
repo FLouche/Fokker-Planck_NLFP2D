@@ -350,7 +350,7 @@ namelist /INPUT/ casename, &
                 iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
                 i_multi, tau_E, nperp_b, npar_b, vbox_b, &
-                lmax_leg, nr_leg, nxi_leg, i_ms_check
+                lmax_leg, nr_leg, nxi_leg, i_ms_check, i_sc00
 
 
 !write(*,*) 'Read namelist'
