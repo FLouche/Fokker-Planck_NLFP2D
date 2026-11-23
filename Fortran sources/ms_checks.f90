@@ -56,6 +56,54 @@ contains
   end subroutine coef_errors
 
 !-----------------------------------------------------------------------
+! Map dump for the article figures: one line per grid point,
+!   i  j  vperp  vpar  then the nc columns of cols(:,:,1:nc).
+!-----------------------------------------------------------------------
+  subroutine dump_maps(fname, header, n1, n2, nc, cols)
+    use shared_grid, only: vperp, vpar
+    character(len=*), intent(in) :: fname, header
+    integer, intent(in) :: n1, n2, nc
+    double precision, intent(in) :: cols(n1,n2,nc)
+    integer :: i, j, u
+    character(len=32) :: fmt
+    write(fmt,'(A,I0,A)') '(2I5,', nc + 2, 'ES16.7E3)'
+    open(newunit=u, file=fname, status='replace')
+    write(u,'(A)') '# '//header
+    do j = 1, n2
+      do i = 1, n1
+        write(u,fmt) i, j, vperp(i), vpar(j), cols(i,j,1:nc)
+      end do
+    end do
+    close(u)
+  end subroutine dump_maps
+
+!-----------------------------------------------------------------------
+! Legendre spectrum dump: f_l, h_l, g_l (dimensionless, x = v/v0) at the
+! radial nodes, from the cumulative moments of p (as in legpot_eval).
+!-----------------------------------------------------------------------
+  subroutine dump_spectrum(fname, p)
+    character(len=*), intent(in) :: fname
+    type(legpot_t), intent(in) :: p
+    integer :: l, m, u
+    double precision :: x, kl, hx, gx
+    double precision, parameter :: pi = 3.141592653589793d0
+    open(newunit=u, file=fname, status='replace')
+    write(u,'(A,ES16.8,A,I0,A,I0)') '# v0 = ', p%v0, '  nr = ', p%nr, '  lmax = ', p%lmax
+    write(u,'(A)') '# l  m  x=v/v0  f_l  h_l  g_l   (h_l, g_l in units v0^2, v0^4)'
+    do l = 0, p%lmax
+      do m = 1, p%nr
+        x  = m * p%dx
+        kl = 4.d0 * pi / dble(2*l+1)
+        hx = kl * (x**(-l-1) * p%i2(m,l) + x**l * p%j1(m,l))
+        gx = kl * ( x**(-l-1) * p%i4(m,l) / (2*l+3) - x**(1-l) * p%i2(m,l) / (2*l-1) &
+                  + x**(l+2) * p%j1(m,l) / (2*l+3) - x**l * p%j3(m,l) / (2*l-1) )
+        write(u,'(2I6,4ES16.7E3)') l, m, x, p%fl(m,l), hx, gx
+      end do
+    end do
+    close(u)
+  end subroutine dump_spectrum
+
+!-----------------------------------------------------------------------
   subroutine ms_check_cblin
     use shared_grid
     use shared_multi, only: lmax_leg, nr_leg, nxi_leg
@@ -115,6 +163,19 @@ contains
           '     | bulk: 20       02       11       10       01       00'
         write(*,'(2X,A4,A,A4,ES10.3,F10.6,A,6ES9.2,A,6ES9.2)') tg_t, ' <- ', tg_s, mu, nleg, ' |', err, ' |', errb
         write(uchk,'(2A6,ES12.4,F12.8,12ES11.3)') tg_t, tg_s, mu, nleg, err, errb
+        block
+          double precision, allocatable :: cols(:,:,:)
+          allocate(cols(nperp,npar,13))
+          cols(:,:,1) = spec(t)%f
+          cols(:,:,2) = a20;  cols(:,:,3) = a02;  cols(:,:,4) = a11
+          cols(:,:,5) = a10;  cols(:,:,6) = a01;  cols(:,:,7) = a00
+          cols(:,:,8) = r20;  cols(:,:,9) = r02;  cols(:,:,10) = r11
+          cols(:,:,11) = r10; cols(:,:,12) = r01; cols(:,:,13) = r00
+          call dump_maps('ms_cblin_'//trim(tg_t)//'_'//trim(tg_s)//'.dat', &
+               'f_target  Legendre c20 c02 c11 c10 c01 c00  cblin c20 c02 c11 c10 c01 c00', &
+               nperp, npar, 13, cols)
+          deallocate(cols)
+        end block
 
         deallocate(a20,a02,a11,a10,a01,a00,r20,r02,r11,r10,r01,r00,mall,mbulk)
       end do
@@ -199,6 +260,34 @@ contains
         end do
       end do
     end if
+    call dump_spectrum('ms_legendre_spectrum.dat', pot)
+    block
+      integer(8) :: c0, c1, cr
+      integer :: k
+      type(legpot_t) :: ptmp
+      double precision :: tb(4), tc(4)
+      integer, parameter :: lt(4) = (/ 0, 8, 16, 32 /)
+      do k = 1, 4
+        call system_clock(c0, cr)
+        call legpot_build(ptmp, f, lt(k), nr_leg, nxi_leg)
+        call system_clock(c1)
+        tb(k) = dble(c1 - c0) / dble(cr)
+        call system_clock(c0)
+        call pair_coefs(ptmp, 1.d0, 1.d0, a20, a02, a11, a10, a01, a00)
+        call system_clock(c1)
+        tc(k) = dble(c1 - c0) / dble(cr)
+      end do
+      call system_clock(c0)
+      call compute_psi(f, psik)
+      call system_clock(c1)
+      write(uchk,'(A)') '# timing [s]: lmax, legpot_build, pair_coefs (all grid points); then compute_psi'
+      do k = 1, 4
+        write(uchk,'(I6,2ES11.3)') lt(k), tb(k), tc(k)
+      end do
+      write(uchk,'(ES11.3)') dble(c1 - c0) / dble(cr)
+      write(uchk,'(A,3I8)') '# nr, nxi(lmax=32), threads-independent sizes: ', ptmp%nr, ptmp%nxi, nperp*npar
+      call legpot_free(ptmp)
+    end block
     call main_nlterm(xvec, teff, s00, s10, s01, s20, s11, s02)
     ta_ev = teff * 1.d3
     call coulomb_log_ab(za, aa, ta_ev, npart, za, aa, ta_ev, npart, lnaa)
@@ -207,6 +296,19 @@ contains
     ! main_nlterm's sc11 multiplies d2f/dvpe dvpa like c11
     call coef_errors(nperp, npar, mall,  a20,a02,a11,a10,a01,a00, s20,s02,s11,s10,s01,s00, err)
     call coef_errors(nperp, npar, mtail, a20,a02,a11,a10,a01,a00, s20,s02,s11,s10,s01,s00, errt)
+    block
+      double precision, allocatable :: cols(:,:,:)
+      allocate(cols(nperp,npar,16))
+      cols(:,:,1) = f;     cols(:,:,2) = psik;  cols(:,:,3) = psil
+      cols(:,:,4) = a20;   cols(:,:,5) = a02;   cols(:,:,6) = a11
+      cols(:,:,7) = a10;   cols(:,:,8) = a01;   cols(:,:,9) = a00
+      cols(:,:,10) = s20;  cols(:,:,11) = s02;  cols(:,:,12) = s11
+      cols(:,:,13) = s10;  cols(:,:,14) = s01;  cols(:,:,15) = s00
+      cols(:,:,16) = -coef * f
+      call dump_maps('ms_kernel_maps.dat', 'f  psi_kernel  psi_Legendre  Legendre c20 c02 c11 c10 c01 c00'// &
+           '  main_nlterm c20 c02 c11 c10 c01 c00  -coef*f', nperp, npar, 16, cols)
+      deallocate(cols)
+    end block
     write(*,'(A,I0,A)') '   self-collision coefficients, Legendre (lmax=', lmax_leg, &
                         ') vs main_nlterm:'
     write(*,'(A)') '               20       02       11       10       01       00'
@@ -283,6 +385,20 @@ contains
       call aniso(a10, b10, s10, t10, ek(5), sz(5))
       ! c00: against the exact -coef (f - f_iso) (main_nlterm's c00 is noisy on
       ! the axis); c01 is zero by construction for mu = 1 and is left out.
+      block
+        double precision, allocatable :: cols(:,:,:)
+        allocate(cols(nperp,npar,13))
+        cols(:,:,1) = fiso
+        cols(:,:,2) = psil - psi0;  cols(:,:,3) = psik - psiki
+        cols(:,:,4) = a20 - b20;    cols(:,:,5) = s20 - t20
+        cols(:,:,6) = a02 - b02;    cols(:,:,7) = s02 - t02
+        cols(:,:,8) = a11 - b11;    cols(:,:,9) = s11 - t11
+        cols(:,:,10) = a10 - b10;   cols(:,:,11) = s10 - t10
+        cols(:,:,12) = a00 - b00;   cols(:,:,13) = -coef * (f - fiso)
+        call dump_maps('ms_aniso_maps.dat', 'f_iso  then anisotropic parts, Legendre / kernel:'// &
+             ' psi psi  c20 c20  c02 c02  c11 c11  c10 c10  c00 c00(exact)', nperp, npar, 13, cols)
+        deallocate(cols)
+      end block
       t20 = -coef * f;  t02 = -coef * fiso
       call aniso(a00, b00, t20, t02, ek(6), sz(6))
       write(*,'(A)') '   anisotropic part (f - f_0), where f > 1e-6 max f:'
