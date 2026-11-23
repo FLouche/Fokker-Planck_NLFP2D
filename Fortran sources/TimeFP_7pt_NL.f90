@@ -22,7 +22,7 @@ MODULE mod_timefp_7pt_nl
 
   IMPLICIT NONE
   PRIVATE
-  PUBLIC :: timefp_7pt_nl
+  PUBLIC :: timefp_7pt_nl, phi_kernel_prepare
 
 CONTAINS
 
@@ -161,65 +161,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   ! matrix are perfectly readable numbers.  Renaming makes old caches simply
   ! not found.  Any leftover sum_phi-*.dat can be deleted; they are ~11.9 GiB
   ! each at 200x200 and are no longer used.
-  ALLOCATE(phi_kern(0:npar-1, nperp, nperp))
-  kernel_file  = TRIM(outfile('phi_kern.dat'))
-  need_compute = .TRUE.
-  INQUIRE(file=kernel_file, exist=file_exists)
-  IF (file_exists) THEN
-    OPEN(55, file=kernel_file, status='old', form='unformatted', access='stream', iostat=error)
-    IF (error == 0) THEN
-      ! SUM(vperp) closes a hole in the signature: nperp and the box limits do
-      ! not change with ising, nsing, vbound or p_grid, so a kernel for another
-      ! v_perp grid used to load as 'matching'.  An older cache has a kernel
-      ! value where the sum now sits, fails the test and is simply recomputed.
-      READ(55, iostat=error) f_nperp, f_npar, f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max, &
-                             f_vperp_sum
-      IF (error == 0 .AND. f_nperp == nperp .AND. f_npar == npar .AND. &
-          f_vperp_min == vperp_min .AND. f_vperp_max == vperp_max .AND. &
-          f_vpar_min  == vpar_min  .AND. f_vpar_max  == vpar_max  .AND. &
-          f_vperp_sum == SUM(vperp)) THEN
-        READ(55, iostat=error) phi_kern
-        IF (error == 0) THEN
-          need_compute = .FALSE.
-          WRITE(*,'(A)') '  phi-distance kernel loaded from '//TRIM(kernel_file)//' (grid matches).'
-        ELSE
-          WRITE(*,'(A)') '  '//TRIM(kernel_file)//' is truncated -- recomputing kernel.'
-        END IF
-      ELSE
-        WRITE(*,'(A)') '  grid signature in '//TRIM(kernel_file)//' differs -- recomputing kernel.'
-      END IF
-      CLOSE(55)
-    END IF
-  ELSE
-    WRITE(*,'(A)') '  '//TRIM(kernel_file)//' not found -- computing kernel.'
-  END IF
-
-  IF (need_compute) THEN
-    WRITE(*,*) 'Computing phi-distance kernel for non-linear self-collisions...'
-    CALL cpu_time(t_start)
-    CALL distance_v_gauss_legendre
-    CALL cpu_time(t_end)
-    WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
-    OPEN(55, file=kernel_file, status='replace', form='unformatted', access='stream')
-    WRITE(55) nperp, npar, vperp_min, vperp_max, vpar_min, vpar_max, SUM(vperp)
-    WRITE(55) phi_kern
-    CLOSE(55)
-    WRITE(*,'(A)') '  phi-distance kernel saved to '//TRIM(kernel_file)
-  END IF
-
-  ! Circulant transform of the kernel, used by the FFT matvec.  Cheap
-  ! (nperp^2 transforms of length phi_m) and done once, whether the kernel was
-  ! just computed or loaded from cache.
-  CALL cpu_time(t_start)
-  CALL phi_kernel_transform
-  CALL cpu_time(t_end)
-  WRITE(*,'(A,I0,A,F8.3,A)') '  phi kernel transformed (circulant length ', &
-       phi_m, '), CPU time = ', t_end - t_start, ' s'
-  WRITE(*,'(A,F10.1,A,F10.1,A)') '  kernel storage: ', &
-       DBLE(npar)*DBLE(nperp)**2*8.d0/1024.d0**2, ' MiB + ', &
-       DBLE(nperp)**2*DBLE(phi_nf)*8.d0/1024.d0**2, &
-       ' MiB transform  (dense sum_phi would be '// &
-       'nbig^2*8 B)'
+  CALL phi_kernel_prepare
 
   !================================================================
   ! 2.  Build sparsity pattern of L using linear coefficients.
@@ -745,5 +687,91 @@ CONTAINS
   END SUBROUTINE sort_stencil
 
 END SUBROUTINE timefp_7pt_nl
+
+!=====================================================================
+! phi-distance kernel of the grid now in shared_grid: loaded from the cache
+! phi_kern-CASENAME.dat when its grid signature matches, else computed and
+! saved; then transformed for the FFT matvec.  Called by timefp_7pt_nl and
+! by the coupled multispecies loop (timefp_ms, on the heated species' grid).
+!=====================================================================
+SUBROUTINE phi_kernel_prepare
+
+  USE shared_grid
+  USE shared_timer
+  USE mod_grid
+  USE mod_phi_kernel
+
+  IMPLICIT NONE
+
+  INTEGER, PARAMETER :: dp = KIND(1.0D0)
+  CHARACTER(len=256) :: kernel_file
+  LOGICAL            :: file_exists, need_compute
+  INTEGER            :: f_nperp, f_npar, error
+  REAL(dp)           :: f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max
+  REAL(dp)           :: f_vperp_sum      ! SUM(vperp): catches ising/nsing/vbound/p_grid
+  REAL(dp)           :: t_start, t_end
+
+  ALLOCATE(phi_kern(0:npar-1, nperp, nperp))
+  kernel_file  = TRIM(outfile('phi_kern.dat'))
+  need_compute = .TRUE.
+  INQUIRE(file=kernel_file, exist=file_exists)
+  IF (file_exists) THEN
+    OPEN(55, file=kernel_file, status='old', form='unformatted', access='stream', iostat=error)
+    IF (error == 0) THEN
+      ! SUM(vperp) closes a hole in the signature: nperp and the box limits do
+      ! not change with ising, nsing, vbound or p_grid, so a kernel for another
+      ! v_perp grid used to load as 'matching'.  An older cache has a kernel
+      ! value where the sum now sits, fails the test and is simply recomputed.
+      READ(55, iostat=error) f_nperp, f_npar, f_vperp_min, f_vperp_max, f_vpar_min, f_vpar_max, &
+                             f_vperp_sum
+      IF (error == 0 .AND. f_nperp == nperp .AND. f_npar == npar .AND. &
+          f_vperp_min == vperp_min .AND. f_vperp_max == vperp_max .AND. &
+          f_vpar_min  == vpar_min  .AND. f_vpar_max  == vpar_max  .AND. &
+          f_vperp_sum == SUM(vperp)) THEN
+        READ(55, iostat=error) phi_kern
+        IF (error == 0) THEN
+          need_compute = .FALSE.
+          WRITE(*,'(A)') '  phi-distance kernel loaded from '//TRIM(kernel_file)//' (grid matches).'
+        ELSE
+          WRITE(*,'(A)') '  '//TRIM(kernel_file)//' is truncated -- recomputing kernel.'
+        END IF
+      ELSE
+        WRITE(*,'(A)') '  grid signature in '//TRIM(kernel_file)//' differs -- recomputing kernel.'
+      END IF
+      CLOSE(55)
+    END IF
+  ELSE
+    WRITE(*,'(A)') '  '//TRIM(kernel_file)//' not found -- computing kernel.'
+  END IF
+
+  IF (need_compute) THEN
+    WRITE(*,*) 'Computing phi-distance kernel for non-linear self-collisions...'
+    CALL cpu_time(t_start)
+    CALL distance_v_gauss_legendre
+    CALL cpu_time(t_end)
+    WRITE(*,'(A,F10.3,A)') '  Done. CPU time = ', t_end - t_start, ' s'
+    OPEN(55, file=kernel_file, status='replace', form='unformatted', access='stream')
+    WRITE(55) nperp, npar, vperp_min, vperp_max, vpar_min, vpar_max, SUM(vperp)
+    WRITE(55) phi_kern
+    CLOSE(55)
+    WRITE(*,'(A)') '  phi-distance kernel saved to '//TRIM(kernel_file)
+  END IF
+
+  ! Circulant transform of the kernel, used by the FFT matvec.  Cheap
+  ! (nperp^2 transforms of length phi_m) and done once, whether the kernel was
+  ! just computed or loaded from cache.
+  CALL cpu_time(t_start)
+  CALL phi_kernel_transform
+  CALL cpu_time(t_end)
+  WRITE(*,'(A,I0,A,F8.3,A)') '  phi kernel transformed (circulant length ', &
+       phi_m, '), CPU time = ', t_end - t_start, ' s'
+  WRITE(*,'(A,F10.1,A,F10.1,A)') '  kernel storage: ', &
+       DBLE(npar)*DBLE(nperp)**2*8.d0/1024.d0**2, ' MiB + ', &
+       DBLE(nperp)**2*DBLE(phi_nf)*8.d0/1024.d0**2, &
+       ' MiB transform  (dense sum_phi would be '// &
+       'nbig^2*8 B)'
+
+END SUBROUTINE phi_kernel_prepare
+
 
 END MODULE mod_timefp_7pt_nl
