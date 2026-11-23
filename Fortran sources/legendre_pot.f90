@@ -308,6 +308,11 @@ contains
     double precision :: psil, psilp, psilpp, phil, philp
     double precision :: pl, plm1, plp, plpm1, plpp, plppm1, tmp, newp, newpp
     double precision :: fv, fvv, fxi, fvxi, fxixi, gv, gxi, fbsum, psis, phis
+    ! running powers (x^l, x^-l, xa^l, xb^-l) and fixed small powers: the loop
+    ! over l needs no x**k (the former ~15 power calls per degree and point)
+    double precision :: pl_x, ql_x, al_x, bl_x, xm1, xm2, xm3, x2, x3, x4, x5, x6
+    double precision :: xa3, xa4, xa5, xa6, xb2, xb3, xb4, xb5, xbinv, alpha, beta
+    double precision :: c4, c3, c2, c1
 
     v0 = p%v0
     v  = sqrt(vpe**2 + vpa**2)
@@ -324,6 +329,14 @@ contains
     end if
     xa = m * p%dx;  xb = (m + 1) * p%dx
 
+    xm1 = 1.d0 / x;  xm2 = xm1 * xm1;  xm3 = xm2 * xm1
+    x2 = x * x;  x3 = x2 * x;  x4 = x3 * x;  x5 = x4 * x;  x6 = x5 * x
+    xa3 = xa**3;  xa4 = xa3 * xa;  xa5 = xa4 * xa;  xa6 = xa5 * xa
+    xb2 = xb * xb;  xb3 = xb2 * xb;  xb4 = xb3 * xb;  xb5 = xb4 * xb;  xbinv = 1.d0 / xb
+    pl_x = 1.d0;  ql_x = 1.d0;  al_x = 1.d0;  bl_x = 1.d0
+    c4 = v0**4 / (8.d0*pi);  c3 = v0**3 / (8.d0*pi);  c2 = v0**2 / (8.d0*pi)
+    c1 = v0**2 / (4.d0*pi)
+
     fv = 0.d0; fvv = 0.d0; fxi = 0.d0; fvxi = 0.d0; fxixi = 0.d0
     gv = 0.d0; gxi = 0.d0; fbsum = 0.d0; psis = 0.d0; phis = 0.d0
 
@@ -337,32 +350,43 @@ contains
         i2 = p%i2(p%nr,l);  i4 = p%i4(p%nr,l);  j1 = 0.d0;  j3 = 0.d0;  flx = 0.d0
       else
         fa = p%fl(m,l);  fb_ = p%fl(m+1,l)
-        i2 = p%i2(m,l) + cellint(l+2, fa, fb_, xa, xb, xa, x)
-        i4 = p%i4(m,l) + cellint(l+4, fa, fb_, xa, xb, xa, x)
-        j1 = p%j1(m+1,l) + cellint(1-l, fa, fb_, xa, xb, x, xb)
-        j3 = p%j3(m+1,l) + cellint(3-l, fa, fb_, xa, xb, x, xb)
+        ! f_l = alpha + beta x on the cell; partial integrals of the cell
+        ! (= cellint, with the powers from the running products)
+        beta  = (fb_ - fa) / (xb - xa)
+        alpha = fa - beta * xa
+        i2 = p%i2(m,l) + alpha * (pl_x * x3 - al_x * xa3) / dble(l+3) &
+                       + beta  * (pl_x * x4 - al_x * xa4) / dble(l+4)
+        i4 = p%i4(m,l) + alpha * (pl_x * x5 - al_x * xa5) / dble(l+5) &
+                       + beta  * (pl_x * x6 - al_x * xa6) / dble(l+6)
+        j1 = p%j1(m+1,l) + alpha * pint(2-l, bl_x * xb2, ql_x * x2, xb, x) &
+                         + beta  * pint(3-l, bl_x * xb3, ql_x * x3, xb, x)
+        j3 = p%j3(m+1,l) + alpha * pint(4-l, bl_x * xb4, ql_x * x4, xb, x) &
+                         + beta  * pint(5-l, bl_x * xb5, ql_x * x5, xb, x)
         flx = fa + (fb_ - fa) * (x - xa) / (xb - xa)
       end if
 
       kl = 4.d0 * pi / dble(2*l+1)
       dl = dble(l)
-      hx  = kl * (x**(-l-1) * i2 + x**l * j1)
-      hxp = kl * (-(dl+1.d0) * x**(-l-2) * i2 + dl * x**(l-1) * j1)
-      gx  = kl * ( x**(-l-1) * i4 / (2*l+3) - x**(1-l) * i2 / (2*l-1) &
-                 + x**(l+2) * j1 / (2*l+3) - x**l * j3 / (2*l-1) )
-      gxp = kl * ( -(dl+1.d0) * x**(-l-2) * i4 / (2*l+3) + (dl-1.d0) * x**(-l) * i2 / (2*l-1) &
-                 + (dl+2.d0) * x**(l+1) * j1 / (2*l+3) - dl * x**(l-1) * j3 / (2*l-1) )
-      gxpp = kl * ( (dl+1.d0)*(dl+2.d0) * x**(-l-3) * i4 / (2*l+3) &
-                  - dl*(dl-1.d0) * x**(-l-1) * i2 / (2*l-1) &
-                  + (dl+1.d0)*(dl+2.d0) * x**l * j1 / (2*l+3) &
-                  - dl*(dl-1.d0) * x**(l-2) * j3 / (2*l-1) )
+      ! x^(-l-k) = ql_x * x^-k,  x^(l+k) = pl_x * x^k
+      hx  = kl * (ql_x * xm1 * i2 + pl_x * j1)
+      hxp = kl * (-(dl+1.d0) * ql_x * xm2 * i2 + dl * pl_x * xm1 * j1)
+      gx  = kl * ( ql_x * xm1 * i4 / (2*l+3) - ql_x * x * i2 / (2*l-1) &
+                 + pl_x * x2 * j1 / (2*l+3) - pl_x * j3 / (2*l-1) )
+      gxp = kl * ( -(dl+1.d0) * ql_x * xm2 * i4 / (2*l+3) + (dl-1.d0) * ql_x * i2 / (2*l-1) &
+                 + (dl+2.d0) * pl_x * x * j1 / (2*l+3) - dl * pl_x * xm1 * j3 / (2*l-1) )
+      gxpp = kl * ( (dl+1.d0)*(dl+2.d0) * ql_x * xm3 * i4 / (2*l+3) &
+                  - dl*(dl-1.d0) * ql_x * xm1 * i2 / (2*l-1) &
+                  + (dl+1.d0)*(dl+2.d0) * pl_x * j1 / (2*l+3) &
+                  - dl*(dl-1.d0) * pl_x * xm2 * j3 / (2*l-1) )
 
       ! physical units: h ~ v0^2, g ~ v0^4, one 1/v0 per derivative
-      psil   = -gx   * v0**4 / (8.d0*pi)
-      psilp  = -gxp  * v0**3 / (8.d0*pi)
-      psilpp = -gxpp * v0**2 / (8.d0*pi)
-      phil   = -hx   * v0**2 / (4.d0*pi)
-      philp  = -hxp  * v0    / (4.d0*pi)
+      psil   = -gx   * c4
+      psilp  = -gxp  * c3
+      psilpp = -gxpp * c2
+      phil   = -hx   * c1
+      philp  = -hxp  * c1 / v0
+
+      pl_x = pl_x * x;  ql_x = ql_x * xm1;  al_x = al_x * xa;  bl_x = bl_x * xbinv
 
       psis  = psis  + psil   * pl
       fv    = fv    + psilp  * pl
@@ -404,6 +428,19 @@ contains
                + fxi * (s / v**2) * (3.d0*c*c - 1.d0)
     r%phi_pe = gv * s + gxi * a
     r%phi_pa = gv * c + gxi * b
+
+  contains
+
+    ! int_lo^hi t^(e-1) dt from the powers hi^e, lo^e (log when e = 0)
+    pure double precision function pint(e, hip, lop, hi, lo)
+      integer, intent(in) :: e
+      double precision, intent(in) :: hip, lop, hi, lo
+      if (e == 0) then
+        pint = log(hi / lo)
+      else
+        pint = (hip - lop) / dble(e)
+      end if
+    end function pint
   end subroutine legpot_eval
 
 !-----------------------------------------------------------------------
