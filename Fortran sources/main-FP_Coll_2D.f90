@@ -211,6 +211,7 @@ use mod_domain_check      ! domain adequacy check at the end of the run
 use shared_multi          ! multispecies namelist (i_multi, tau_E, background grids)
 use mod_species           ! species containers (multispecies extension)
 use mod_ms_checks         ! stage-2 checks (i_ms_check = -1)
+use mod_timefp_ms         ! stage 3: coupled multispecies loop (i_coupled = -1)
 !$ use omp_lib            ! OpenMP runtime (Release build only)
 
 implicit none
@@ -350,7 +351,7 @@ namelist /INPUT/ casename, &
                 iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
                 i_multi, tau_E, nperp_b, npar_b, vbox_b, &
-                lmax_leg, nr_leg, nxi_leg, i_ms_check, i_sc00
+                lmax_leg, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled, ta_init, i_ms_cons, n_picard, ua_init, lmax_bulk
 
 
 !write(*,*) 'Read namelist'
@@ -385,6 +386,25 @@ endif
 if (i_ms_check == -1 .and. i_multi /= -1) then
     write(*,'(A)') ' WARNING: i_ms_check = -1 needs i_multi = -1; checks skipped.'
     i_ms_check = 0
+end if
+if (i_coupled /= 0 .and. i_coupled /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: i_coupled=', i_coupled, ' is not valid. Use 0 (frozen backgrounds) or -1.'
+    stop
+endif
+if (i_coupled == -1) then
+    if (i_multi /= -1 .or. isc /= -1 .or. iold == -1 .or. ntimes(1) == 0) then
+        write(*,'(A)') 'ERROR: i_coupled = -1 needs i_multi = -1, isc = -1, iold = 0 and a'
+        write(*,'(A)') '       time-dependent run (ntimes > 0).'
+        stop
+    endif
+    if (i_ss_check == -1) then
+        write(*,'(A)') ' WARNING: i_ss_check = -1 is not used by the coupled loop (i_coupled = -1).'
+        i_ss_check = 0
+    endif
+endif
+if (lmax_bulk < 0 .or. lmax_bulk > 48) then
+    write(*,*) 'ERROR: lmax_bulk must be in 0..48.'
+    stop
 end if
 if (lmax_leg < 0 .or. lmax_leg > 48) then
     write(*,*) 'ERROR: lmax_leg must be in 0..48.'
@@ -742,7 +762,9 @@ else steady_state
     ! All phases run inside the solver in one uninterrupted loop.
     ! ntimes_cur/timestep_cur are no longer used here; the solvers
     ! iterate over ntimes(1..3)/timestep(1..3) directly.
-    if (isc == -1) then
+    if (i_coupled == -1) then
+        call timefp_ms(fin, fout, time1)
+    else if (isc == -1) then
         call timefp_7pt_nl(all00,all10,all01,all11,all20,all02,fin,fout,time1)
     else
         call timefp_7pt(all00,all10,all01,all11,all20,all02,fin,fout,time1)

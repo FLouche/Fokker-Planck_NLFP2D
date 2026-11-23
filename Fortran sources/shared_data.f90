@@ -288,10 +288,37 @@ double precision, parameter     :: vbox_default = 8.d0  ! f(wall)/f(0) = exp(-32
 
 ! Legendre potentials (mod_legendre_pot), stage 2.
 integer :: lmax_leg = 16     ! highest harmonic of the heated species' potentials
+integer :: lmax_bulk = 4     ! coupled loop: highest Legendre degree of the bulk species'
+                             ! potentials.  L = 0 (isotropic) breaks momentum conservation:
+                             ! a drifting species then collides with a non-drifting copy
+                             ! of itself (e-e drift damped at ~0.3 nu_ee).  L >= 1 needed.
 integer :: nr_leg   = 0      ! radial intervals of the expansion (0: auto, step dvpar/4)
 integer :: nxi_leg  = 0      ! Gauss points in cos(theta) (0: auto, max(64, 4 lmax_leg + 8))
 integer :: i_ms_check = 0    ! -1: stage-2 checks (Legendre pair coefficients vs cblin at
                              !     start; vs the phi kernel at the end of timefp_7pt_nl)
+
+! Stage 3: coupled evolution of all species (mod_timefp_ms).
+integer :: i_coupled = 0     !  0: background species frozen (stages 1-2, v3.2 physics)
+                             ! -1: every species evolves on its own grid; the collision
+                             !     operator of each pair is built from the Legendre
+                             !     potentials of the background species, lagged by one
+                             !     step (heated species' self-collisions: main_nlterm).
+                             !     Needs i_multi = -1, isc = -1, iold = 0.
+double precision :: ta_init = 0.d0  ! initial temperature [eV] of the heated species in
+                             ! the coupled run (Maxwellian); 0 = the namelist/Stix start.
+double precision :: ua_init = 0.d0  ! initial parallel drift [m/s] of the heated species (with ta_init)
+integer :: n_picard = 0      ! coupled loop: Picard iterations per step.  0: potentials
+                             ! lagged (f^n); k > 0: potentials, coefficients and
+                             ! corrections re-evaluated k times at
+                             ! theta f^(n+1) + (1-theta) f^n (energy exchange
+                             ! antisymmetric at convergence).
+integer :: i_ms_cons = 2     ! conservation of the coupled step (implicit moment projection
+                             ! onto the responses to f, div(v f), df/dv_par; TimeFP_ms.f90):
+                             !  0: none (raw discrete pair operators)
+                             !  1: particle number of every species
+                             !  2: 1 + total energy and total parallel momentum (self-pair
+                             !     rates removed, inter-species defects shared n- and
+                             !     rho-weighted): all conserved to round-off
 
 ! f*f term of the nonlinear self-collisions (main_nlterm), c00 = -coef laplacian(phi).
 integer :: i_sc00 = 0        !  0: finite-difference laplacian(phi) after the axis

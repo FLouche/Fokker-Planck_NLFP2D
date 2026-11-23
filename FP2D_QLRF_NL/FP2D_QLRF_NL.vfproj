@@ -82,6 +82,7 @@
 			<File RelativePath="..\Fortran sources\species.f90"/>
 			<File RelativePath="..\Fortran sources\legendre_pot.f90"/>
 			<File RelativePath="..\Fortran sources\ms_checks.f90"/>
+			<File RelativePath="..\Fortran sources\TimeFP_ms.f90"/>
 			<File RelativePath="..\Fortran sources\shared_data.f90">
 			</File>
 			<File RelativePath="..\Fortran sources\solfe_FP_pardiso.f90"/>
