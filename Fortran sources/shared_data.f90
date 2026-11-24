@@ -325,6 +325,16 @@ integer :: i_bulk_frozen = 0 ! coupled loop, stage-4 verification:
                              !     step, no L_E, no projection): the coupled loop then
                              !     solves the v3.2 problem with its own operators
                              !     (Legendre a <- b coefficients instead of cblin)
+integer :: i_regrid = 0      ! coupled loop, bulk species (after stage 5):
+                             !  0: each bulk grid fixed from the initial temperature
+                             ! -1: regrid a bulk species when its grid no longer fits
+                             !     its thermal speed v_t and drift u: new box of
+                             !     vbox_b thermal speeds centred on u, f interpolated
+                             !     (Maxwellian + interpolated deviation), particles,
+                             !     energy and parallel momentum restored exactly
+double precision :: regrid_fac = 1.3d0  ! regrid when the wall distance from u falls below
+                             ! vbox_b/regrid_fac thermal speeds or the half-width exceeds
+                             ! vbox_b*regrid_fac (i.e. T changed by ~regrid_fac^2)
 
 ! f*f term of the nonlinear self-collisions (main_nlterm), c00 = -coef laplacian(phi).
 integer :: i_sc00 = 0        !  0: finite-difference laplacian(phi) after the axis

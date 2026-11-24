@@ -23,7 +23,7 @@ module mod_species
   private
 
   public :: species_t, spec, nspec, species_setup, select_species, &
-            store_grid, load_grid, species_current
+            store_grid, load_grid, species_current, bulk_grid
 
   integer, parameter :: dp = kind(1.0d0)
 
@@ -114,6 +114,32 @@ contains
   end subroutine select_species
 
 !-----------------------------------------------------------------------
+! Grid of a bulk species s: the heated species' v_perp grid type (power
+! law, nsing, vbound) rescaled so that v_perp <= vhalf, and a uniform
+! v_par grid on [vcenter - vhalf, vcenter + vhalf].  Built in shared_grid
+! and stored in spec(s); the caller selects a species afterwards.  Used
+! at setup (vcenter = 0) and by the regridding of the coupled loop.
+!-----------------------------------------------------------------------
+  subroutine bulk_grid(s, np_b, nq_b, vhalf, vcenter)
+    use mod_grid, only: make_grid
+    integer,          intent(in) :: s, np_b, nq_b
+    double precision, intent(in) :: vhalf, vcenter
+    double precision :: scale
+    scale = vhalf / spec(1)%vperp_max
+    nperp = np_b;  npar = nq_b
+    ising = spec(1)%ising;  nsing = spec(1)%nsing;  p_grid = spec(1)%p_grid
+    vperp_min = spec(1)%vperp_min * scale
+    vperp_max = vhalf
+    vbound    = spec(1)%vbound * scale
+    vpar_min  = vcenter - vhalf
+    vpar_max  = vcenter + vhalf
+    if (allocated(vperp)) deallocate(vperp, vpar, jacob)
+    allocate(vperp(nperp), vpar(npar), jacob(nperp,npar))
+    call make_grid
+    call store_grid(s)
+  end subroutine bulk_grid
+
+!-----------------------------------------------------------------------
 ! Build every species: the heated one from the grid already made by main
 ! (make_grid) and the Stix Maxwellian (consts); each background from its
 ! own box, |v| <= vbox_b * vth0, with an initial Maxwellian at t(ib) and
@@ -125,15 +151,12 @@ contains
     use shared_plasma
     use shared_multi
     use shared_timer, only: fstix, outfile
-    use mod_grid,     only: make_grid
     use mod_ncint
 
     integer          :: s, ib, i, j, np_b, nq_b
-    double precision :: vbox, scale, dens_num, cinit, arg, vth
+    double precision :: vbox, dens_num, cinit, arg, vth
     double precision, allocatable :: fint(:,:)
-    ! the heated species' grid type, kept for the background grids
-    integer          :: ising_a, nsing_a
-    double precision :: vperp_min_a, vperp_max_a, vbound_a, p_grid_a
+    ! the heated species' grid size (default for the background grids)
     integer          :: nperp_a, npar_a
 
     double precision, parameter :: twopi = 6.283185307179586d0
@@ -156,9 +179,6 @@ contains
     spec(1)%f = fstix
 
     nperp_a = nperp;  npar_a = npar
-    ising_a = ising;  nsing_a = nsing
-    vperp_min_a = vperp_min;  vperp_max_a = vperp_max
-    vbound_a = vbound;  p_grid_a = p_grid
 
     !--- s = 1+ib: background species
     do ib = 1, nbulk
@@ -184,19 +204,7 @@ contains
       vbox = vbox_b(ib);  if (vbox <= 0.d0) vbox = vbox_default
       np_b = nperp_b(ib); if (np_b <= 0) np_b = nperp_a
       nq_b = npar_b(ib);  if (nq_b <= 0) nq_b = npar_a
-      scale = vbox * spec(s)%vth0 / vperp_max_a
-
-      nperp = np_b;  npar = nq_b
-      ising = ising_a;  nsing = nsing_a;  p_grid = p_grid_a
-      vperp_min = vperp_min_a * scale
-      vperp_max = vbox * spec(s)%vth0
-      vbound    = vbound_a * scale
-      vpar_min  = -vbox * spec(s)%vth0
-      vpar_max  =  vbox * spec(s)%vth0
-      if (allocated(vperp)) deallocate(vperp, vpar, jacob)
-      allocate(vperp(nperp), vpar(npar), jacob(nperp,npar))
-      call make_grid
-      call store_grid(s)
+      call bulk_grid(s, np_b, nq_b, vbox * spec(s)%vth0, 0.d0)
 
       ! Initial Maxwellian at T0, normalised to the density on this grid
       ! (as fstix in consts).

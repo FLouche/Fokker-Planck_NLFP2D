@@ -44,6 +44,11 @@
 !*  logarithms, the RF and confinement powers, the beam source and     *
 !*  particle-loss rates (ms_source) and the corrections.               *
 !*                                                                     *
+!*  Regridding (i_regrid = -1): a bulk grid that no longer fits its     *
+!*  species' thermal speed and drift is rebuilt around them at the      *
+!*  start of a step (regrid_check / regrid_species), with n, W and      *
+!*  P_par restored exactly; events in ms_regrid.txt.                    *
+!*                                                                     *
 !*  23/11/2026                                                          *
 !***********************************************************************
 
@@ -57,6 +62,7 @@ module mod_timefp_ms
   integer, parameter :: dp = kind(1.0d0)
   real(dp), parameter :: pmass = 1.6726d-27      ! proton mass [kg]
   real(dp), parameter :: qe    = 1.60218d-19     ! J per eV
+  real(dp), parameter :: pi_ms = 3.14159265358979323846d0
 
   ! Wall-clock profile of the coupled step (printed at the end of the run).
   integer, parameter :: nt_prof = 10
@@ -147,6 +153,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   logical,  allocatable :: active(:)
   real(dp) :: pres, pres_s
   logical  :: sc_skip
+  integer, allocatable :: nregrid(:)
 
   ns = nspec
   if (icn == -1) then
@@ -163,6 +170,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
            dNc(ns), dPc(ns), dRc(ns), uu(3,3,ns), rr(3,0:3,ns,ns), wgt(3,ns,ns), active(ns))
   if (3 * nspec > 60) stop 'timefp_ms: too many species for the projection system'
   uu = 0.d0;  rr = 0.d0;  wgt = 0.d0;  active = .false.
+  allocate(nregrid(ns));  nregrid = 0
   dNc = 0.d0;  dPc = 0.d0;  dRc = 0.d0
 
   !--- initial distribution of the heated species: from main (istart), or a
@@ -192,6 +200,8 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
                          ',  Picard iterations n_picard = ', n_picard
   if (i_bulk_frozen == -1) write(*,'(A)') '  i_bulk_frozen = -1: the bulk species are held at their '// &
        'initial Maxwellians; no projection (v3.2 problem, coupled-loop operators)'
+  if (i_regrid == -1) write(*,'(A,F6.3)') '  i_regrid = -1: bulk grids follow v_t and the drift, regrid_fac = ', &
+       regrid_fac
 
   itime_global = 0
   time = otime
@@ -204,6 +214,9 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
     time_loop: do itime = 1, ntimes(iphase)
       itime_global = itime_global + 1
       call tic(10)
+
+      ! regridding of the bulk species (i_regrid = -1), on f^n
+      if (i_regrid == -1) call regrid_check(time, dt)
 
       ! f* (at which potentials, coefficients and corrections are evaluated):
       ! f^n, then theta f^(n+1,k) + (1-theta) f^n for n_picard iterations.
@@ -491,6 +504,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
 
   !--- summary -------------------------------------------------------------
   write(*,'(/,A)') ' COUPLED MULTISPECIES RUN (i_coupled = -1): final state'
+  if (i_regrid == -1) write(*,'(A,*(1X,I0))') '    regrids per species:', nregrid
   write(*,'(A)')   '    s  tag        n [m^-3]       Teff [eV]     T_perp [eV]    T_par [eV]'
   do s = 1, ns
     write(*,'(I5,2X,A4,4ES15.6)') s, spec(s)%tag, dens(s), tev(s), tperp(s), tpar(s)
@@ -606,6 +620,143 @@ contains
   end subroutine all_moments
 
   !---------------------------------------------------------------------
+  ! Regridding of the bulk species (i_regrid = -1), at the start of a
+  ! step, on f^n.  Species s is regridded when its grid no longer fits its
+  ! thermal speed v_t and parallel drift u:
+  !   wall distance  min(vperp_max, vpar_max - u, u - vpar_min) < vb/fac v_t
+  !   (heating or drift),  or  half-width > vb*fac v_t  (cooling: too few
+  !   cells per v_t),
+  ! with vb = vbox_b and fac = regrid_fac.  The new grid has the half-width
+  ! vb v_t and its v_par range centred on u (bulk_grid).
+  subroutine regrid_check(tt, dtt)
+    real(dp), intent(in) :: tt, dtt
+    integer  :: s1
+    real(dp) :: n1, w1, wp1, p1, m, u1, kt, vt, vb, half, dwall
+    do s1 = 1, ns
+      if (spec(s1)%kind == 0) cycle
+      call sel(s1)
+      call moments(ws(s1), s1, spec(s1)%f, n1, w1, wp1, p1)
+      if (.not. (n1 > 0.d0)) cycle
+      m  = spec(s1)%aa * pmass
+      u1 = p1 / (n1 * m)
+      kt = (2.d0/3.d0) * (w1 - 0.5d0 * n1 * m * u1**2) / n1
+      if (.not. (kt > 0.d0)) cycle              ! check_grids stops the run
+      vt = sqrt(kt / m)
+      vb = vbox_b(spec(s1)%ib);  if (vb <= 0.d0) vb = vbox_default
+      half  = 0.5d0 * (vpar(npar) - vpar(1))
+      dwall = min(vperp(nperp), vpar(npar) - u1, u1 - vpar(1))
+      if (dwall < vb / regrid_fac * vt .or. half > vb * regrid_fac * vt) &
+        call regrid_species(s1, tt, dtt, n1, w1, p1, u1, vt, vb)
+    end do
+  end subroutine regrid_check
+
+  ! New grid for species s1, transfer of f, exact restoration of n, W and
+  ! P_par (the moments of the coupled loop's quadrature), rebuild of the
+  ! workspace and of the PARDISO handle.  The transferred f is the drifting
+  ! Maxwellian with the same n, u, T plus the deviation f - f_M on the old
+  ! grid, interpolated bilinearly (0 outside the old box): smooth, with a
+  ! Maxwellian tail where the old box ended.
+  subroutine regrid_species(s1, tt, dtt, n0, w0, p0, u0, vt, vb)
+    integer,  intent(in) :: s1
+    real(dp), intent(in) :: tt, dtt, n0, w0, p0, u0, vt, vb
+    type(ms_ws_t) :: wblank
+    real(dp), allocatable :: vpo(:), vao(:), dev(:,:), fnew(:,:), gk(:,:,:)
+    real(dp) :: half_o, cen_o, cm, n1, w1, wp1, p1, mk(3,3), rk(3), ck(3), dum, tsave, tth
+    integer  :: i, jj, k, npo, nao, ip1, ja1, err
+    real(dp) :: x, y, a1, b1
+
+    ! old grid, deviation from the drifting Maxwellian on it
+    call sel(s1)
+    npo = nperp;  nao = npar
+    allocate(vpo(npo), vao(nao), dev(npo,nao))
+    vpo = vperp;  vao = vpar
+    half_o = 0.5d0 * (vpar(npar) - vpar(1));  cen_o = 0.5d0 * (vpar(npar) + vpar(1))
+    cm = n0 / (2.d0 * pi_ms * vt**2)**1.5d0
+    do jj = 1, nao
+      do i = 1, npo
+        dev(i,jj) = spec(s1)%f(i,jj) - cm * exp(-(vpo(i)**2 + (vao(jj) - u0)**2) / (2.d0 * vt**2))
+      end do
+    end do
+
+    ! release the workspace and build the new grid
+    call pardiso_solve_finalize(ws(s1)%h, ws(s1)%ialhs, ws(s1)%jalhs, err)
+    ws(s1) = wblank                       ! deallocates every component, fresh handle
+    call bulk_grid(s1, spec(s1)%nperp, spec(s1)%npar, vb * vt, u0)
+    call sel(s1)
+    tsave = taum;  taum = 0.d0
+    call ws_setup(ws(s1), s1, ns, theta, dtt)
+    taum = tsave
+
+    ! transferred f: Maxwellian + interpolated deviation
+    allocate(fnew(nperp,npar), gk(nperp,npar,3))
+    do jj = 1, npar
+      do i = 1, nperp
+        fnew(i,jj) = cm * exp(-(vperp(i)**2 + (vpar(jj) - u0)**2) / (2.d0 * vt**2))
+        x = min(max(vperp(i), vpo(1)), vpo(npo))      ! below the first old node: its value
+        y = vpar(jj)
+        if (vperp(i) <= vpo(npo) .and. y >= vao(1) .and. y <= vao(nao)) then
+          ip1 = 1
+          do while (ip1 < npo - 1)
+            if (vpo(ip1+1) >= x) exit
+            ip1 = ip1 + 1
+          end do
+          ja1 = min(max(int((y - vao(1)) / (vao(2) - vao(1))) + 1, 1), nao - 1)
+          a1 = (x - vpo(ip1)) / (vpo(ip1+1) - vpo(ip1))
+          b1 = (y - vao(ja1)) / (vao(ja1+1) - vao(ja1))
+          fnew(i,jj) = fnew(i,jj) + (1.d0 - a1) * (1.d0 - b1) * dev(ip1,ja1) &
+                                  + a1 * (1.d0 - b1) * dev(ip1+1,ja1) &
+                                  + (1.d0 - a1) * b1 * dev(ip1,ja1+1) + a1 * b1 * dev(ip1+1,ja1+1)
+        end if
+        fnew(i,jj) = max(fnew(i,jj), 0.d0)
+      end do
+    end do
+    call impose_constraints(fnew)
+
+    ! exact restoration: f += sum_k c_k phi_k f, phi = (1, |v - u|^2/v_t^2, (v_par - u)/v_t)
+    call moments(ws(s1), s1, fnew, n1, w1, wp1, p1)
+    do jj = 1, npar
+      do i = 1, nperp
+        gk(i,jj,1) = fnew(i,jj)
+        gk(i,jj,2) = fnew(i,jj) * (vperp(i)**2 + (vpar(jj) - u0)**2) / vt**2
+        gk(i,jj,3) = fnew(i,jj) * (vpar(jj) - u0) / vt
+      end do
+    end do
+    do k = 1, 3
+      call impose_constraints(gk(:,:,k))
+      call moments(ws(s1), s1, gk(:,:,k), mk(1,k), mk(2,k), dum, mk(3,k))
+    end do
+    rk = [n0 - n1, w0 - w1, p0 - p1]
+    call solve3(mk, rk, ck)
+    do k = 1, 3
+      fnew = fnew + ck(k) * gk(:,:,k)
+    end do
+    deallocate(spec(s1)%f);  allocate(spec(s1)%f(nperp,npar))
+    spec(s1)%f = fnew
+    nregrid(s1) = nregrid(s1) + 1
+
+    tth = (2.d0/3.d0) * (w0 - 0.5d0 * p0 * u0) / n0 / qe
+    write(*,'(A,ES11.4,A,A,A,F10.1,A,F7.3,A,ES11.3,A)') '  regrid at t = ', tt, ' s: species ', &
+         trim(stag(s1)), ', T = ', tth, ' eV, half-width x', 0.5d0 * (vpar(npar) - vpar(1)) / half_o, &
+         ', centre ', u0, ' m/s'
+    write(629,'(ES16.8,I4,*(ES17.9))') tt, s1, tth, u0, half_o, cen_o, 0.5d0 * (vpar(npar) - vpar(1)), &
+         0.5d0 * (vpar(npar) + vpar(1)), n1 / n0 - 1.d0, w1 / w0 - 1.d0, &
+         (p1 - p0) / (n0 * spec(s1)%aa * pmass * vt), ck
+    deallocate(vpo, vao, dev, fnew, gk)
+  end subroutine regrid_species
+
+  ! Dirichlet walls 0 and the axis row from the interior, as the step
+  ! leaves f (species selected)
+  subroutine impose_constraints(fa)
+    real(dp), intent(inout) :: fa(:,:)
+    integer :: s1, jj
+    s1 = species_current
+    fa(nperp,:) = 0.d0;  fa(:,1) = 0.d0;  fa(:,npar) = 0.d0
+    do jj = 2, npar - 1
+      fa(1,jj) = sum(ws(s1)%ax(2:7) * fa(2:7,jj))
+    end do
+  end subroutine impose_constraints
+
+  !---------------------------------------------------------------------
   ! Grid adequacy, every step.  Each bulk grid is fixed at setup from the
   ! initial temperature; a species that heats or cools far from it is
   ! truncated by the walls or under-resolved.  Warn once per species when
@@ -703,6 +854,7 @@ contains
     open(626, file=trim(outfile('ms_power_other_vs_time.txt')),    status='unknown')
     open(627, file=trim(outfile('ms_corrections_vs_time.txt')),    status='unknown')
     open(628, file=trim(outfile('ms_source_vs_time.txt')),         status='unknown')
+    open(629, file=trim(outfile('ms_regrid.txt')),                 status='unknown')
     hdr = '# time [s]; per species s ('
     do s1 = 1, ns
       hdr = trim(hdr)//' '//trim(stag(s1))
@@ -726,11 +878,14 @@ contains
     write(628,'(A)') '# time [s]; beam source S: dN/dt [m^-3/s], P [MW/m^3], dP_par/dt [kg m^-2 s^-2];'// &
                      ' particle loss -f/tau_p (heated species): the same three; momentum rate of L_E,'// &
                      ' s = 1..ns [kg m^-2 s^-2]  (on the corrected f^theta)'
+    write(629,'(A)') '# regrids (i_regrid = -1): time [s], s, T_th [eV], u [m/s], old half-width and centre,'// &
+                     ' new half-width and centre [m/s]; moment errors of the transferred f before the'// &
+                     ' restoration: dn/n, dW/W, dP/(n m v_t); restoration amplitudes c(1:3)'
   end subroutine open_outputs
 
   subroutine close_outputs()
     integer :: u
-    do u = 620, 628
+    do u = 620, 629
       close(u)
     end do
   end subroutine close_outputs

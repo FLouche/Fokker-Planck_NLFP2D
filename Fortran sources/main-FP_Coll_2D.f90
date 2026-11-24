@@ -352,7 +352,7 @@ namelist /INPUT/ casename, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
                 i_multi, tau_E, nperp_b, npar_b, vbox_b, &
                 lmax_leg, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled, ta_init, i_ms_cons, n_picard, ua_init, lmax_bulk, &
-                i_bulk_frozen
+                i_bulk_frozen, i_regrid, regrid_fac
 
 
 !write(*,*) 'Read namelist'
@@ -406,6 +406,18 @@ endif
 if (i_bulk_frozen == -1 .and. i_coupled /= -1) then
     write(*,'(A)') ' WARNING: i_bulk_frozen = -1 applies to the coupled loop only (i_coupled = -1); ignored.'
     i_bulk_frozen = 0
+end if
+if (i_regrid /= 0 .and. i_regrid /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: i_regrid=', i_regrid, ' is not valid. Use 0 (fixed bulk grids) or -1.'
+    stop
+end if
+if (i_regrid == -1 .and. (i_coupled /= -1 .or. i_bulk_frozen == -1)) then
+    write(*,'(A)') ' WARNING: i_regrid = -1 applies to evolving bulk species of the coupled loop only; ignored.'
+    i_regrid = 0
+end if
+if (i_regrid == -1 .and. regrid_fac <= 1.d0) then
+    write(*,*) 'ERROR: regrid_fac must be > 1.'
+    stop
 end if
 if (lmax_bulk < 0 .or. lmax_bulk > 48) then
     write(*,*) 'ERROR: lmax_bulk must be in 0..48.'
