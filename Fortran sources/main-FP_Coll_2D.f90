@@ -407,6 +407,10 @@ if (i_bulk_frozen == -1 .and. i_coupled /= -1) then
     write(*,'(A)') ' WARNING: i_bulk_frozen = -1 applies to the coupled loop only (i_coupled = -1); ignored.'
     i_bulk_frozen = 0
 end if
+if (i_ms_cons /= 0 .and. i_ms_cons /= 1 .and. i_ms_cons /= 2 .and. i_ms_cons /= -2) then
+    write(*,'(A,I0,A)') 'ERROR: i_ms_cons=', i_ms_cons, ' is not valid. Use 0, 1, 2 (or -2, demonstration).'
+    stop
+end if
 if (i_regrid /= 0 .and. i_regrid /= -1) then
     write(*,'(A,I0,A)') 'ERROR: i_regrid=', i_regrid, ' is not valid. Use 0 (fixed bulk grids) or -1.'
     stop

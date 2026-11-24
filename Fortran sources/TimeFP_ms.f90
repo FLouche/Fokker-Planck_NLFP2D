@@ -151,7 +151,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   real(dp) :: amat(60,60), bvec(60), vsx
   real(dp), allocatable :: uu(:,:,:), rr(:,:,:,:), wgt(:,:,:)
   logical,  allocatable :: active(:)
-  real(dp) :: pres, pres_s
+  real(dp) :: pres, pres_s, thimp
   logical  :: sc_skip
   integer, allocatable :: nregrid(:)
 
@@ -200,6 +200,8 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
                          ',  Picard iterations n_picard = ', n_picard
   if (i_bulk_frozen == -1) write(*,'(A)') '  i_bulk_frozen = -1: the bulk species are held at their '// &
        'initial Maxwellians; no projection (v3.2 problem, coupled-loop operators)'
+  if (i_ms_cons == -2) write(*,'(A)') '  WARNING: i_ms_cons = -2: explicit projection amplitudes '// &
+       '(demonstration of the instability; not for production runs)'
   if (i_regrid == -1) write(*,'(A,F6.3)') '  i_regrid = -1: bulk grids follow v_t and the drift, regrid_fac = ', &
        regrid_fac
 
@@ -329,14 +331,18 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
       taum_save = taum
       taum = 0.d0
       pnrl = 0.d0;  pE = 0.d0;  pRF = 0.d0
-      nk = merge(3, 1, i_ms_cons == 2)
+      nk = merge(3, 1, abs(i_ms_cons) == 2)
+      ! i_ms_cons = -2 (demonstration only): EXPLICIT amplitudes, chosen for the
+      ! uncorrected f^theta (the theta terms below, through which the correction
+      ! changes the rates of the pairs it acts on, are dropped).  Unstable.
+      thimp = merge(theta, 0.d0, i_ms_cons > 0)
       do s = 1, ns
         call sel(s)
         allocate(zero2(nperp,npar), t00(nperp,npar), t10(nperp,npar), t01(nperp,npar))
         zero2 = 0.d0
         ws(s)%fth = theta * ws(s)%x + (1.d0 - theta) * ws(s)%fn
         ws(s)%f = ws(s)%fth
-        active(s) = (i_ms_cons >= 1 .and. dens(s) > 1.d-6 * spec(s)%dens .and. i_bulk_frozen == 0)
+        active(s) = (abs(i_ms_cons) >= 1 .and. dens(s) > 1.d-6 * spec(s)%dens .and. i_bulk_frozen == 0)
         call tic(6)
         if (active(s)) call responses(ws(s), s, theta, dt, nk, uu(:,:,s))
         call toc(6)
@@ -350,7 +356,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
         deallocate(zero2, t00, t10, t01)
       end do
       dNc = 0.d0;  dPc = 0.d0;  dRc = 0.d0
-      if (i_ms_cons >= 1) then
+      if (abs(i_ms_cons) >= 1) then
         ! weights of each pair defect (X = 1 N: none; 2 W: n; 3 P: rho)
         do s = 1, ns
           do j = 1, ns
@@ -392,9 +398,9 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
               amat(row,col) = amat(row,col) + uu(ix,k,s)
               do j = 1, ns                                   ! own response through every pair (s<-j)
                 if (ix == 1) then
-                  amat(row,col) = amat(row,col) + theta * rr(1,k,j,s)
+                  amat(row,col) = amat(row,col) + thimp * rr(1,k,j,s)
                 else
-                  amat(row,col) = amat(row,col) + theta * wgt(ix,s,j) * rr(ix,k,j,s)
+                  amat(row,col) = amat(row,col) + thimp * wgt(ix,s,j) * rr(ix,k,j,s)
                 end if
               end do
             end do
@@ -403,7 +409,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
                 if (j == s .or. .not. active(j)) cycle
                 do k = 1, nk
                   col = (j - 1) * nk + k
-                  amat(row,col) = amat(row,col) + theta * wgt(ix,s,j) * rr(ix,k,s,j)
+                  amat(row,col) = amat(row,col) + thimp * wgt(ix,s,j) * rr(ix,k,s,j)
                 end do
               end do
             end if

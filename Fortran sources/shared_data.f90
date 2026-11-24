@@ -319,6 +319,8 @@ integer :: i_ms_cons = 2     ! conservation of the coupled step (implicit moment
                              !  2: 1 + total energy and total parallel momentum (self-pair
                              !     rates removed, inter-species defects shared n- and
                              !     rho-weighted): all conserved to round-off
+                             ! -2: as 2 with EXPLICIT amplitudes (chosen for the
+                             !     uncorrected state): demonstration only, unstable
 integer :: i_bulk_frozen = 0 ! coupled loop, stage-4 verification:
                              !  0: every species evolves
                              ! -1: the bulk species keep their initial Maxwellians (no
