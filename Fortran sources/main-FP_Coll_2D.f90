@@ -1,20 +1,65 @@
-program FP_Coll_2D
+program FP_Coll_2D_ms
 
 ! ====================================================
-!  Non-linear Fokker-Planck code
-!    - 2D in vperp/vpar
-!    - steady-state solution OR 
-!    - time-dependant solver (Cranck-Nicholson method)
-!    - collisions with Maxwellian background
-!    - self-collisions accounted for:
-!           _ either Maxwellian background (time-independant)
-!           _ or general background (time-dependant)
-!    - finite differences
-!    - homogeneous grid
-!    - beam 
+!  FP2D_QLRF_NL -- version 4.0 (multispecies)
 !
+!  Non-linear Fokker-Planck code for the velocity distributions of a
+!  magnetised plasma, 2D in (vperp, vpar), gyrotropic.
+!    - finite differences (7-point Fornberg stencils, power-law vperp grid),
+!      theta-scheme time integration or steady-state solve, Intel MKL PARDISO
+!    - heated species: quasilinear ICRH operator and/or NBI source with
+!      particle loss
+!
+!  Single-species mode (i_multi = 0, the default; identical to version 3.2):
+!    - the heated species collides with fixed Maxwellian backgrounds
+!      (electrons and bulk ions);
+!    - self-collisions with a Maxwellian background or non-linear (FFT
+!      kernel of the Rosenbluth potentials);
+!    - optional energy-confinement loss L_E f = div(v f)/(2 tau_E) when
+!      there is a source (tau_E > 0).
+!
+!  Multispecies mode (i_multi = -1, i_coupled = -1):
+!    - every species (heated, electrons, bulk ions) evolves on its own grid;
+!    - collisions of any pair from the Legendre-expanded Rosenbluth
+!      potentials of the background species, evaluated across grids
+!      (legendre_pot.f90);
+!    - coupled time loop (TimeFP_ms.f90): lagged or Picard-iterated
+!      potentials, implicit moment projection (particles, energy and
+!      momentum conserved to round-off), L_E on every species, particle loss
+!      of the beam species, optional regridding of the bulk grids.
+!
+!  Documentation: FP2D_QLRF_NL_v4_manual.pdf (use), FP2D_QLRF_NL_manual.pdf
+!  (version 3.2), and the multispecies article (method and verification).
 ! ====================================================
 !
+    ! Version 4.0 - 24th November 2026 (FL)
+
+    ! Multispecies extension; program renamed FP_Coll_2D_ms.  With the
+    !   defaults (i_multi = 0, i_coupled = 0) every output is byte-identical
+    !   to 3.2 (four reference paths, 94 files).
+    !
+    !  1) Species containers (species.f90): one grid and distribution per
+    !     species, select_species loads a species into shared_grid exactly.
+    !     Grid caches of ncint_2d and fd_stencil_2d keyed on the grid values.
+    !  2) Energy-confinement term L_E (tau_E), on every species, only with a
+    !     source; its power in the traces and the end-of-run balance.
+    !  3) Rosenbluth potentials by Legendre expansion, evaluated on any grid,
+    !     and the collision coefficients of any pair (legendre_pot.f90);
+    !     checks against cblin and the FFT kernel (ms_checks.f90).
+    !  4) Coupled time loop of all species (TimeFP_ms.f90, i_coupled = -1):
+    !     per-species PARDISO solves, lagged or Picard-iterated potentials,
+    !     electron-electron Coulomb logarithm, implicit moment projection,
+    !     RF and NBI with L_E on every species, frozen-bulk verification mode,
+    !     grid checks, thermal temperatures of drifting bulk species in the
+    !     Coulomb logarithms, regridding of the bulk species (i_regrid = -1).
+    !  5) coulomb_log_ab: Za*Zb, not Za^2*Zb^2, in the NRL ion-ion mass factor
+    !     (no change for Z = 1).
+    !
+    !     New namelist entries: i_multi, tau_E, nperp_b, npar_b, vbox_b,
+    !     lmax_leg, lmax_bulk, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled,
+    !     ta_init, ua_init, n_picard, i_ms_cons, i_bulk_frozen, i_regrid,
+    !     regrid_fac.  Details in FP2D_QLRF_NL_v4_manual.pdf.
+
     ! Version 3.2 - 10th November 2026 (FL)
 
     ! Diagnostics and housekeeping; the solution is unchanged (bit-identical to
@@ -858,4 +903,4 @@ write(*,*) ' '
         DBLE(clock_end - clock_start) / DBLE(clock_rate), ' seconds (wall clock);  CPU time ', &
         end_time - start_time, ' s (all threads)'
 
-end program FP_Coll_2D
+end program FP_Coll_2D_ms
