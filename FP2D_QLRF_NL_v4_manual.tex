@@ -82,7 +82,7 @@ The code accounts for three physical operators:
         quasi-linear diffusion operator, evaluated using complex Bessel
         functions.
   \item \textbf{Self-collisions} (collisions of minority ions with
-        themselves), with five levels of approximation selectable at runtime.
+        themselves), either neglected or with the fully nonlinear operator.
 \end{enumerate}
 An optional NBI \textbf{beam source} term and an associated particle
 \textbf{loss term} are also included.
@@ -100,7 +100,10 @@ Rosenbluth potentials evaluated across grids by Legendre expansion.  Particle nu
 momentum are conserved to round-off by an implicit moment projection; an energy-confinement term
 with the same $\tau_E$ on every species closes the balance when the plasma is driven by RF or by a
 beam; the bulk grids can follow their species by regridding.  Section~\ref{sec:ms} describes this
-mode, Sections~\ref{sec:nml_ms}, \ref{sec:out_ms} its namelist entries and outputs.  The rest of the
+mode, Sections~\ref{sec:nml_ms}, \ref{sec:out_ms} its namelist entries and outputs.  Version 4.0
+also removes the Maxwellian self-collision backgrounds of earlier versions (\texttt{isc = 1, 2, 3})
+and the initial condition built with them (\texttt{istart = 3}): the self-collisions are either
+neglected (\texttt{isc = 0}) or nonlinear (\texttt{isc = -1}).  The rest of the
 manual describes the single-species code, which is unchanged.
 
 
@@ -201,37 +204,14 @@ of width \texttt{delta\_RF} in $\vpa$.
 
 \subsection{Self-Collision Operator}
 
-Four options are available for the treatment of self-collisions, selected by
-the flag \texttt{isc}:
+Two options are available for the treatment of self-collisions, selected by
+the flag \texttt{isc}.  (The Maxwellian self-collision backgrounds \texttt{isc = 1, 2, 3} of
+versions up to 3.2 were removed in version 4.0; a namelist that sets them is rejected.)
 
 \paragraph{\texttt{isc = 0} -- No self-collisions.}
-The self-collision coefficients are zero.  The FP equation is linear.
-
-\paragraph{\texttt{isc = 1} -- Maxwellian background at fixed temperature.}
-The self-collision operator is computed using the Rosenbluth potentials for a
-Maxwellian distribution at the Stix effective temperature $T_\mathrm{eff}$
-(computed once at the start of the simulation and kept constant).  This adds
-a fixed linear operator to the coefficient arrays.
-
-\paragraph{\texttt{isc = 2} -- Maxwellian background at varying effective temperature.}
-Same as \texttt{isc = 1}, but the background temperature and Coulomb
-logarithm are updated at each time step to track the evolving effective
-temperature $T_\mathrm{eff}(t) = (2T_\perp + T_\parallel)/3$.  Requires a
-time-dependent run.
-
-\paragraph{\texttt{isc = 3} -- Maxwellian background at the density-characteristic
-temperature.}
-Same as \texttt{isc = 2}, but the background temperature is the
-\emph{density-characteristic} (cold-bulk) temperature $T_n(t)$ instead of the
-energy-weighted $T_\mathrm{eff}(t)$.  $T_n$ is obtained from a
-phase-space-weighted least-squares fit of $\ln f$ versus $v^2$ restricted to the
-dense thermal core --- only cells with $f > \texttt{core\_frac}\cdot\max f$ enter
-the fit --- which returns the temperature exactly for a Maxwellian.  Being tied to
-the cold bulk rather than to the supra-thermal tail, this background better
-represents the population that dominates the collisional drag.  The core fraction
-\texttt{core\_frac} (default $3.8\times10^{-3}$) is tunable; the appropriate value
-depends on the shape of the distribution, so it may need re-calibrating against the
-fully nonlinear operator for a new scenario.  Requires a time-dependent run.
+The self-collision coefficients are zero and the FP equation is linear.  This is valid for a
+\emph{minority} heated species, whose density is small compared with that of the plasma, so that its
+collisions with itself are negligible against those with the electrons and bulk ions.
 
 \paragraph{\texttt{isc = -1} -- Fully nonlinear self-collisions.}
 The complete nonlinear Landau/Fokker--Planck self-collision operator
@@ -441,7 +421,7 @@ passed to \texttt{pardiso\_solve\_steady} for a direct solve (subroutine
 
 \subsection{Time-Dependent Solver -- Linear Problem (\texttt{timefp\_7pt})}
 
-Used when \texttt{ntimes(1) > 0} and $\texttt{isc} \ne -1$.
+Used when \texttt{ntimes(1) > 0} and \texttt{isc = 0}.
 
 \subsubsection{Time Discretization}
 
@@ -472,12 +452,9 @@ else  & $1.0$  & Fully implicit \\
   \item \textbf{Factorize} $M_\mathrm{lhs}$ once (PARDISO phases 11+22).
   \item \textbf{Time loop} for $n = 1, \ldots, N_\mathrm{times}$:
         \begin{enumerate}
-          \item Recompute the Coulomb logarithm and, for
-                \texttt{isc} $\in \{1,2,3\}$, the Maxwellian self-collision
-                background (at the fixed Stix, $T_\mathrm{eff}(t)$, or $T_n(t)$
-                temperature, respectively) from the current distribution, then
-                rebuild the FP operator (allowing a time-varying Coulomb logarithm
-                and self-collision term).
+          \item Recompute the Coulomb logarithms from the current effective
+                temperature, then rebuild the FP operator (allowing a
+                time-varying Coulomb logarithm).
           \item Rebuild $M_\mathrm{lhs}$ with the updated operator.
           \item Compute the RHS:
                 $b = \bigl(I + (1-\theta)\,\dt\,\Lcal\bigr)\,f^n + \dt\,S$
@@ -595,10 +572,11 @@ The initial distribution $f^0$ is selected by \texttt{istart}:
 0 & $f^0 = 0$ everywhere. Requires \texttt{isource = -1}. \\
 1 & Stix Maxwellian solution (default). \\
 2 & Steady-state solution of the linear solver without self-collisions. \\
-3 & Steady-state solution of the linear solver with Maxwellian SC background. \\
 \bottomrule
 \end{tabular}
 \end{center}
+(\texttt{istart = 3}, the steady state with a Maxwellian self-collision background, was removed in
+version 4.0.)
 
 \subsection{Steady-State Convergence Detection}
 \label{sec:ssconv}
@@ -681,7 +659,8 @@ always computed and reported; \texttt{i\_conv\_shape} only selects which family 
 tolerances are applied to, and the log line is tagged \texttt{[amplitude]} or
 \texttt{[shape]} accordingly.
 
-Verified 2026-07-30 on a 60$\times$41 \texttt{isc = 2} RF case: the amplitude rates
+Verified 2026-07-30 on a 60$\times$41 \texttt{isc = 2} RF case (an option removed in
+version 4.0): the amplitude rates
 flattened at $\varepsilon \approx 2\times10^{-3}$ (the drain rate, with the density
 drift pinned at $1.73\times10^{-3}$) and the run never stopped, while
 $\varepsilon_\mathrm{shape}$ kept falling exponentially and reached
@@ -718,8 +697,8 @@ At each time step the following quantities are written to disk:
         where $T_\perp = \tfrac{1}{2}m\langle \vp^2 \rangle$ and
         $T_\parallel = m\langle \vpa^2 \rangle$.
   \item Density-characteristic temperature $T_n$ (the cold-bulk temperature from
-        the $\ln f$-vs-$v^2$ log-slope fit; it is the background used by
-        \texttt{isc = 3} but is written as a diagnostic for \emph{all} runs).
+        the $\ln f$-vs-$v^2$ log-slope fit over the cells with
+        $f > \texttt{core\_frac}\cdot\max f$), a diagnostic.
   \item Near-axis and whole-grid minima of $f$ (a negative-$f$ monitor: small
         negative undershoots near the axis can corrupt low-velocity moments such
         as $T_n$).
@@ -766,8 +745,9 @@ Namelist & What is computed\\\midrule
   every background species and written to \texttt{finit-*.txt}.  The backgrounds stay frozen; this
   level serves the checks of Section~\ref{sec:ms_checks}. \\[3pt]
 \texttt{i\_multi = -1}, \texttt{i\_coupled = -1} & \textbf{Coupled multispecies run}: every species
-  evolves on its own grid (Section~\ref{sec:ms_loop}).  Requires \texttt{isc = -1}, \texttt{iold = 0}
-  and a time-dependent run. \\
+  evolves on its own grid (Section~\ref{sec:ms_loop}).  Requires \texttt{iold = 0} and a
+  time-dependent run; \texttt{isc = -1} (nonlinear self-collisions of the heated species) or
+  \texttt{isc = 0} (neglected; minority only, with a warning). \\
 \end{longtable}
 
 \subsection{Coupled Equations}
@@ -880,7 +860,8 @@ then does:
   \item moments, temperatures, drifts and Coulomb logarithms of every $f^*$; grid check;
   \item Legendre representation of every $f^*$ on its own grid;
   \item the coefficients of every pair $(s\leftarrow j)$ on the grid of $s$, plus $Q_\mathrm{RF}$ (heated
-    species) and $L_E$ (every species);
+    species) and $L_E$ (every species); the self-pair of the heated species is skipped with
+    \texttt{isc = 0};
   \item one $\theta$-step per species: $(I-\theta\Delta t\,L_s)f_s^{n+1}=(I+(1-\theta)\Delta t\,L_s)f_s^n
     +\Delta t\,S_s$;
   \item the moment projection (below); then $f^*=\theta f^{n+1}+(1-\theta)f^n$ for the next pass.
@@ -967,8 +948,13 @@ species is not regridded: size its namelist grid for the whole run.
 
 \begin{itemize}
 \item Start from a working v3.2 namelist; add \texttt{i\_multi = -1}, \texttt{i\_coupled = -1}
-  (with \texttt{isc = -1}, \texttt{iold = 0}), \texttt{n\_picard = 1}, and \texttt{tau\_E} when there is a
+  (with \texttt{iold = 0}), \texttt{n\_picard = 1}, and \texttt{tau\_E} when there is a
   source.  Keep \texttt{i\_ms\_cons = 2}.
+\item Self-collisions of the heated species: \texttt{isc = -1}.  \texttt{isc = 0} neglects them and
+  saves the FFT kernel; the code then warns that this is valid only for a minority heated species
+  ($n_a\ll n_e$), e.g.\ a few per cent of minority ions in ICRH.  It is not valid for the 50\%
+  tritons of the RF example, or for a beam whose density is a sizeable fraction of the plasma
+  density.
 \item Bulk boxes: \texttt{vbox\_b} 8 for the electrons and 12 for the ions suit temperatures within a
   factor of about two of the initial ones; otherwise set \texttt{i\_regrid = -1}.
 \item $\tau_E$: the steady state has $\sum_sW_s\simeq P\,\tau_E$, so choose $\tau_E$ from the expected power
@@ -990,7 +976,8 @@ species is not regridded: size its namelist grid for the whole run.
   $Z=1$; RF or NBI.  More bulk ion species (up to ten) and $Z>1$ are allowed but untested; run a
   multi-ion check before using them for D--T--$\alpha$ or impurity cases.
 \item RF and NBI together, restarts (\texttt{iold = -1}) and the steady-state solver are not available
-  or not tested in the coupled loop.
+  or not tested in the coupled loop.  With \texttt{isc = 0} the coupled loop has been run only as a
+  functional test.
 \item Non-relativistic electrons; momentum lost only through $L_E$ (beam cases over-rotate); no
   fixed-power RF option; the heated species is not regridded.
 \end{itemize}
@@ -1283,23 +1270,19 @@ istart & $1$ &
   $0$: $f^0 = 0$ (beam-driven only; requires \texttt{isource = -1}).
   $1$: Stix Maxwellian.
   $2$: Steady-state solution without self-collisions.
-  $3$: Steady-state solution with Maxwellian self-collisions. \\[4pt]
+  ($3$ was removed in version 4.0.) \\[4pt]
 
 isc & -- &
-  Self-collision treatment.
-  $0$: no self-collisions (linear FP equation).
-  $1$: Maxwellian background at fixed Stix temperature.
-  $2$: Maxwellian background at evolving effective temperature $T_\mathrm{eff}(t)$
-       (requires TD run).
-  $3$: Maxwellian background at the density-characteristic temperature $T_n(t)$
-       (requires TD run; see \texttt{core\_frac}).
-  $-1$: fully nonlinear self-collision operator (requires TD run). \\[4pt]
+  Self-collision treatment of the heated species.
+  $0$: no self-collisions (linear FP equation; minority heated species).
+  $-1$: fully nonlinear self-collision operator (requires TD run).
+  Other values are rejected: the Maxwellian backgrounds $1$, $2$, $3$ were removed in
+  version 4.0. \\[4pt]
 
-core\_frac & $3.8\!\times\!10^{-3}$ &
-  Core fraction defining the $T_n$ log-slope fit for \texttt{isc = 3}: only grid
-  cells with $f > \texttt{core\_frac}\cdot\max f$ enter the $\ln f$-vs-$v^2$ fit.
-  Smaller values weight the cold bulk more heavily.  Ignored unless
-  \texttt{isc = 3}; the appropriate value is scenario-dependent. \\[4pt]
+core\_frac & $4\!\times\!10^{-3}$ &
+  Core fraction of the $T_n$ diagnostic: only grid cells with
+  $f > \texttt{core\_frac}\cdot\max f$ enter the $\ln f$-vs-$v^2$ fit.  Smaller values weight
+  the cold bulk more heavily.  It affects the \texttt{Tn\_vs\_time} output only. \\[4pt]
 
 i\_upwind & $0$ &
   Advection stabilization of the perpendicular drag term $B\,\partial f/\partial\vp$
@@ -1443,8 +1426,9 @@ vbox\_b(ib) & $0$ &
 
 i\_coupled & $0$ &
   $0$: backgrounds frozen (v3.2 physics).  $-1$: coupled evolution of all species
-  (\texttt{timefp\_ms}); needs \texttt{i\_multi = -1}, \texttt{isc = -1}, \texttt{iold = 0} and
-  \texttt{ntimes(1) > 0}. \\[4pt]
+  (\texttt{timefp\_ms}); needs \texttt{i\_multi = -1}, \texttt{iold = 0} and
+  \texttt{ntimes(1) > 0}, with \texttt{isc = -1}, or \texttt{isc = 0} (self-collisions of the
+  heated species neglected; minority only, with a warning). \\[4pt]
 
 n\_picard & $0$ &
   Picard iterations per coupled step.  $0$: potentials lagged by one step; $1$ (recommended):
@@ -1514,9 +1498,6 @@ extension.
         \texttt{Ekin\_perp\_at\_vpar0.txt}] Kinetic-energy density of the final
         $f$ (total, perpendicular and parallel parts), and its cut at
         $\vpa = 0$.
-  \item[\texttt{fsc\_maxw.txt}, \texttt{fsc\_maxw\_at\_vpar0.txt}] Maxwellian
-        background of the self-collision operator, at $T_\mathrm{eff}$
-        (\texttt{isc = 2}) or $T_n$ (\texttt{isc = 3}).
   \item[\texttt{beam.txt}] NBI source $S(\vp,\vpa)$ (\texttt{isource = -1}).
 \end{description}
 
@@ -1566,7 +1547,8 @@ which are written once per \texttt{n\_ss\_window}-step window):
   \item[\texttt{power\_NBI\_vs\_time.txt}] Beam injection and particle loss power.
   \item[\texttt{power\_RF\_vs\_time.txt}] RF power density.
   \item[\texttt{coulomb\_log\_vs\_time.txt}] Coulomb logarithm for background ion species.
-  \item[\texttt{coulomb\_log\_self\_vs\_time.txt}] Self-collision Coulomb logarithm.
+  \item[\texttt{coulomb\_log\_self\_vs\_time.txt}] Self-collision Coulomb logarithm
+        (\texttt{isc = -1}).
   \item[\texttt{density\_terms\_vs\_time.txt}] Particle rate $\mathrm{d}n/\mathrm{d}t$
         carried by each term of the operator (m$^{-3}$\,s$^{-1}$): time, total,
         collisions with each background species (electrons first),
