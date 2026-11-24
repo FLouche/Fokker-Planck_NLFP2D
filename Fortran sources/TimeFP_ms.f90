@@ -41,7 +41,8 @@
 !*  Diagnostics (every step, files ms_*_vs_time.txt): moments of every  *
 !*  species, the raw particle, power and momentum rates of every pair,  *
 !*  the NRL Maxwellian prediction of the power, the Coulomb             *
-!*  logarithms, the RF and confinement powers and the corrections.      *
+!*  logarithms, the RF and confinement powers, the beam source and     *
+!*  particle-loss rates (ms_source) and the corrections.               *
 !*                                                                     *
 !*  23/11/2026                                                          *
 !***********************************************************************
@@ -133,8 +134,10 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   type(ms_ws_t),  allocatable :: ws(:)
   type(legpot_t), allocatable :: pot(:)
   real(dp), allocatable :: dens(:), wkin(:), wperp(:), ppar(:), tev(:), tperp(:), tpar(:)
+  real(dp), allocatable :: tcl(:), udr(:)   ! collision temperature [eV], parallel drift [m/s]
   real(dp), allocatable :: lnl(:,:), ppair(:,:), rpair(:,:), npair(:,:), pnrl(:,:)
-  real(dp), allocatable :: pE(:), dNc(:), dPc(:), dRc(:)
+  real(dp), allocatable :: pE(:), pEm(:), dNc(:), dPc(:), dRc(:)
+  real(dp) :: srcr(3) = 0.d0, lossr(3) = 0.d0   ! beam source and particle-loss rates (N, W, P_par)
   real(dp), allocatable, dimension(:,:) :: t20, t02, t11, t10, t01, t00, zero2
   real(dp) :: theta, time, dt, taum_save, pRF, mu, kap, wtot, ptot, rdum
   integer  :: s, j, ns, iphase, itime, itime_global, error, k, l, ip, nk, nsys, row, col, ix, info
@@ -154,8 +157,9 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
     theta = 1.0_dp
   end if
 
+  allocate(tcl(ns), udr(ns))
   allocate(ws(ns), pot(ns), dens(ns), wkin(ns), wperp(ns), ppar(ns), tev(ns), tperp(ns), &
-           tpar(ns), lnl(ns,ns), ppair(ns,ns), rpair(ns,ns), npair(ns,ns), pnrl(ns,ns), pE(ns), &
+           tpar(ns), lnl(ns,ns), ppair(ns,ns), rpair(ns,ns), npair(ns,ns), pnrl(ns,ns), pE(ns), pEm(ns), &
            dNc(ns), dPc(ns), dRc(ns), uu(3,3,ns), rr(3,0:3,ns,ns), wgt(3,ns,ns), active(ns))
   if (3 * nspec > 60) stop 'timefp_ms: too many species for the projection system'
   uu = 0.d0;  rr = 0.d0;  wgt = 0.d0;  active = .false.
@@ -215,7 +219,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
         call check_grids(time)                   ! before any Coulomb logarithm
         do s = 1, ns
           do j = 1, ns
-            lnl(s,j) = coulomb_log_pair(s, j, tev(s), tev(j))
+            lnl(s,j) = coulomb_log_pair(s, j, tcl(s), tcl(j))
           end do
         end do
         if (ip == 0) call write_moments(time)   ! state at t^n (first line: the initial state)
@@ -328,7 +332,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
           call pair_rates(ws(s), s, ws(s)%pc(:,:,:,j), merge(nk, 0, active(s)), rr(:,0:,j,s))
           call toc(7)
           npair(s,j) = rr(1,0,j,s);  ppair(s,j) = rr(2,0,j,s);  rpair(s,j) = rr(3,0,j,s)
-          if (s /= j) pnrl(s,j) = p_nrl(s, j, tev(s), tev(j), lnl(s,j))
+          if (s /= j) pnrl(s,j) = p_nrl(s, j, tcl(s), tcl(j), lnl(s,j))
         end do
         deallocate(zero2, t00, t10, t01)
       end do
@@ -428,18 +432,28 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
       ! species, so dW_tot/dt = P_RF + sum_s P_E(s) holds step by step.
       ! (On the uncorrected f^theta, P_E of the electrons is off by the
       ! projection's density correction, ~4% when T_i /= T_e.)
+      ! Beam (heated species): source S, with the step's dt S, and particle
+      ! loss -f/tau_p on the same corrected f^theta, as N, W, P_par rates.
       call tic(8)
+      srcr = 0.d0;  lossr = 0.d0;  pEm = 0.d0
       do s = 1, ns
         call sel(s)
         allocate(zero2(nperp,npar), t00(nperp,npar), t10(nperp,npar), t01(nperp,npar))
         zero2 = 0.d0
         ws(s)%f = theta * ws(s)%x + (1.d0 - theta) * ws(s)%fn
+        if (s == 1 .and. isource == -1) then
+          ws(s)%Lf = source_v
+          call lf_rates(ws(s), s, srcr(1), srcr(2), srcr(3))
+          taum = taum_save                ! fd_stencil_2d adds -taum f: the loss operator alone
+          call op_rates(ws(s), s, zero2, zero2, zero2, zero2, zero2, zero2, lossr(1), lossr(2), lossr(3))
+        end if
+        taum = 0.d0                       ! RF and L_E rates without the particle loss
         if (s == 1 .and. irf == -1) &
           call op_rates(ws(s), s, rf20, rf02, rf11, rf10, rf01, zero2, rdum, pRF, rdum)
         if (tau_E > 0.d0 .and. .not. (i_bulk_frozen == -1 .and. s /= 1)) then
           t00 = 0.d0; t10 = 0.d0; t01 = 0.d0
           call add_lossE_terms(t00, t10, t01)
-          call op_rates(ws(s), s, zero2, zero2, zero2, t10, t01, t00, rdum, pE(s), rdum)
+          call op_rates(ws(s), s, zero2, zero2, zero2, t10, t01, t00, rdum, pE(s), pEm(s))
         end if
         deallocate(zero2, t00, t10, t01)
       end do
@@ -566,6 +580,12 @@ contains
 
   !---------------------------------------------------------------------
   ! Moments of every species with the weights q of the coupled loop.
+  ! T_eff = (2/3) W/n includes the energy of the parallel drift u; the
+  ! collision temperature tcl of a bulk species excludes it,
+  ! T_th = T_eff - m u^2/3, since a drifting bulk species is a shifted
+  ! Maxwellian and the NRL formulae want its thermal spread (a beam
+  ! drives all species to drifts comparable with v_th, stage 5).  The
+  ! heated species keeps T_eff, as in v3.2.
   subroutine all_moments()
     integer :: s1
     do s1 = 1, ns
@@ -575,9 +595,13 @@ contains
         tev(s1)   = (2.d0/3.d0) * wkin(s1) / dens(s1) / qe
         tperp(s1) = wperp(s1) / dens(s1) / qe
         tpar(s1)  = 2.d0 * (wkin(s1) - wperp(s1)) / dens(s1) / qe
+        udr(s1)   = ppar(s1) / (dens(s1) * spec(s1)%aa * pmass)
       else                                      ! empty (beam fill-up): nominal T
         tev(s1) = spec(s1)%t0;  tperp(s1) = tev(s1);  tpar(s1) = tev(s1)
+        udr(s1) = 0.d0
       end if
+      tcl(s1) = tev(s1)
+      if (spec(s1)%kind /= 0) tcl(s1) = tev(s1) - spec(s1)%aa * pmass * udr(s1)**2 / (3.d0 * qe)
     end do
   end subroutine all_moments
 
@@ -585,7 +609,8 @@ contains
   ! Grid adequacy, every step.  Each bulk grid is fixed at setup from the
   ! initial temperature; a species that heats or cools far from it is
   ! truncated by the walls or under-resolved.  Warn once per species when
-  ! |v|_wall < 5 v_th (f_wall/f(0) > 4e-6: the walls absorb particles and
+  ! |v|_wall - |u| < 5 v_th (thermal v_th, drift u; f_wall/f(0) > 4e-6:
+  ! the walls absorb particles and
   ! energy) or v_th < 4 dv_par (the electron projection then oscillates);
   ! stop on a non-positive temperature.
   subroutine check_grids(tt)
@@ -593,9 +618,9 @@ contains
     integer  :: s1
     real(dp) :: vth
     do s1 = 1, ns
-      if (.not. (tev(s1) > 0.d0)) then
+      if (.not. (tcl(s1) > 0.d0)) then
         write(*,'(/,A,I0,A,A,A,ES12.4,A,ES12.4,A)') '  *** coupled loop: species ', s1, ' (', &
-             trim(stag(s1)), ') has T_eff = ', tev(s1), ' eV at t = ', tt, ' s.'
+             trim(stag(s1)), ') has T = ', tcl(s1), ' eV at t = ', tt, ' s.'
         write(*,'(A)') '      Its grid no longer resolves it (see the warnings above): '// &
              'adapt vbox_b / the grid, or the time step.'
         stop
@@ -603,11 +628,11 @@ contains
       ! bulk species only: the heated species' T_eff measures its RF/beam tail,
       ! whose extent the end-of-run domain check (v3.2) assesses
       if (spec(s1)%kind == 0) cycle
-      vth = sqrt(tev(s1) * qe / (spec(s1)%aa * pmass))
-      if (ws(s1)%vbox < 5.d0 * vth .and. .not. btest(ws(s1)%gwarn, 0)) then
+      vth = sqrt(tcl(s1) * qe / (spec(s1)%aa * pmass))
+      if (ws(s1)%vbox - abs(udr(s1)) < 5.d0 * vth .and. .not. btest(ws(s1)%gwarn, 0)) then
         ws(s1)%gwarn = ibset(ws(s1)%gwarn, 0)
         write(*,'(A,I0,A,A,A,ES11.4,A,F6.2,A)') '  WARNING (coupled loop): species ', s1, ' (', &
-             trim(stag(s1)), ') at t = ', tt, ' s: wall at ', ws(s1)%vbox / vth, &
+             trim(stag(s1)), ') at t = ', tt, ' s: wall at ', (ws(s1)%vbox - abs(udr(s1))) / vth, &
              ' v_th < 5 -- the walls truncate the distribution (increase vbox_b).'
       end if
       if (vth < 4.d0 * ws(s1)%dvmax .and. .not. btest(ws(s1)%gwarn, 1)) then
@@ -677,6 +702,7 @@ contains
     open(625, file=trim(outfile('ms_coulomb_log_vs_time.txt')),    status='unknown')
     open(626, file=trim(outfile('ms_power_other_vs_time.txt')),    status='unknown')
     open(627, file=trim(outfile('ms_corrections_vs_time.txt')),    status='unknown')
+    open(628, file=trim(outfile('ms_source_vs_time.txt')),         status='unknown')
     hdr = '# time [s]; per species s ('
     do s1 = 1, ns
       hdr = trim(hdr)//' '//trim(stag(s1))
@@ -697,11 +723,14 @@ contains
     write(626,'(A)') '# time [s]; P_RF (heated species); P_E(s), s = 1..ns  [MW/m^3]  (on the corrected f^theta)'
     write(627,'(A)') '# time [s]; per species: defects removed dN [m^-3/s], dP [MW/m^3], dR [kg m^-2 s^-2],'// &
                      ' projection amplitudes c_gamma, c_alpha [1/s], c_beta [m/s^2]'
+    write(628,'(A)') '# time [s]; beam source S: dN/dt [m^-3/s], P [MW/m^3], dP_par/dt [kg m^-2 s^-2];'// &
+                     ' particle loss -f/tau_p (heated species): the same three; momentum rate of L_E,'// &
+                     ' s = 1..ns [kg m^-2 s^-2]  (on the corrected f^theta)'
   end subroutine open_outputs
 
   subroutine close_outputs()
     integer :: u
-    do u = 620, 627
+    do u = 620, 628
       close(u)
     end do
   end subroutine close_outputs
@@ -730,6 +759,8 @@ contains
     write(624,'(ES16.8,*(ES17.9))') tt, ((npair(s1,j1), j1 = 1, ns), s1 = 1, ns)
     write(626,'(ES16.8,*(ES17.9))') tt, pRF*1.d-6, (pE(s1)*1.d-6, s1 = 1, ns)
     write(627,'(ES16.8,*(ES17.9))') tt, (dNc(s1), dPc(s1)*1.d-6, dRc(s1), ws(s1)%cproj, s1 = 1, ns)
+    write(628,'(ES16.8,*(ES17.9))') tt, srcr(1), srcr(2)*1.d-6, srcr(3), lossr(1), lossr(2)*1.d-6, lossr(3), &
+                                    (pEm(s1), s1 = 1, ns)
   end subroutine write_rates
 
 end subroutine timefp_ms
