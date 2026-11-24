@@ -24,7 +24,7 @@
 !*    4. one theta-scheme step per species, each with its own CSR       *
 !*       pattern and PARDISO handle (block-diagonal system, never       *
 !*       assembled);                                                    *
-!*    5. (after the Picard iterations) the rates of every pair on       *
+!*    5. (in every Picard iteration) the rates of every pair on         *
 !*       f^theta = theta f^(n+1) + (1-theta) f^n, the conservation       *
 !*       defects (namelist i_ms_cons), and their removal by a moment    *
 !*       projection onto the implicit responses to f, div(v f) and      *
@@ -80,6 +80,8 @@ module mod_timefp_ms
     real(dp) :: cproj(3) = 0.d0              ! projection amplitudes [1/s, 1/s, m/s^2]
     real(dp), allocatable :: q(:,:)          ! trapezoidal weights times 2 pi v_perp
     real(dp) :: ax(7) = 0.d0                 ! f(1,j) = sum_{k=2..7} ax(k) f(k,j)
+    real(dp) :: vbox = 0.d0, dvmax = 0.d0    ! smallest wall distance, largest v_par spacing [m/s]
+    integer  :: gwarn = 0                    ! grid warnings already printed (bit 1: box, bit 2: resolution)
     type(pardiso_handle_t) :: h
   end type ms_ws_t
 
@@ -184,6 +186,8 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
   call open_outputs()
   write(*,'(A,I0,A,I0)') '  coupled loop: conservative construction i_ms_cons = ', i_ms_cons, &
                          ',  Picard iterations n_picard = ', n_picard
+  if (i_bulk_frozen == -1) write(*,'(A)') '  i_bulk_frozen = -1: the bulk species are held at their '// &
+       'initial Maxwellians; no projection (v3.2 problem, coupled-loop operators)'
 
   itime_global = 0
   time = otime
@@ -208,6 +212,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
       picard: do ip = 0, n_picard
         !--- 1. moments and Coulomb logarithms of f^n ----------------------
         call tic(1); call all_moments(); call toc(1)
+        call check_grids(time)                   ! before any Coulomb logarithm
         do s = 1, ns
           do j = 1, ns
             lnl(s,j) = coulomb_log_pair(s, j, tev(s), tev(j))
@@ -269,24 +274,25 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
         taum = taum_save
 
         !--- 4. one theta step per species ----------------------------------
-        pres = 0.d0
         do s = 1, ns
           call sel(s)
           if (s /= 1) taum = 0.d0   ! the particle loss -f/tau_p acts on the heated species only
-          ws(s)%xprev = ws(s)%x
           call tic(5)
-          call ws_step(ws(s), s, theta, dt, itime_global)
+          if (i_bulk_frozen == -1 .and. s /= 1) then
+            ws(s)%x = ws(s)%fn                ! frozen bulk species (verification mode)
+          else
+            call ws_step(ws(s), s, theta, dt, itime_global)
+          end if
           call toc(5)
           taum = taum_save
-          if (ip > 0) then
-            pres_s = maxval(abs(ws(s)%x - ws(s)%xprev)) / max(maxval(abs(ws(s)%x)), tiny(1.d0))
-            pres = max(pres, pres_s)
-          end if
-          ws(s)%fs = theta * reshape_vec(ws(s)%x) + (1.d0 - theta) * spec(s)%f
         end do
-      end do picard
 
       !--- 5. rates of every pair on f^theta, conservation defects, projection
+      ! (inside the Picard loop: each iterate f* is built from the PROJECTED
+      ! solve.  The unprojected one carries the raw defects -- for e <- i,
+      ! several % of n_e per step when T_i /= T_e -- and potentials built
+      ! from it would make the Picard steady state differ from the lagged
+      ! one.)
       ! The step applied each pair operator to f_s^theta = theta f^(n+1) +
       ! (1-theta) f^n.  Conservation violations V(s,X), X = N, W, P_par
       ! (i_ms_cons >= 1: N; = 2: also W and P_par):
@@ -313,7 +319,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
         zero2 = 0.d0
         ws(s)%fth = theta * ws(s)%x + (1.d0 - theta) * ws(s)%fn
         ws(s)%f = ws(s)%fth
-        active(s) = (i_ms_cons >= 1 .and. dens(s) > 1.d-6 * spec(s)%dens)
+        active(s) = (i_ms_cons >= 1 .and. dens(s) > 1.d-6 * spec(s)%dens .and. i_bulk_frozen == 0)
         call tic(6)
         if (active(s)) call responses(ws(s), s, theta, dt, nk, uu(:,:,s))
         call toc(6)
@@ -324,15 +330,6 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
           npair(s,j) = rr(1,0,j,s);  ppair(s,j) = rr(2,0,j,s);  rpair(s,j) = rr(3,0,j,s)
           if (s /= j) pnrl(s,j) = p_nrl(s, j, tev(s), tev(j), lnl(s,j))
         end do
-        call tic(8)
-        if (s == 1 .and. irf == -1) &
-          call op_rates(ws(s), s, rf20, rf02, rf11, rf10, rf01, zero2, rdum, pRF, rdum)
-        if (tau_E > 0.d0) then
-          t00 = 0.d0; t10 = 0.d0; t01 = 0.d0
-          call add_lossE_terms(t00, t10, t01)
-          call op_rates(ws(s), s, zero2, zero2, zero2, t10, t01, t00, rdum, pE(s), rdum)
-        end if
-        call toc(8)
         deallocate(zero2, t00, t10, t01)
       end do
       dNc = 0.d0;  dPc = 0.d0;  dRc = 0.d0
@@ -409,6 +406,44 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
           end do
         end do
       end if
+      taum = taum_save
+
+      ! next Picard iterate f* = theta f^(n+1,k) + (1-theta) f^n, from the projected solve
+      pres = 0.d0
+      do s = 1, ns
+        call sel(s)
+        if (ip > 0) then
+          pres_s = maxval(abs(ws(s)%x - ws(s)%xprev)) / max(maxval(abs(ws(s)%x)), tiny(1.d0))
+          pres = max(pres, pres_s)
+        end if
+        ws(s)%xprev = ws(s)%x
+        ws(s)%fs = theta * reshape_vec(ws(s)%x) + (1.d0 - theta) * spec(s)%f
+      end do
+      end do picard
+
+      ! RF and confinement powers on the CORRECTED theta state
+      ! f^theta' = theta f^(n+1) + (1-theta) f^n: the step gives exactly
+      ! f^(n+1) - f^n = dt [L f^theta' + sum_k c_k U_k f^theta], and the
+      ! collisional pairs plus the projection terms sum to zero over the
+      ! species, so dW_tot/dt = P_RF + sum_s P_E(s) holds step by step.
+      ! (On the uncorrected f^theta, P_E of the electrons is off by the
+      ! projection's density correction, ~4% when T_i /= T_e.)
+      call tic(8)
+      do s = 1, ns
+        call sel(s)
+        allocate(zero2(nperp,npar), t00(nperp,npar), t10(nperp,npar), t01(nperp,npar))
+        zero2 = 0.d0
+        ws(s)%f = theta * ws(s)%x + (1.d0 - theta) * ws(s)%fn
+        if (s == 1 .and. irf == -1) &
+          call op_rates(ws(s), s, rf20, rf02, rf11, rf10, rf01, zero2, rdum, pRF, rdum)
+        if (tau_E > 0.d0 .and. .not. (i_bulk_frozen == -1 .and. s /= 1)) then
+          t00 = 0.d0; t10 = 0.d0; t01 = 0.d0
+          call add_lossE_terms(t00, t10, t01)
+          call op_rates(ws(s), s, zero2, zero2, zero2, t10, t01, t00, rdum, pE(s), rdum)
+        end if
+        deallocate(zero2, t00, t10, t01)
+      end do
+      call toc(8)
       taum = taum_save
       call write_rates(time)
       do s = 1, ns
@@ -547,6 +582,44 @@ contains
   end subroutine all_moments
 
   !---------------------------------------------------------------------
+  ! Grid adequacy, every step.  Each bulk grid is fixed at setup from the
+  ! initial temperature; a species that heats or cools far from it is
+  ! truncated by the walls or under-resolved.  Warn once per species when
+  ! |v|_wall < 5 v_th (f_wall/f(0) > 4e-6: the walls absorb particles and
+  ! energy) or v_th < 4 dv_par (the electron projection then oscillates);
+  ! stop on a non-positive temperature.
+  subroutine check_grids(tt)
+    real(dp), intent(in) :: tt
+    integer  :: s1
+    real(dp) :: vth
+    do s1 = 1, ns
+      if (.not. (tev(s1) > 0.d0)) then
+        write(*,'(/,A,I0,A,A,A,ES12.4,A,ES12.4,A)') '  *** coupled loop: species ', s1, ' (', &
+             trim(stag(s1)), ') has T_eff = ', tev(s1), ' eV at t = ', tt, ' s.'
+        write(*,'(A)') '      Its grid no longer resolves it (see the warnings above): '// &
+             'adapt vbox_b / the grid, or the time step.'
+        stop
+      end if
+      ! bulk species only: the heated species' T_eff measures its RF/beam tail,
+      ! whose extent the end-of-run domain check (v3.2) assesses
+      if (spec(s1)%kind == 0) cycle
+      vth = sqrt(tev(s1) * qe / (spec(s1)%aa * pmass))
+      if (ws(s1)%vbox < 5.d0 * vth .and. .not. btest(ws(s1)%gwarn, 0)) then
+        ws(s1)%gwarn = ibset(ws(s1)%gwarn, 0)
+        write(*,'(A,I0,A,A,A,ES11.4,A,F6.2,A)') '  WARNING (coupled loop): species ', s1, ' (', &
+             trim(stag(s1)), ') at t = ', tt, ' s: wall at ', ws(s1)%vbox / vth, &
+             ' v_th < 5 -- the walls truncate the distribution (increase vbox_b).'
+      end if
+      if (vth < 4.d0 * ws(s1)%dvmax .and. .not. btest(ws(s1)%gwarn, 1)) then
+        ws(s1)%gwarn = ibset(ws(s1)%gwarn, 1)
+        write(*,'(A,I0,A,A,A,ES11.4,A,F6.2,A)') '  WARNING (coupled loop): species ', s1, ' (', &
+             trim(stag(s1)), ') at t = ', tt, ' s: v_th = ', vth / ws(s1)%dvmax, &
+             ' dv_par < 4 -- under-resolved (reduce vbox_b or refine the grid).'
+      end if
+    end do
+  end subroutine check_grids
+
+  !---------------------------------------------------------------------
   ! Coulomb logarithm of the pair (s <- j), NRL formulary; symmetric in
   ! (s, j), so both directions of a pair use the same value.
   real(dp) function coulomb_log_pair(s1, j1, ts, tj)
@@ -621,7 +694,7 @@ contains
     write(623,'(A)') trim(hdr)//'; then the sum  [kg m^-2 s^-2]  (raw)'
     write(624,'(A)') trim(hdr)//'  [m^-3 s^-1]'
     write(625,'(A)') trim(hdr)//'  (Coulomb logarithms)'
-    write(626,'(A)') '# time [s]; P_RF (heated species); P_E(s), s = 1..ns  [MW/m^3]'
+    write(626,'(A)') '# time [s]; P_RF (heated species); P_E(s), s = 1..ns  [MW/m^3]  (on the corrected f^theta)'
     write(627,'(A)') '# time [s]; per species: defects removed dN [m^-3/s], dP [MW/m^3], dR [kg m^-2 s^-2],'// &
                      ' projection amplitudes c_gamma, c_alpha [1/s], c_beta [m/s^2]'
   end subroutine open_outputs
@@ -709,6 +782,10 @@ subroutine ws_setup(w, s, nsp, theta, dt0)
       w%q(i,jj) = wpe(i) * wpa(jj) * jacob(i,jj)
     end do
   end do
+
+  ! grid extent and v_par resolution, for the adequacy check of the coupled loop
+  w%vbox  = min(vperp(nperp), vpar(npar), -vpar(1))
+  w%dvmax = maxval(vpar(2:npar) - vpar(1:npar-1))
 
   ! axis row (Neumann): sum_{k=1..7} c_k f(k,j) = 0, the same for every j
   call fd_stencil_2d(1, 2, nperp, npar, vperp, dvpar, 1.0_dp, 1.0_dp, 1.0_dp, &

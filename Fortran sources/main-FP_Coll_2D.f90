@@ -351,7 +351,8 @@ namelist /INPUT/ casename, &
                 iplot_pow, iplot_mom, notxt, &
                 i_upwind, n_snap, i_lu_reuse, lu_reuse_tol, n_threads, &
                 i_multi, tau_E, nperp_b, npar_b, vbox_b, &
-                lmax_leg, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled, ta_init, i_ms_cons, n_picard, ua_init, lmax_bulk
+                lmax_leg, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled, ta_init, i_ms_cons, n_picard, ua_init, lmax_bulk, &
+                i_bulk_frozen
 
 
 !write(*,*) 'Read namelist'
@@ -402,6 +403,10 @@ if (i_coupled == -1) then
         i_ss_check = 0
     endif
 endif
+if (i_bulk_frozen == -1 .and. i_coupled /= -1) then
+    write(*,'(A)') ' WARNING: i_bulk_frozen = -1 applies to the coupled loop only (i_coupled = -1); ignored.'
+    i_bulk_frozen = 0
+end if
 if (lmax_bulk < 0 .or. lmax_bulk > 48) then
     write(*,*) 'ERROR: lmax_bulk must be in 0..48.'
     stop

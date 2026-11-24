@@ -319,6 +319,12 @@ integer :: i_ms_cons = 2     ! conservation of the coupled step (implicit moment
                              !  2: 1 + total energy and total parallel momentum (self-pair
                              !     rates removed, inter-species defects shared n- and
                              !     rho-weighted): all conserved to round-off
+integer :: i_bulk_frozen = 0 ! coupled loop, stage-4 verification:
+                             !  0: every species evolves
+                             ! -1: the bulk species keep their initial Maxwellians (no
+                             !     step, no L_E, no projection): the coupled loop then
+                             !     solves the v3.2 problem with its own operators
+                             !     (Legendre a <- b coefficients instead of cblin)
 
 ! f*f term of the nonlinear self-collisions (main_nlterm), c00 = -coef laplacian(phi).
 integer :: i_sc00 = 0        !  0: finite-difference laplacian(phi) after the axis
