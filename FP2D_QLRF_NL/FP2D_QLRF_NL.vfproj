@@ -78,7 +78,6 @@
 			<File RelativePath="..\Fortran sources\phi_kernel.f90"/>
 			<File RelativePath="..\Fortran sources\qlrfterm.f90">
 			</File>
-			<File RelativePath="..\Fortran sources\self_coll_max.f90"/>
 			<File RelativePath="..\Fortran sources\species.f90"/>
 			<File RelativePath="..\Fortran sources\legendre_pot.f90"/>
 			<File RelativePath="..\Fortran sources\ms_checks.f90"/>

@@ -84,7 +84,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   !--- Scalars -----------------------------------------------------
   REAL(dp) :: theta          ! 0.5 for CN, 1.0 for implicit
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar, teff, teff_tmp
-  REAL(dp) :: Tn, Tn_eV          ! density-characteristic temperature (isc=3 background)
+  REAL(dp) :: Tn                 ! density-characteristic temperature (diagnostic)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: ncoll_d(nbulk), nsc_d, nRF_d, nsrc_d, nloss_d   ! dn/dt per operator term
   REAL(dp) :: tau_rf            ! RF tail formation time [s]
@@ -98,7 +98,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   CHARACTER(len=2)   :: ibString
   CHARACTER(len=256) :: dynfname
 
-  EXTERNAL :: time_power_7pt, self_coll_max, time_momentum_7pt, time_density_terms_7pt
+  EXTERNAL :: time_power_7pt, time_momentum_7pt, time_density_terms_7pt
   EXTERNAL :: time_power_lossE
 
   real(dp) :: anisotropy
@@ -107,10 +107,7 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   real(dp), dimension(nperp,npar) :: f_init
   REAL(dp), DIMENSION(nperp,npar) :: all00, all10, all01, all11, all20, all02
   REAL(dp), PARAMETER :: gamma0 = 2.390775d-1
-  REAL(dp), PARAMETER :: Tn_floor_frac = 0.05_dp  ! clamp isc=3 Tn >= 5% of Teff for the SC background
-  REAL(dp), PARAMETER :: twopi15 = 15.749609945722419_dp  ! (2π)^(3/2), SC Maxwellian norm
-  REAL(dp) :: lnab_t, cte0_t, ta_eV, lnaa_t, teff_sc_eV, vteff_t
-  REAL(dp) :: vteff_fin, fM_ij   ! temporaries for SC Maxwellian output
+  REAL(dp) :: lnab_t, cte0_t, ta_eV
   REAL(dp) :: lnab_arr(nbulk)
   REAL(dp) :: mcoll_perp(nbulk), mcoll_par(nbulk)
   REAL(dp) :: mRF_perp, mRF_par, msrc_perp, msrc_par
@@ -225,7 +222,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='unknown')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='unknown')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),     status='unknown')
-    IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='unknown')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='unknown')
     IF (iplot_pow == -1) THEN
@@ -243,7 +239,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       IF (irf   == -1) OPEN(515,file=TRIM(outfile('tau_rf_vs_time.txt')),          status='unknown')
       OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='unknown')
       IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='unknown')
-      IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='unknown')
       IF (tau_E > 0.d0) OPEN(495,file=TRIM(outfile('power_lossE_vs_time.txt')), status='unknown')
       !DTERMS-OFF! OPEN(520,file=TRIM(outfile('density_terms_vs_time.txt')),   status='unknown')
       !DTERMS-OFF! WRITE(520,'(A)') '# time  total  coll(1:nbulk; 1=e)  self-coll  RF  source  losses   [m^-3 s^-1]'
@@ -261,14 +256,12 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) OPEN(580,file=TRIM(outfile('momentum_RF_vs_time.txt')),        status='unknown')
       IF (isource==-1) OPEN(590,file=TRIM(outfile('momentum_NBI_vs_time.txt')),       status='unknown')
-      IF (isc   /=  0) OPEN(600,file=TRIM(outfile('momentum_coll_self_vs_time.txt')), status='unknown')
     END IF
   ELSE
     OPEN(45, file=TRIM(outfile('density_vs_time.txt')),     status='old', access='append')
     OPEN(46, file=TRIM(outfile('energy_vs_time.txt')),      status='old', access='append')
     OPEN(47, file=TRIM(outfile('anisotropy_vs_time.txt')), status='old', access='append')
     IF (nbulk >   1) OPEN(505,file=TRIM(outfile('coulomb_log_vs_time.txt')),     status='old', access='append')
-    IF (isc==1 .OR. isc==2 .OR. isc==3) OPEN(506,file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='old', access='append')
                      OPEN(507,file=TRIM(outfile('Teff_vs_time.txt')),             status='old', access='append')
                      OPEN(514,file=TRIM(outfile('Tn_vs_time.txt')),               status='old', access='append')
     IF (iplot_pow == -1) THEN
@@ -286,7 +279,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       IF (irf   == -1) OPEN(515,file=TRIM(outfile('tau_rf_vs_time.txt')),          status='old', access='append')
       OPEN(516,file=TRIM(outfile('tau_coll_vs_time.txt')),        status='old', access='append')
       IF (isource==-1) OPEN(490,file=TRIM(outfile('power_NBI_vs_time.txt')),       status='old', access='append')
-      IF (isc   /=  0) OPEN(500,file=TRIM(outfile('power_coll_self_vs_time.txt')), status='old', access='append')
       IF (tau_E > 0.d0) OPEN(495,file=TRIM(outfile('power_lossE_vs_time.txt')), status='old', access='append')
       !DTERMS-OFF! OPEN(520,file=TRIM(outfile('density_terms_vs_time.txt')),   status='old', access='append')
     END IF
@@ -303,7 +295,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) OPEN(580,file=TRIM(outfile('momentum_RF_vs_time.txt')),        status='old', access='append')
       IF (isource==-1) OPEN(590,file=TRIM(outfile('momentum_NBI_vs_time.txt')),       status='old', access='append')
-      IF (isc   /=  0) OPEN(600,file=TRIM(outfile('momentum_coll_self_vs_time.txt')), status='old', access='append')
     END IF
   END IF
 
@@ -336,9 +327,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
    call time_Tn(f_init, dens_tmp, Tn)        ! initialise Tn (density-characteristic T)
    write(*,*) 'Initial density-characteristic temperature is ',Tn
 
-  ! Fixed Stix background temperature for isc=1 self-collision Coulomb log
-  teff_sc_eV = aa * (vteff / 9.79d3)**2
-
   phase_offset  = 0.0_dp
   itime_global  = 0
 
@@ -361,7 +349,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
 
     !--- Update Coulomb log and rebuild linear operator each step ----
     lnab_arr = 0.0_dp
-    lnaa_t   = 0.0_dp
     IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
       DO iv = 1, nperp
         DO imu = 1, npar
@@ -370,15 +357,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       CALL time_energy(f_init, dens_tmp, teff=teff)
       ta_eV = teff * 1.0d3
-      CALL time_Tn(f_init, dens_tmp, Tn)        ! density-characteristic temperature
-      Tn_eV = Tn * 1.0d3
-      ! Coulomb-log clamp: keep the isc=3 background temperature positive and
-      ! not absurdly cold even if the (grid-sensitive) Tn moment dips low.
-      IF (isc == 3 .AND. Tn_eV < Tn_floor_frac * ta_eV) THEN
-        WRITE(*,'(A,F9.4,A,F9.4,A)') '  [isc=3] Tn=', Tn, &
-              ' keV clamped to ', Tn_floor_frac*teff, ' keV for SC background'
-        Tn_eV = Tn_floor_frac * ta_eV
-      END IF
       DO ib = 2, nbulk
         CALL coulomb_log_ab(za, aa, ta_eV, npart, &
                             zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
@@ -387,23 +365,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         gammab(ib) = cte0_t * nb(ib) * zb(ib-1)**2
       END DO
       CALL assemble_FP_terms(all00, all10, all01, all20, all11, all02)
-      ! Self-collision: rebuild sc** with updated Coulomb log and add to all**
-      IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
-        IF (isc == 1) THEN
-          vteff_t = vteff                                    ! fixed Stix thermal velocity
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
-        ELSE IF (isc == 2) THEN  ! background at the effective temperature Teff
-          vteff_t = 9.79d3 * SQRT(ta_eV / aa)              ! thermal velocity at current Teff
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
-        ELSE  ! isc == 3: background at the density-characteristic temperature Tn
-          vteff_t = 9.79d3 * SQRT(Tn_eV / aa)              ! thermal velocity at current Tn
-          CALL coulomb_log_ab(za, aa, Tn_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
-        END IF
-        gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
-        CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
-        all00 = all00 + sc00;  all10 = all10 + sc10;  all01 = all01 + sc01
-        all11 = all11 + sc11;  all20 = all20 + sc20;  all02 = all02 + sc02
-      END IF
     ELSE
       all00 = all00_lin;  all10 = all10_lin;  all01 = all01_lin
       all11 = all11_lin;  all20 = all20_lin;  all02 = all02_lin
@@ -529,50 +490,17 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     CALL time_Tn(fout, dens_tmp, Tn)
     WRITE(514,*) time, Tn
 
-    !--- Refresh Teff-dependent coefficients from the just-solved f^{n} ------
-    ! The operator used for the time step is built from the start-of-step
-    ! (lagged) Teff.  Reporting the collisional/self-collision power with that
-    ! lagged operator produces a transient in the power whenever the Teff jumps
-    ! a lot in one step -- e.g. at a dt change -- because the isc=2 background
-    ! scales as sqrt(temperature).  Rebuild gammab/sc** from the post-step
-    ! temperatures (and dens_tmp) above so the reported power is consistent
-    ! with the current f.  Only the diagnostic coefficients are touched; all**
-    ! and the solution are unchanged, and the next step rebuilds everything.
-    IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
-      ta_eV = teff * 1.0d3
-      Tn_eV = Tn * 1.0d3
-      IF (isc == 3 .AND. Tn_eV < Tn_floor_frac * ta_eV) Tn_eV = Tn_floor_frac * ta_eV
-      DO ib = 2, nbulk
-        CALL coulomb_log_ab(za, aa, ta_eV, npart, &
-                            zb(ib-1), ab(ib-1), t(ib), nb(ib), lnab_t)
-        lnab_arr(ib) = lnab_t
-        gammab(ib)   = gamma0 * lnab_t * (za/aa)**2 * nb(ib) * zb(ib-1)**2
-      END DO
-      IF (isc == 1 .OR. isc == 2 .OR. isc == 3) THEN
-        IF (isc == 1) THEN
-          vteff_t = vteff
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
-        ELSE IF (isc == 2) THEN
-          vteff_t = 9.79d3 * SQRT(ta_eV / aa)
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
-        ELSE  ! isc == 3
-          vteff_t = 9.79d3 * SQRT(Tn_eV / aa)
-          CALL coulomb_log_ab(za, aa, Tn_eV, npart, za, aa, Tn_eV, npart, lnaa_t)
-        END IF
-        gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
-        CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
-      END IF
-    END IF
 
     !--- Refresh Teff-dependent coefficients from the just-solved f^{n} ------
     ! The operator used for the time step is built from the start-of-step
     ! (lagged) Teff.  Reporting the collisional/self-collision power with that
     ! lagged operator produces a transient in the power whenever the Teff jumps
-    ! a lot in one step -- e.g. at a dt change -- because the isc=2 background
-    ! scales as sqrt(Teff).  Rebuild gammab/sc** from the post-step teff (and
-    ! dens_tmp) above so the reported power is consistent with the current f.
+    ! a lot in one step -- e.g. at a dt change.  Rebuild gammab from the
+    ! post-step teff (and dens_tmp) above so the reported power is consistent
+    ! with the current f.
     ! Only the diagnostic coefficients are touched; all** and the solution are
     ! unchanged, and the next step rebuilds everything from fstart regardless.
+    ! (This solver runs with isc = 0 only: no self-collision coefficients.)
     IF (.NOT. (isource == -1 .AND. iold == 0 .AND. dens_tmp < 0.05d0 * npart)) THEN
       ta_eV = teff * 1.0d3
       DO ib = 2, nbulk
@@ -581,17 +509,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
         lnab_arr(ib) = lnab_t
         gammab(ib)   = gamma0 * lnab_t * (za/aa)**2 * nb(ib) * zb(ib-1)**2
       END DO
-      IF (isc == 1 .OR. isc == 2) THEN
-        IF (isc == 1) THEN
-          vteff_t = vteff
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, teff_sc_eV, npart, lnaa_t)
-        ELSE
-          vteff_t = 9.79d3 * SQRT(ta_eV / aa)
-          CALL coulomb_log_ab(za, aa, ta_eV, npart, za, aa, ta_eV, npart, lnaa_t)
-        END IF
-        gammaa = gamma0 * lnaa_t * (za/aa)**2 * npart * za**2
-        CALL self_coll_max(vteff_t, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
-      END IF
     END IF
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
@@ -607,8 +524,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       IF (irf   == -1) WRITE(515,*) time, tau_rf
       WRITE(516,*) time, tau_ii, tau_ie
       IF (isource==-1) WRITE(490,*) time, psource/1.d6, plosses/1.d6
-      IF (isc   /=  0) WRITE(500,*) time, pcoll_self/1.d6, &
-                                         pcoll_self_perp/1.d6, pcoll_self_par/1.d6
       IF (tau_E > 0.d0) THEN
         CALL time_power_lossE(x_vec, dens_tmp, pE_loss, pE_ratio)
         WRITE(495,*) time, pE_loss/1.d6, pE_ratio
@@ -618,7 +533,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
                                      !DTERMS-OFF! ncoll_d, nsc_d, nRF_d, nsrc_d, nloss_d
     END IF
     IF (nbulk >   1) WRITE(505,*) time, (lnab_arr(ib), ib=2,nbulk)
-    IF (isc==1 .OR. isc==2 .OR. isc==3) WRITE(506,*) time, lnaa_t
     IF (iplot_mom == -1) THEN
       CALL time_momentum_7pt(x_vec, dens_tmp, &
                              mcoll_perp, mcoll_par, &
@@ -632,7 +546,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
       END DO
       IF (irf   == -1) WRITE(580,*) time, mRF_perp, mRF_par
       IF (isource==-1) WRITE(590,'(5ES15.7)') time, msrc_perp, msrc_par, mloss_perp, mloss_par
-      IF (isc   /=  0) WRITE(600,*) time, mSC_perp, mSC_par
     END IF
 
     !--- Steady-state convergence test (single, Jacobian-weighted) --
@@ -667,7 +580,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     IF (irf     == -1) CLOSE(515)
     CLOSE(516)
     IF (isource == -1) CLOSE(490)
-    IF (isc     /=  0) CLOSE(500)
     IF (tau_E > 0.d0) CLOSE(495)
     !DTERMS-OFF! CLOSE(520)
     CLOSE(470)
@@ -676,13 +588,11 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
     END DO
   END IF
   IF (nbulk   >   1) CLOSE(505)
-  IF (isc==1 .OR. isc==2 .OR. isc==3) CLOSE(506)
   CLOSE(507); CLOSE(514)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)
     IF (isource == -1) CLOSE(590)
-    IF (isc     /=  0) CLOSE(600)
     CLOSE(570)
     DO ib = 1, nbulk
       CLOSE(570+ib)
@@ -714,38 +624,6 @@ SUBROUTINE timefp_7pt(all00_lin, all10_lin, all01_lin, &
   END DO
   CLOSE(42); CLOSE(40)
 
-  !================================================================
-  ! 9.  Write SC Maxwellian background at its final temperature
-  !     (isc=2: Teff;  isc=3: Tn).  Matches the background used by cblin:
-  !       f_M(v⊥,v∥) = npart / ((2π)^{3/2} vth^3) * exp(-v²/(2 vth²))
-  !     with vth = 9.79e3 * sqrt(T/aa) = sqrt(T/m).  The temperature is taken
-  !     from the last step (scale-invariant, so unaffected by renormalisation).
-  !================================================================
-  IF (isc == 2 .OR. isc == 3) THEN
-    IF (isc == 2) THEN
-      vteff_fin = 9.79d3 * SQRT(teff * 1.0d3 / aa)   ! Teff background
-    ELSE
-      vteff_fin = 9.79d3 * SQRT(Tn   * 1.0d3 / aa)   ! Tn background
-    END IF
-    OPEN(508, file=TRIM(outfile('fsc_maxw.txt')),          status='unknown')
-    OPEN(509, file=TRIM(outfile('fsc_maxw_at_vpar0.txt')), status='unknown')
-    DO iv = 1, nperp
-      DO imu = 1, npar
-        fM_ij = npart / (twopi15 * vteff_fin**3) * &
-                EXP(-(vperp(iv)**2 + vpar(imu)**2) / (2.0_dp * vteff_fin**2))
-        WRITE(508,*) vperp(iv), vpar(imu), fM_ij
-      END DO
-      fM_ij = npart / (twopi15 * vteff_fin**3) * &
-              EXP(-(vperp(iv)**2 + vpar(jmid)**2) / (2.0_dp * vteff_fin**2))
-      WRITE(509,*) vperp(iv), fM_ij
-    END DO
-    CLOSE(509); CLOSE(508)
-    IF (isc == 2) THEN
-      WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Teff=', teff, ' keV) written to fsc_maxw.txt'
-    ELSE
-      WRITE(*,'(A,F8.3,A)') '  SC Maxwellian (Tn=', Tn, ' keV) written to fsc_maxw.txt'
-    END IF
-  END IF
 
   DEALLOCATE(ia_L, ja_L, aa_L, ia_lhs, ja_lhs, aa_lhs, rhs_vec, x_vec, Lf)
 

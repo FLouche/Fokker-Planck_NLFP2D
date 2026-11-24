@@ -193,7 +193,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
 
   !--- phi kernel of the heated species' grid (main_nlterm) -------------
   call sel(1)
-  call phi_kernel_prepare
+  if (isc == -1) call phi_kernel_prepare    ! isc = 0: no self-collisions of the heated species
 
   call open_outputs()
   write(*,'(A,I0,A,I0)') '  coupled loop: conservative construction i_ms_cons = ', i_ms_cons, &
@@ -258,8 +258,9 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
           do j = 1, ns
             if (s == 1 .and. j == 1) then
               ! heated species' self-collisions: v3.2 kernel route (same skip as
-              ! timefp_7pt_nl while a beam-filled distribution is still empty)
-              sc_skip = (isource == -1 .and. dens(1) < 0.05d0 * npart)
+              ! timefp_7pt_nl while a beam-filled distribution is still empty);
+              ! none with isc = 0 (minority heated species, warning in main)
+              sc_skip = (isc == 0) .or. (isource == -1 .and. dens(1) < 0.05d0 * npart)
               if (sc_skip) then
                 t20 = 0.d0; t02 = 0.d0; t11 = 0.d0; t10 = 0.d0; t01 = 0.d0; t00 = 0.d0
               else
@@ -521,7 +522,7 @@ subroutine timefp_ms(fstart_a, fout_a, otime)
     call pardiso_solve_finalize(ws(s)%h, ws(s)%ialhs, ws(s)%jalhs, error)
     call legpot_free(pot(s))
   end do
-  deallocate(phi_kern)
+  if (allocated(phi_kern)) deallocate(phi_kern)
   if (allocated(phi_khat)) deallocate(phi_khat)
 
   do s = ns, 1, -1                 ! ends with the heated species selected

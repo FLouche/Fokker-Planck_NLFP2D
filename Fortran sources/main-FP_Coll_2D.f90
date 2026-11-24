@@ -13,13 +13,15 @@ program FP_Coll_2D_ms
 !  Single-species mode (i_multi = 0, the default; identical to version 3.2):
 !    - the heated species collides with fixed Maxwellian backgrounds
 !      (electrons and bulk ions);
-!    - self-collisions with a Maxwellian background or non-linear (FFT
-!      kernel of the Rosenbluth potentials);
+!    - self-collisions of the heated species neglected (isc = 0) or
+!      non-linear (isc = -1, FFT kernel of the Rosenbluth potentials);
 !    - optional energy-confinement loss L_E f = div(v f)/(2 tau_E) when
 !      there is a source (tau_E > 0).
 !
 !  Multispecies mode (i_multi = -1, i_coupled = -1):
 !    - every species (heated, electrons, bulk ions) evolves on its own grid;
+!    - self-collisions of the heated species non-linear (isc = -1) or
+!      neglected (isc = 0, for a minority heated species only);
 !    - collisions of any pair from the Legendre-expanded Rosenbluth
 !      potentials of the background species, evaluated across grids
 !      (legendre_pot.f90);
@@ -35,8 +37,9 @@ program FP_Coll_2D_ms
     ! Version 4.0 - 24th November 2026 (FL)
 
     ! Multispecies extension; program renamed FP_Coll_2D_ms.  With the
-    !   defaults (i_multi = 0, i_coupled = 0) every output is byte-identical
-    !   to 3.2 (four reference paths, 94 files).
+    !   defaults (i_multi = 0, i_coupled = 0) the outputs of the retained
+    !   paths (isc = 0 or -1, time-dependent and steady state) are
+    !   byte-identical to 3.2.
     !
     !  1) Species containers (species.f90): one grid and distribution per
     !     species, select_species loads a species into shared_grid exactly.
@@ -54,6 +57,14 @@ program FP_Coll_2D_ms
     !     Coulomb logarithms, regridding of the bulk species (i_regrid = -1).
     !  5) coulomb_log_ab: Za*Zb, not Za^2*Zb^2, in the NRL ion-ion mass factor
     !     (no change for Z = 1).
+    !  6) Self-collisions: only isc = -1 (non-linear) and isc = 0 (neglected)
+    !     remain.  The Maxwellian backgrounds isc = 1, 2, 3, the initial
+    !     condition istart = 3 (steady state with a Maxwellian background),
+    !     the routine self_coll_max (self_coll_max.f90) and the outputs
+    !     fsc_maxw*.txt and coulomb_log_self (linear solver) are removed.
+    !     isc = 0 is allowed in the coupled loop, with a warning: the
+    !     self-collisions of the heated species are then neglected, which is
+    !     valid for a minority only.  core_frac is kept for the Tn diagnostic.
     !
     !     New namelist entries: i_multi, tau_E, nperp_b, npar_b, vbox_b,
     !     lmax_leg, lmax_bulk, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled,
@@ -261,7 +272,7 @@ use mod_timefp_ms         ! stage 3: coupled multispecies loop (i_coupled = -1)
 
 implicit none
 
-external cblin, consts, self_coll_max
+external cblin, consts
 
 
 ! Elements of the Fokker-Planck linearized collision operator
@@ -281,8 +292,6 @@ double precision, dimension (:,:), allocatable :: fout
 double precision time1
 character(len=256) :: xout_head   ! first line of xout.dat: time [, nstep]
 integer :: ios_head
-double precision :: teff_sc, lnaa_sc
-double precision, parameter :: gamma0_sc = 2.390775d-1
 
 ! do loops indexes
 
@@ -338,16 +347,10 @@ external mkl_set_num_threads
 !
 !  beam_ekin: beam kinetic energy in keV
 !
-!  isc: treatment of self-collisions:
-!           -1: Consistent self-collisions (non-linear operator)
-!            0: no self-collisions
-!           +1: Maxwellian background at fixed Tstix (Stix solution without RF)
-!           +2: Maxwellian background at varying Teff (energy-weighted; starts at Tstix)
-!           +3: Maxwellian SC background at the density-characteristic (cold-bulk)
-!          temperature Tn, from a log-slope fit of ln(f) vs v^2 over the thermal
-!          core (starts at Tstix). core_frac (namelist, default 4.0d-3) sets the
-!          core threshold f > core_frac*max(f); 4.0d-3 calibrates isc=3 to isc=-1
-!          on JET RF case5 (0.69% RMS in Teff). Tn > Teff signals it is too low.
+!  isc: treatment of the self-collisions of the heated species:
+!           -1: non-linear self-collision operator (time-dependent runs)
+!            0: no self-collisions (valid for a minority heated species)
+!          (the Maxwellian backgrounds isc = 1, 2, 3 were removed in version 4.0)
 !  ising: homogeneity of the grid in vperp:
 !            0: homogeneous grid
 !           -1: inhomogeneous grid made of two domains (vperp<vbound and vperp>vbound) with different meshings
@@ -380,7 +383,7 @@ external mkl_set_num_threads
 !  - istart = 0 -> empty solution, f = 0 everywhere; only possible when isource = -1. The code should include a test at the start to guarantee that isource = -1
 !  - istart = 1 ->  Stix's solution as initial solution 
 !  - istart = 2 -> initial solution is the steady-state solution of the linear time independent code, computed without the self-collisions
-!  - istart = 3 -> initial solution is the steady-state solution of the linear time independent code, computed with a Maxwellian background for the self-collisions
+!    (istart = 3, the steady state with a Maxwellian self-collision background, was removed in version 4.0)
 
 namelist /INPUT/ casename, &
                  nperp,npar,vperp_min,vperp_max,vpar_min,vpar_max,&
@@ -402,24 +405,11 @@ namelist /INPUT/ casename, &
 
 !write(*,*) 'Read namelist'
 
-! Default for the isc=3 Tn log-slope core fraction (overridable via namelist).
-! This assignment MUST stay above read(5,INPUT) so a namelist value overrides
-! it.  It was commented out, and core_frac has no initialiser in shared_data
-! either, so any isc=3 run whose namelist omitted core_frac read an undefined
-! value -- silently, since the variable is only ever used as a threshold.
-!
-! 4.0d-3 calibrates isc=3 to the rigorous isc=-1 reference on JET RF case5
-! (200x200, 50% H minority, N=2, 0.588 MW/m^3): Teff = 43.52 keV against the
-! reference 43.81 keV, i.e. 0.69% RMS over the trace and 0.67% on the final
-! value.  A 14-point scan over [0, 0.1] selects it on both measures; a parabola
-! through the minimum puts the true optimum at 4.16d-3.  The previous 3.8d-3
-! gives 1.93% / 2.34% on the same case.  See Benchmark/JET-RF/isc_report.
-!
-! The basin is narrow: only [3.8d-3, 4.0d-3] lies within 5% of the reference,
-! and +-25% in core_frac moves Teff by 10-30%.  The left flank is the steeper,
-! so err high rather than low.  Too low a value lets the RF tail into the
-! log-slope fit and Tn rises ABOVE Teff, which is the diagnostic that the model
-! is outside its regime -- worth checking in any isc=3 run.
+! Core fraction of the density-characteristic temperature Tn (time_Tn, the
+! Tn_vs_time diagnostic): the log-slope fit of ln f vs v^2 uses the cells with
+! f > core_frac*max(f).  Default 4.0d-3; it must be set above read(5,INPUT) so
+! that a namelist value overrides it.  (It was the background parameter of the
+! removed isc = 3 option.)
 core_frac = 4.0d-3
 
 read(5,INPUT)
@@ -427,6 +417,11 @@ read(5,INPUT)
 ! Multispecies extension: checks on the new namelist entries
 if (i_multi /= 0 .and. i_multi /= -1) then
     write(*,'(A,I0,A)') 'ERROR: i_multi=', i_multi, ' is not valid. Use 0 (single species) or -1.'
+    stop
+endif
+if (isc /= 0 .and. isc /= -1) then
+    write(*,'(A,I0,A)') 'ERROR: isc=', isc, ' is not valid. Use -1 (non-linear self-collisions) or'
+    write(*,'(A)') '       0 (none).  The Maxwellian backgrounds isc = 1, 2, 3 were removed in version 4.0.'
     stop
 endif
 if (i_ms_check == -1 .and. i_multi /= -1) then
@@ -438,10 +433,15 @@ if (i_coupled /= 0 .and. i_coupled /= -1) then
     stop
 endif
 if (i_coupled == -1) then
-    if (i_multi /= -1 .or. isc /= -1 .or. iold == -1 .or. ntimes(1) == 0) then
-        write(*,'(A)') 'ERROR: i_coupled = -1 needs i_multi = -1, isc = -1, iold = 0 and a'
+    if (i_multi /= -1 .or. iold == -1 .or. ntimes(1) == 0) then
+        write(*,'(A)') 'ERROR: i_coupled = -1 needs i_multi = -1, iold = 0 and a'
         write(*,'(A)') '       time-dependent run (ntimes > 0).'
         stop
+    endif
+    if (isc == 0) then
+        write(*,'(A)') ' WARNING: isc = 0 with i_coupled = -1: the self-collisions of the heated species'
+        write(*,'(A)') '          are NEGLECTED.  Use this only for a minority heated species'
+        write(*,'(A)') '          (n_a << n_e); otherwise set isc = -1.'
     endif
     if (i_ss_check == -1) then
         write(*,'(A)') ' WARNING: i_ss_check = -1 is not used by the coupled loop (i_coupled = -1).'
@@ -488,8 +488,8 @@ if (tau_E > 0.d0 .and. irf /= -1 .and. isource /= -1) then
 endif
 if (tau_E > 0.d0) write(*,'(A,ES12.4,A)') ' Energy-confinement loss L_E on, tau_E = ', tau_E, ' s'
 
-! isc=-1, isc=2 and isc=3 require a time-dependent run
-if ((isc == -1 .or. isc == 2 .or. isc == 3) .and. ntimes(1) == 0) then
+! isc=-1 requires a time-dependent run
+if (isc == -1 .and. ntimes(1) == 0) then
     write(*,'(A,I0,A)') 'ERROR: isc=', isc, ' requires a time-dependent run (ntimes > 0).'
     write(*,*) 'Steady-state solver cannot be used with a time-varying self-collision operator.'
     stop
@@ -502,8 +502,9 @@ if (ntimes(1) /= 0 .and. iold /= -1) then
         write(*,*) 'Without a source, starting from f=0 gives a trivial zero solution.'
         stop
     endif
-    if (istart < 0 .or. istart > 3) then
-        write(*,'(A,I0,A)') 'ERROR: istart=', istart, ' is not valid. Use 0, 1, 2 or 3.'
+    if (istart < 0 .or. istart > 2) then
+        write(*,'(A,I0,A)') 'ERROR: istart=', istart, ' is not valid. Use 0, 1 or 2'// &
+                            ' (istart = 3 was removed in version 4.0).'
         stop
     endif
 endif
@@ -653,43 +654,14 @@ call assemble_FP_terms(all00,all10,all01,all20,all11,all02)
 !!====================================================================
 !
 
-! --> If self-collisions are taken into account, we consider two options:
-!     1) we assume a Maxwellian background with Stix's effective temperature
-!         --> only for steady-state solution OR isc = +1
-!     2) we compute the time-dependant self-collision operator assuming
-!        slowing-down on the pitch-angle averaged vdf
-!         --> only in the TD module if isc = -1 (self-collisions neglected otherwise)
-    
+! --> Self-collisions (isc = -1): the non-linear operator is built at every
+!     step by the time-dependent solver (timefp_7pt_nl, or the coupled loop);
+!     the arrays sc** hold it for the diagnostics.  isc = 0: none.
+
     if(isc /= 0) then
         allocate(sc00(nperp,npar))
         allocate(sc20,sc02,sc11,sc10,sc01,mold=sc00)
-        if (isc == 1 .OR. isc == 2 .OR. isc == 3) then
-           ! Initial SC term: Maxwellian background at Tstix (same starting point for isc=1,2,3)
-           teff_sc = aa * (vteff / 9.79d3)**2     ! convert vteff [m/s] to T [eV]
-           call coulomb_log_ab(za, aa, teff_sc, npart, za, aa, teff_sc, npart, lnaa_sc)
-           gammaa = gamma0_sc * lnaa_sc * (za/aa)**2 * npart * za**2
-           call self_coll_max(vteff, gammaa, sc20, sc02, sc11, sc10, sc01, sc00)
-
-             all20 = all20+sc20
-             all02 = all02+sc02
-             all10 = all10+sc10
-             all01 = all01+sc01
-             all11 = all11+sc11
-             all00 = all00+sc00
-             if (isc == 1) write(*,*) 'Self-collisions: Maxwellian background at fixed Tstix'
-             if (isc == 2) write(*,*) 'Self-collisions: Maxwellian background at varying Teff (initial: Tstix)'
-             if (isc == 3) write(*,*) 'Self-collisions: Maxwellian background at varying Tn (initial: Tstix)'
-        !else
-        !    allocate(sum_phi(nbig,nbig))
-        !    write(*,*) 'Starting distance evaluation'
-        !    call cpu_time(start_time)
-        !     call distance_v_gauss_legendre
-        !    !call distance_v_elliptic_E
-        !     write(*,*) 'Distance evaluation one'
-        !     call cpu_time(end_time)
-        !     write(*,*) 'Evaluation time: ',end_time-start_time,'seconds'
-         endif
-    endif    
+    endif
 
 allocate(fout(nperp,npar))
 !
@@ -761,24 +733,7 @@ else steady_state
         case (2)
             ! Steady-state of linear code without self-collisions
             write(*,*) 'Initial condition: computing SS solution (no SC)...'
-            if (isc == 1 .OR. isc == 2) then
-                ! all** currently includes Maxwellian SC; strip it back to Coulomb+RF only
-                block
-                    double precision, dimension(nperp,npar) :: &
-                        c00_ns,c10_ns,c01_ns,c11_ns,c20_ns,c02_ns
-                    if (irf == -1) then
-                        c20_ns=colin20+rf20; c02_ns=colin02+rf02; c11_ns=colin11+rf11
-                        c10_ns=colin10+rf10; c01_ns=colin01+rf01; c00_ns=colin00
-                    else
-                        c20_ns=colin20; c02_ns=colin02; c11_ns=colin11
-                        c10_ns=colin10; c01_ns=colin01; c00_ns=colin00
-                    end if
-                    call FP_steady_state(c20_ns,c02_ns,c11_ns,c10_ns,c01_ns,c00_ns,fout)
-                end block
-            else
-                ! isc=0 or isc=-1: all** already excludes SC
-                call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
-            end if
+            call FP_steady_state(all20,all02,all11,all10,all01,all00,fout)
             do iv = 1,nperp
                 do imu = 1,npar
                     ix = index_mat(iv,imu)
@@ -787,39 +742,6 @@ else steady_state
             enddo
             write(*,*) 'Initial condition: SS (no SC) done.'
 
-        case (3)
-            ! Steady-state of linear code with Maxwellian SC background
-            write(*,*) 'Initial condition: computing SS solution (Maxwellian SC)...'
-            block
-                double precision, dimension(nperp,npar) :: &
-                    c00_sc,c10_sc,c01_sc,c11_sc,c20_sc,c02_sc
-                double precision, dimension(nperp,npar) :: &
-                    sc00t,sc10t,sc01t,sc11t,sc20t,sc02t
-                double precision :: teff_sc_t, lnaa_sc_t, gammaa_sc_t
-                if (isc == 1 .OR. isc == 2) then
-                    ! all** already includes Maxwellian SC — use as-is
-                    c20_sc=all20; c02_sc=all02; c11_sc=all11
-                    c10_sc=all10; c01_sc=all01; c00_sc=all00
-                else
-                    ! Compute Maxwellian SC and add temporarily
-                    teff_sc_t = aa * (vteff / 9.79d3)**2
-                    call coulomb_log_ab(za, aa, teff_sc_t, npart, &
-                                        za, aa, teff_sc_t, npart, lnaa_sc_t)
-                    gammaa_sc_t = gamma0_sc * lnaa_sc_t * (za/aa)**2 * npart * za**2
-                    call self_coll_max(vteff, gammaa_sc_t, &
-                                       sc20t, sc02t, sc11t, sc10t, sc01t, sc00t)
-                    c20_sc=all20+sc20t; c02_sc=all02+sc02t; c11_sc=all11+sc11t
-                    c10_sc=all10+sc10t; c01_sc=all01+sc01t; c00_sc=all00+sc00t
-                end if
-                call FP_steady_state(c20_sc,c02_sc,c11_sc,c10_sc,c01_sc,c00_sc,fout)
-            end block
-            do iv = 1,nperp
-                do imu = 1,npar
-                    ix = index_mat(iv,imu)
-                    fin(ix) = fout(iv,imu)
-                enddo
-            enddo
-            write(*,*) 'Initial condition: SS (Maxwellian SC) done.'
 
         end select
 
