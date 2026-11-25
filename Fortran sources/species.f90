@@ -10,8 +10,9 @@
 !*  so switching back reproduces the heated species' grid to the bit.   *
 !*                                                                     *
 !*  Stage 1 (docs/Multispecies_design.pdf): the containers are built    *
-!*  and the initial Maxwellians written; the backgrounds stay frozen    *
-!*  (the heated species still sees them through cblin).                 *
+!*  and the initial Maxwellians written.  With i_coupled = 0 the        *
+!*  backgrounds stay frozen (the heated species sees them through       *
+!*  cblin); with i_coupled = -1 every species evolves (TimeFP_ms.f90).  *
 !*                                                                     *
 !*  20/11/2026                                                          *
 !***********************************************************************
@@ -234,8 +235,16 @@ contains
              p%vperp_max, p%vpar_min, p%vpar_max
       end associate
     end do
-    write(*,'(A)') '   Stage 1: background distributions are built and written (finit-*.txt)'
-    write(*,'(A,/)') '            but stay frozen; the heated species sees them through cblin.'
+    write(*,'(A)') '   Initial distributions written (finit-*.txt).'
+    if (i_coupled /= 0 .and. i_bulk_frozen == -1) then
+      write(*,'(A)')   '   Coupled loop (i_coupled = -1) with i_bulk_frozen = -1: only the heated'
+      write(*,'(A,/)') '   species evolves; the bulk species keep their initial Maxwellians.'
+    else if (i_coupled /= 0) then
+      write(*,'(A,/)') '   Coupled loop (i_coupled = -1): every species evolves on its own grid.'
+    else
+      write(*,'(A)')   '   i_coupled = 0: the background distributions stay frozen; the heated'
+      write(*,'(A,/)') '   species sees them through cblin (v3.2 physics).'
+    end if
 
     do s = 1, nspec
       call select_species(s)

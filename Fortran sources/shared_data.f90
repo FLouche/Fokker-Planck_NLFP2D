@@ -272,7 +272,8 @@ integer :: i_multi = 0              ! 0: single species, the backgrounds are fix
                                     !    Maxwellians (v3.2).
                                     ! -1: multispecies.  Every background species gets
                                     !    its own grid and distribution (mod_species).
-                                    !    Stage 1: built and written, still frozen.
+                                    !    With i_coupled = 0 they stay frozen; with
+                                    !    i_coupled = -1 they evolve (coupled loop).
 double precision :: tau_E = 0.d0    ! Energy confinement time [s] of the loss term
                                     !   L_E f = (1/2 tau_E) div(v f),
                                     ! applied to every species, and only when there is a
@@ -303,7 +304,8 @@ integer :: i_coupled = 0     !  0: background species frozen (stages 1-2, v3.2 p
                              !     operator of each pair is built from the Legendre
                              !     potentials of the background species, lagged by one
                              !     step (heated species' self-collisions: main_nlterm).
-                             !     Needs i_multi = -1, isc = -1, iold = 0.
+                             !     Needs i_multi = -1, iold = 0, and isc = -1 or isc = 0
+                             !     (heated species' self-collisions neglected: minority only).
 double precision :: ta_init = 0.d0  ! initial temperature [eV] of the heated species in
                              ! the coupled run (Maxwellian); 0 = the namelist/Stix start.
 double precision :: ua_init = 0.d0  ! initial parallel drift [m/s] of the heated species (with ta_init)

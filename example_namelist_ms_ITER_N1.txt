@@ -1,0 +1,90 @@
+&INPUT
+! ==========================================================================
+!  Example namelist, FP_Coll_2D_ms version 4.0 (multispecies, coupled loop).
+!
+!  ITER fundamental (N=1) ICRF heating of tritium in a 50:50 D-T plasma,
+!  ne = 1.5e20 m^-3, B0 = 6 T.  Electrons, deuterons and tritons all
+!  evolve, each on its own velocity grid, starting from 12 keV Maxwellians.
+!  The same energy confinement time tau_E = 0.5 s acts on every species.
+!  Steady state is reached within a few seconds, at about
+!  T_T = 22.3 keV, T_D = 17.9 keV and T_e = 11.4 keV
+!  (the N=1 benchmark of the multispecies article, stage 4).
+!
+!  Run (Release build):   FP2D_QLRF_NL.exe < example_namelist_ms_ITER_N1.txt
+!  About 3-4 minutes with 8 threads (700 steps, t = 11 s; 0.3 s per step).
+! ==========================================================================
+
+   casename = 'N1',
+
+! ---- Grid of the heated species (tritons) ----------------------------------
+!  Power-law v_perp grid (ising=1): keep it for nonlinear self-collisions.
+   nperp = 150, npar = 150,
+   vperp_min = 0.d0,  vperp_max = 2.d7,
+   vpar_min = -6.d6,  vpar_max  = 6.d6,
+   ising = 1, nsing = 25, vbound = 0.07d6, p_grid = 2.d0,
+
+! ---- Background plasma: electrons + D; resonant T at 50% ------------------
+!  t(1) = T_e, t(2) = T_D (initial values in the coupled loop).
+   nbulk = 2,
+   t  = 12.d3, 12.d3, 8*0.d0,
+   aa = 3.d0, ab = 2.d0, 8*0.d0,
+   za = 1.d0, zb = 1.d0, 8*0.d0,
+   ne = 15.d19, xpart = 50.d-2,
+   xb = .50d0, 8*0.d0,
+
+! ---- NBI source (off; values unused) -----------------------------------------
+   isource = 0,
+   beam_ekin = 120.d0, beam_angle_deg = 0.d0,
+   beam_dvperp = 0.12d6, beam_dvpar = 0.2d6,
+   taus = 200.d-3,
+
+! ---- RF: fundamental tritium resonance, 30.45 MHz, B0 = 6 T -------------------
+   irf = -1, eplus = (2.5d2,1.0d2), emin = (7.5d2,1.0d0), kperp = (30.d0,0.d0),
+   kpar = 2.d0, frek = 30.45d6, delta_RF = 2.5d6, b0 = 6.d0, nharm = 1,
+
+! ---- Time integration: three phases of increasing time step -----------------
+!  icn=1: theta = 0.75.  isc=-1: nonlinear self-collisions of the tritons
+!  (isc=0 would neglect them: valid for a minority only, not for 50% T).
+   icn = 1, ntimes = 100, 300, 300, timestep = 5.d-3, 10.d-3, 25.d-3,
+   iold = 0, istart = 1, isc = -1,
+!  core_frac: core fraction of the Tn diagnostic (Tn_vs_time output only).
+   core_frac = 4.d-3,
+
+! ---- Linear solver -----------------------------------------------------------
+   i_lu_reuse = -1, lu_reuse_tol = 1.d-10,
+!  n_threads=1 is reproducible bit for bit; more threads differ in the last digits.
+   n_threads = 8,
+
+! ---- Steady-state convergence detection (single-species loop only) ----------
+   i_ss_check = 0, n_ss_window = 50,
+   ss_tol_eps = 8.d-4, ss_tol_tail = 5.d-3, ss_tol_moment = 5.d-4,
+   i_conv_shape = -1,
+
+! ---- Output ------------------------------------------------------------------
+   iplot_pow = -1, iplot_mom = 0, notxt = 0,
+   i_upwind = 0, n_snap = 0,
+
+! ---- Version 4.0: multispecies coupled loop ----------------------------------
+!  i_multi=-1, i_coupled=-1: every species evolves (requires iold=0 and a
+!  time-dependent run).
+   i_multi = -1, i_coupled = -1,
+!  Initial Maxwellian of the heated species (temperature in eV, drift in m/s).
+   ta_init = 12.d3, ua_init = 0.d0,
+!  Energy confinement time [s], the same for every species (RF or NBI runs).
+   tau_E = 0.5d0,
+!  Bulk grids (electrons, D): 0 -> same size as the heated species' grid;
+!  vbox_b = half-width in thermal velocities of each bulk species.
+   nperp_b = 0, 0, npar_b = 0, 0,
+   vbox_b = 8.d0, 12.d0,
+!  Legendre potentials: lmax_leg for the heated species, lmax_bulk for the
+!  bulk species; nr_leg = nxi_leg = 0: automatic quadrature.
+   lmax_leg = 16, lmax_bulk = 4, nr_leg = 0, nxi_leg = 0,
+!  i_ms_cons=2: implicit moment projection (n, W, P conserved to round-off).
+!  n_picard=1: one Picard iteration of the potentials per step.
+   i_ms_cons = 2, n_picard = 1,
+!  i_regrid=-1 would let the bulk grids follow their species (beam-driven
+!  drifts, strong heating or cooling); not needed here.
+   i_regrid = 0, regrid_fac = 1.3d0,
+!  Checks and verification switches: off.
+   i_ms_check = 0, i_sc00 = 0, i_bulk_frozen = 0
+  /
