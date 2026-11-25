@@ -1,9 +1,0 @@
-! Options for cold_dispersion.exe (second argument, or append this group to the
-! FP2D namelist after its &INPUT group: FP2D reads only &INPUT).
-&COLD
-   nu_omega  = 0.d0,     ! collision frequency / omega (regularises cold resonances)
-   nscan     = 2001,     ! radial scan points, B = b0*r0/R (0 = point at b0 only)
-   r0        = 2.96d0,   ! major radius where B = b0 (m), JET
-   rmin      = 1.9d0, rmax = 4.0d0,
-   nharm_max = 3         ! highest cyclotron harmonic in the layer table
-/
