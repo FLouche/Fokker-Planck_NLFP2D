@@ -2,6 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Version 4.0 (multispecies)
+
+The main program is **`FP_Coll_2D_ms`** (`main-FP_Coll_2D.f90`), version 4.0. It has two modes:
+
+- **Single species** (`i_multi = 0`, `i_coupled = 0`, the defaults). This is version 3.2: one heated
+  species evolves against fixed Maxwellian backgrounds (`cblin`). With these defaults the outputs are
+  **byte-identical to v3.2**, so keep them so.
+- **Multispecies** (`i_multi = -1`, `i_coupled = -1`). Every species (the heated species, the
+  electrons and the bulk ions) evolves on its own grid in the coupled loop `timefp_ms`
+  (`TimeFP_ms.f90`). See *Multispecies Mode* below.
+
+Version 4.0 also removed several options:
+
+- the Maxwellian self-collision backgrounds `isc = 1, 2, 3`, with `self_coll_max.f90`, the
+  `fsc_maxw*` outputs and `istart = 3`. `isc` is now only `-1` (nonlinear) or `0` (neglected);
+  other values stop the run.
+- the density-characteristic temperature T_n (`time_Tn`, `Tn_vs_time.txt`) and its namelist entry
+  `core_frac`. A namelist that still sets `core_frac` stops at the read with a message.
+
+The changelog is in the header of `main-FP_Coll_2D.f90` (items 1–7). The user documentation is
+`FP2D_QLRF_NL_v4_manual.tex/.pdf` at the project root (`FP2D_QLRF_NL_manual.*` is v3.2). When a
+namelist entry or an output changes, update the v4 manual as well. Its namelist reference is
+Section 6.
+
 ## Git Workflow
 
 After every meaningful unit of work — a bug fix, a new feature, a refactor, or any change that compiles and leaves the code in a coherent state — commit the changed source files and push to GitHub:
@@ -39,7 +63,9 @@ Never batch unrelated changes into a single commit. Never commit build outputs, 
 ```
 FP2D_QLRF_NL.exe < <case>.dat
 ```
-A commented example, `example_namelist_ITER_N2.txt` (project root, branch `parallelised`), runs the ITER N=2 reference case with every current parameter, including `i_lu_reuse`/`lu_reuse_tol`; on 16 threads it converges at step 900 in ~21 s with 2 factorisations. The namelists of the reference runs are under `Benchmark runs/`. For the full parameter list see the `namelist /INPUT/` declaration in `main-FP_Coll_2D.f90`.
+A commented example, `example_namelist_ITER_N2.txt` (project root), runs the single-species ITER N=2 reference case with every current parameter, including `i_lu_reuse`/`lu_reuse_tol`; on 16 threads it converges at step 900 in ~21 s with 2 factorisations. The multispecies examples, also at the root and setting every entry, are:
+- `example_namelist_ms_ITER_N1.txt`: ITER N=1 ICRH of T in a 50:50 D–T plasma, τ_E = 0.5 s. It reaches steady state at T_T ≈ 22.3, T_D ≈ 17.9 and T_e ≈ 11.4 keV; 700 steps take ~3–4 min on 8 threads.
+- `example_namelist_ms_JET_NBI.txt`: a 120 keV D beam at 45° with `i_regrid = -1`; 800 steps take ~7 min. The namelists of the reference runs are under `Benchmark runs/`. For the full parameter list see the `namelist /INPUT/` declaration in `main-FP_Coll_2D.f90`.
 
 There is no test suite; correctness is verified by inspecting the output files (`density_vs_time.txt`, `energy_vs_time.txt`, `fout.txt`, etc.) and checking power/density balance diagnostics printed to stdout.
 
@@ -55,7 +81,9 @@ A·f + B·∂f/∂v⊥ + C·∂f/∂v∥ + D·∂²f/∂v⊥² + E·∂²f/∂v�
 The six coefficient arrays (`all00`=A, `all10`=B, `all01`=C, `all20`=D, `all11`=E, `all02`=F) are assembled in `main-FP_Coll_2D.f90` as sums of three independently computed contributions, all stored in `shared_FPterms`:
 - **Coulomb collisions** (`colin**`): computed by `cblin` per background species, summed over `nbulk` species
 - **Quasi-linear RF** (`rf**`): computed by `qlrfterm` using complex Bessel functions; active when `irf=-1`
-- **Self-collisions** (`sc**`): computed by `self_coll_max`; active when `isc≠0`
+- **Self-collisions** (`sc**`): computed every step by `main_nlterm` (`nlterm_test.f90`, FFT kernel of the Rosenbluth potentials, `mod_phi_kernel`) in `timefp_7pt_nl`; active when `isc=-1` (`isc=0`: none)
+
+The energy-confinement loss L_E f = div(v f)/(2 τ_E) is added when `tau_E > 0`, in both time solvers (power in `power_lossE_vs_time.txt`).
 
 ### Grid and Indexing
 Grid is `nperp × npar` in (v⊥, v∥). The global 1D index used in all sparse matrix operations is:
@@ -82,12 +110,13 @@ The velocity domain must contain not just the beam injection point but the full 
 **Rule of thumb:** set vpar_max ≥ v_beam × cos(θ) + 3 × max(beam_dvpar, v_th_bulk), and similarly for vperp_max. Always verify SC energy conservation via Psc_perp + Psc_par ≈ 0 in power_coll_self_vs_time.txt when running near-parallel or near-perpendicular beam cases.
 
 ### Solver Path
-All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`). The solver selected by `isc`:
+All solvers use the 7-point Fornberg stencil (`fd_stencil_2d`). The time-dependent solver is chosen in `main`:
 
-| `isc` | Time-dependent solver |
-|-------|-----------------------|
-| `-1`  | `timefp_7pt_nl` (nonlinear self-collisions) |
-| `≠-1` | `timefp_7pt` (linear or Maxwellian-SC) |
+| Condition | Time-dependent solver |
+|-----------|-----------------------|
+| `i_coupled = -1` | `timefp_ms` (`TimeFP_ms.f90`, all species coupled; `isc = -1` or `0`) |
+| `isc = -1` | `timefp_7pt_nl` (nonlinear self-collisions) |
+| `isc = 0`  | `timefp_7pt` (linear) |
 
 The steady-state solver is always `FP_steady_state` ← `fd_stencil_2d` (in `mod_linear`).
 
@@ -112,9 +141,9 @@ Implements the θ-scheme: Crank-Nicolson (`icn=-1`, θ=0.5), intermediate (`icn=
 ```
 (I - θ·dt·L)·f^{n+1} = (I + (1-θ)·dt·L)·f^n + dt·S
 ```
-**The operator is rebuilt every step; it is not constant** (it is refactorised only when LU reuse rejects a step, or every step with `i_lu_reuse=0`; see *Sparse Matrix and PARDISO*). Each step recomputes `Teff` (and `Tn`) from `f^n`, updates the Coulomb logarithms, reassembles the coefficient arrays (`assemble_FP_terms`, plus the `sc**` self-collision terms when `isc=1,2,3`), refills the values of `aa_L` and of the LHS `(I - θ·dt·L)` on the fixed CSR pattern, applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`) to build the RHS, and calls `pardiso_solve_step` with `a_changed=.TRUE.`. This holds for every case, including RF-off/SC-off ones. The only exception is the NBI fill-up (`isource=-1`, `iold=0`, density below 5% of `npart`): there the Coulomb-log update is skipped and the precomputed `all**_lin` arrays are used, but the matrix is still refilled (and solved through `pardiso_solve_step` like any other step).
+**The operator is rebuilt every step; it is not constant** (it is refactorised only when LU reuse rejects a step, or every step with `i_lu_reuse=0`; see *Sparse Matrix and PARDISO*). Each step recomputes `Teff` from `f^n`, updates the Coulomb logarithms, reassembles the coefficient arrays (`assemble_FP_terms`; in `timefp_7pt_nl` plus the `sc**` terms of `main_nlterm`), refills the values of `aa_L` and of the LHS `(I - θ·dt·L)` on the fixed CSR pattern, applies `L` to `f^n` via a hand-written sparse mat-vec (`sparse_matvec_csr`, inside `timefp_7pt`) to build the RHS, and calls `pardiso_solve_step` with `a_changed=.TRUE.`. This holds for every case, including RF-off/SC-off ones. The only exception is the NBI fill-up (`isource=-1`, `iold=0`, density below 5% of `npart`): there the Coulomb-log update is skipped and the precomputed `all**_lin` arrays are used, but the matrix is still refilled (and solved through `pardiso_solve_step` like any other step).
 
-Consequence (stencil study, 2026-09-16): self-collisions (`isc=2`) add no matrix work. They cost only the `self_coll_max` evaluation and six extra N² arrays: +3–13% run time and about +1 MB at 161×161 for the JET RF case.
+Consequence (stencil study, 2026-09-16): self-collisions add no matrix work, only the evaluation of their coefficients. With the Maxwellian background (`isc=2`, removed in 4.0) that cost +3–13% run time on the JET RF case.
 
 **No particle-conservation rescaling is applied.** A `fout = fout * npart / dens_tmp`
 renormalisation exists but is commented out (`fstart = x_vec!*npart/dens_tmp`,
@@ -122,7 +151,7 @@ renormalisation exists but is commented out (`fstart = x_vec!*npart/dens_tmp`,
 `consts.f90`). Nothing therefore counteracts particles absorbed at the Dirichlet
 boundaries, so a sourceless RF run drains: once the VDF shape has converged, `f` decays
 as a fixed shape with slowly falling amplitude. Verified 2026-07-30 on a 60×41 `isc=2`
-RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen. This puts a
+RF case (an option removed in 4.0) — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen. This puts a
 **floor** under the amplitude-based convergence rate `eps`; use `i_conv_shape=-1`
 (shape criterion) for such cases, or set `ss_tol_eps` above the drain rate.
 
@@ -131,7 +160,14 @@ RF case — density fell at a steady 1.74×10⁻³ s⁻¹ with the shape frozen.
 |-----------|--------|--------|
 | `ntimes` | 0 / >0 | Steady-state / time-dependent |
 | `icn` | -1 / 1 / else | Crank-Nicolson (θ=0.5) / θ=0.75 / fully implicit (θ=1) |
-| `isc` | 0 / 1 / -1 | No self-coll / Maxwellian approx / neglected in TD |
+| `isc` | 0 / -1 | Self-collisions neglected (minority heated species) / nonlinear (`timefp_7pt_nl`, FFT kernel). Other values stop the run (`1,2,3` removed in 4.0) |
+| `istart` | 0 / 1 / 2 | Initial f for TD runs: zero / Stix Maxwellian / steady state without SC (`3` removed in 4.0) |
+| `tau_E` | 0 / >0 | Energy-confinement loss L_E on every evolving species (s) |
+| `i_multi` | 0 / -1 | Single species (v3.2) / per-species grids and distributions (`mod_species`) |
+| `i_coupled` | 0 / -1 | Backgrounds frozen / all species evolve (`timefp_ms`; needs `i_multi=-1`, `iold=0`, a TD run). With `isc=0` the code warns that it is valid only for a minority |
+| `i_ms_cons` | 2 / 1 / 0 / -2 | Coupled loop: implicit moment projection (n, W, P; default) / particles only / none / explicit (demonstration only) |
+| `n_picard` | 0 / ≥1 | Coupled loop: lagged potentials / Picard iterations per step |
+| `i_regrid` | 0 / -1 | Coupled loop: fixed bulk grids / bulk grids follow v_t and the drift (`regrid_fac`, default 1.3) |
 | `irf` | -1 / else | Include QL-RF term / no RF |
 | `isource` | -1 / 0 | NBI beam source / no source |
 | `iold` | -1 / 0 | Restart from `xout.dat` / fresh start |
@@ -166,7 +202,6 @@ file-unit registry under *Fortran Internals*. Time traces are written by both
 | `fout_at_vpar0.txt`, `fout_at_vperp0.txt` | 1D cuts of f | always |
 | `fstix.dat` | Stix reference Maxwellian | always |
 | `vdf_snap_<step>.txt` | f every `n_snap` steps | `n_snap>0` |
-| `fsc_maxw.txt`, `fsc_maxw_at_vpar0.txt` | Maxwellian background of the SC operator | `isc=2,3` (`timefp_7pt` only) |
 | `beam.txt` | NBI source | NBI |
 
 **Energy maps** (`analysis.f90`, end of run): `Ekin.txt`, `Ekin_perp.txt`,
@@ -176,12 +211,12 @@ file-unit registry under *Fortran Internals*. Time traces are written by both
 
 | Group | Files | Condition |
 |-------|-------|-----------|
-| moments | `density`, `energy`, `anisotropy`, `Teff`, `Tn` | always |
+| moments | `density`, `energy`, `anisotropy`, `Teff` | always |
 | collision times | `tau_coll` (effective τ_ii, τ_ie) | always |
-| power balance | `power_coll_tot`, `power_coll_e`, `power_coll_ion<k>` (one per species), `power_coll_self` (`isc≠0`), `power_RF` (RF), `power_NBI` (NBI) | `iplot_pow=-1` |
+| power balance | `power_coll_tot`, `power_coll_e`, `power_coll_ion<k>` (one per species), `power_coll_self` (`isc=-1`), `power_RF` (RF), `power_NBI` (NBI), `power_lossE` (`tau_E>0`) | `iplot_pow=-1` |
 | density balance | `density_terms`: dn/dt split into total, coll per species, SC, RF, source, losses (m⁻³/s) | **switched off** (`84e54ac`, lines marked `!DTERMS-OFF!`); was `iplot_pow=-1` |
 | momentum balance | `momentum_coll_tot`, `momentum_coll_e`, `momentum_coll_ion<k>`, `momentum_coll_self`, `momentum_RF`, `momentum_NBI` (same conditions as power) | `iplot_mom=-1` |
-| Coulomb logs | `coulomb_log` (`nbulk>1`), `coulomb_log_self` (`isc=1,2,3` in `timefp_7pt`; `isc≠0` in `timefp_7pt_nl`) | — |
+| Coulomb logs | `coulomb_log` (`nbulk>1`), `coulomb_log_self` (`isc=-1`, `timefp_7pt_nl`) | — |
 | RF | `tau_rf` (RF tail formation time) | RF |
 | convergence | `conv_eps_vs_time.txt` (time, eps, eps_tail), `conv_diag_vs_time.csv` (full history; `conv_diag.f90`) | `i_ss_check=-1` |
 
@@ -197,7 +232,10 @@ index and may carry a space (see *`--files` matching* below).
   in `domain_check.f90`, called at the end of `main`), always run: from the
   final Teff it gives f(wall)/f(peak) at `vperp_max` and min(|vpar_min|,
   |vpar_max|) and the |v|max needed for 1e-12 (~7.4 vth), and flags a box
-  that is TOO SMALL — an error grid refinement cannot reduce.
+  that is TOO SMALL — an error grid refinement cannot reduce. It models f at
+  the wall by a Maxwellian at Teff, so for a **beam** (Teff set by the
+  injection energy) it reports TOO SMALL although the computed f near the
+  walls is tiny (< 1e-8 of the peak in the JET NBI example): check f itself.
 
 **Debug dumps kept in the sources, switched off** (`!DEBUG-OFF!` marker):
 `LF_RF_2D`, `LF_RF_fstix_2D`, `LF_col_fstix_2D`, `LF_col_2D`
@@ -209,6 +247,22 @@ suffix.
 the cuts `fout_at_vparmax`, `fout_at_vperpmax` and all four
 `fstix_at_{vpar0,vparmax,vperp0,vperpmax}`. `fp2d_plot.py` still has entries
 for them, which only matter for old run directories.
+
+**Multispecies outputs** (`timefp_ms`, `i_coupled=-1`; full list in Section 7 of
+the v4 manual): `finit-*.txt` (initial f of every species), `fout-*.txt` /
+`xout-*.dat` per species (tag `_e`, `_i1`, ...), and the `ms_*_vs_time.txt`
+traces: `ms_moments` (n, W, Teff, T⊥, T∥, P∥ per species), `ms_power_pairs`,
+`ms_momentum_pairs`, `ms_density_pairs` (raw rates of every pair),
+`ms_power_nrl` (Maxwellian prediction), `ms_coulomb_log`, `ms_power_other`
+(P_RF, P_E per species), `ms_source` (beam source and particle loss),
+`ms_corrections` (defects removed by the projection), and `ms_regrid.txt`
+(one line per regrid). The stdout ends with a per-step profile and the final
+state of every species.
+
+**Removed in 4.0:** `fsc_maxw*.txt` (with `isc=2,3`), the `coulomb_log_self`
+and `power/momentum_coll_self` outputs of `timefp_7pt` (it has no
+self-collisions now), and `Tn_vs_time.txt`. `fp2d_plot.py` keeps entries for
+them to plot older runs.
 
 **Cache, not a diagnostic:** `phi_kern-<case>.dat`, the compressed φ-kernel of
 `timefp_7pt_nl` (`mod_phi_kernel`), reused when the grid matches.
@@ -233,7 +287,12 @@ The two main solver calls use different argument orders than each other. In `mai
 All `.f90` sources live in `Fortran sources/` at the **project root** — not inside the
 nested `FP2D_QLRF_NL/` Visual Studio project folder (which holds the `.sln`/`.vfproj` and
 the `x64/Debug`, `x64/Release` build outputs). Run outputs land in whichever `x64/*`
-directory the exe is launched from.
+directory the exe is launched from. A new source file must also be added to
+`FP2D_QLRF_NL/FP2D_QLRF_NL.vfproj`.
+
+The project root also holds the manuals (`FP2D_QLRF_NL_v4_manual.*`, v4.0;
+`FP2D_QLRF_NL_manual.*`, v3.2), the example namelists (`example_namelist_*.txt`),
+`fp2d_plot.py` and its readme.
 
 ### `Benchmark runs/` — reference results under version control
 
@@ -276,6 +335,41 @@ minority in the dielectric, and compares with the namelist `kperp` and `|emin/ep
 JET namelists: N=1 bulk-only fast wave k⊥ = 29.4 m⁻¹, |E−/E+| = 3.75; N=2 (1.725 T)
 k⊥ ≈ 58–61 m⁻¹, |E−/E+| ≈ 1.9.
 
+## Multispecies Mode (version 4.0)
+
+The method of every routine is described stage by stage in the multispecies
+article: the appendix "sources of the new routines" and the flowchart in Fig. 4.
+The article is kept in the development repository (`Multispecies/docs/article`),
+not here. Summary of the files:
+
+| File | Module | Content |
+|------|--------|---------|
+| `species.f90` | `mod_species` | `species_t` containers (one per species: grid, f, A, Z, n, T0), `species_setup`, `bulk_grid`, `select_species` / `store_grid` / `load_grid` (copy a species' grid into `shared_grid`, so the v3.2 routines run unchanged on it) |
+| `legendre_pot.f90` | `mod_legendre_pot` | Legendre expansion of the Rosenbluth potentials of a species on its own grid (`legpot_build`, `legpot_eval`) and the collision coefficients of a pair on the grid of the target (`pair_coefs`) |
+| `TimeFP_ms.f90` | `mod_timefp_ms` | the coupled loop `timefp_ms`: per-species θ-step, pair rates, implicit moment projection (`responses`, `solve3`), L_E and beam rates, regridding (`regrid_check`, `regrid_species`), `ms_*` outputs |
+| `ms_checks.f90` | `mod_ms_checks` | `i_ms_check=-1` verifications (Legendre coefficients against `cblin`; self-pair against `main_nlterm`) |
+
+**One coupled step** (see the header of `TimeFP_ms.f90`):
+1. moments and the Coulomb logarithms from f^n;
+2. the Legendre potentials of every species (`lmax_leg` for the heated species, `lmax_bulk`, default 4, for the bulk);
+3. the coefficients of every pair on the grid of the target species. The heated species' self-pair uses `main_nlterm`, and is skipped with `isc=0`, which also skips the φ kernel;
+4. one θ-step per species (θ = 0.75 with `icn=1`). Each species has its own CSR pattern and PARDISO handle;
+5. the pair rates on f^θ, then the conservation defects and their removal by the projection. Steps 2–5 are repeated in each of the `n_picard` iterations.
+
+**Rules learned (keep them):**
+- **Implicit projection (`i_ms_cons=2`) is required.** Without it, the lagged potentials leave pair energy and momentum unbalanced. On the IE5 test the electrons lose 72% of their particles in 3 s with no projection, and the energy grows by 39% with the explicit form (`-2`). The implicit form conserves n, W and P to round-off.
+- **RF and L_E rates are computed with `taum = 0`.** `fd_stencil_2d` subtracts `taum`, so with a beam the particle loss would otherwise pollute those rates.
+- **Coulomb logarithms, NRL powers and grid checks use the thermal temperature** T_eff − m u²/3 of the bulk species, not T_eff, which includes the drift energy of beam-driven rotation.
+- **The energy confinement time is the same for every species** (`tau_E`). With RF or NBI the steady state satisfies P = Σ W_s/τ_E (+ W_beam/τ_s), and for a beam n_beam = Ṅ τ_s.
+- **Regridding** (`i_regrid=-1`) rebuilds a bulk grid, centred on its drift, when the wall comes within `vbox_b/regrid_fac` v_t of the drift or the half-width exceeds `vbox_b·regrid_fac` v_t. The new f is the Maxwellian plus the bilinearly interpolated deviation, with n, W and P restored exactly. Without it, the electrons of the NBI case lag by 4e-3 (1.1e-4 with it).
+- Restarts (`iold=-1`), the steady-state solver, and RF and NBI together are not available or not tested in the coupled loop.
+
+**Verification after a change:** run with the default namelist entries and check
+that the outputs are byte-identical to the previous build with `n_threads = 1`
+(more threads differ in the last digits). For multispecies runs, also compare
+the `ms_moments` and `ms_power_*` traces and the conservation figures printed
+at the end against the example runs.
+
 ## Fortran Internals
 
 ### Shared variable semantics
@@ -284,29 +378,13 @@ k⊥ ≈ 58–61 m⁻¹, |E−/E+| ≈ 1.9.
 |----------|--------|---------|
 | `npart` | `shared_plasma` | Particle density from namelist (m⁻³); used as SC-operator density and renorm target |
 | `dens_tmp` | local in solvers | Actual density of `fout` at current step (diverges from `npart` during NBI fill) |
-| `vteff` | `shared_plasma` | Thermal velocity at Stix temperature (fixed; used by `isc=1`) |
+| `vteff` | `shared_plasma` | Thermal velocity at the Stix temperature (fixed; convergence diagnostics) |
 | `teff` | local in `timefp_7pt` | Effective temperature (keV) updated unconditionally every step via `time_energy(fout,…,teff=teff)` |
-| `ta_eV` | local in `timefp_7pt` | `teff * 1.0d3` — Teff in eV, recomputed each step for isc=2 |
-| `vteff_t` | local in `timefp_7pt` | Thermal velocity used for SC this step: `vteff` (isc=1) or `9.79d3*sqrt(ta_eV/aa)` (isc=2) |
+| `ta_eV` | local in `timefp_7pt` | `teff * 1.0d3` — Teff in eV, recomputed each step for the Coulomb logarithms |
 | `jmid` | `shared_grid` | v∥ grid index for v∥ = 0 (used for all `_at_vpar0` output slices) |
 | `gamma0` | PARAMETER in solvers | `2.390775d-1` — collision frequency pre-factor |
-| `pi15` | PARAMETER in `timefp_7pt` | `5.5683279968` = π^(3/2), used for SC Maxwellian normalisation |
 
-### Maxwellian background formula (isc=2, isc=3)
-
-The SC operator uses a Maxwellian background with density `npart` and thermal velocity `vteff_t`:
-```
-f_M(v⊥, v∥) = npart / ((2π)^{3/2} · vth³) · exp(−(v⊥² + v∥²) / (2·vth²))
-              where  vth = 9.79×10³ · sqrt(T[eV] / aa)  m/s  ( = sqrt(T/m) )
-```
-Here `vth` is the per-degree-of-freedom rms speed `sqrt(T/m)` (NOT the most-probable
-speed `sqrt(2T/m)`), so the normalisation constant is `(2π)^{3/2}` and the exponent
-carries a factor `1/(2·vth²)`. The temperature `T` is `Teff` for `isc=2` and `Tn` for
-`isc=3`. See `TimeFP_7pt.f90` (`twopi15` parameter and the `fM_ij` assembly, ~line 631).
-Written to `fsc_maxw.txt` and `fsc_maxw_at_vpar0.txt` at the end of `timefp_7pt` when
-`isc==2` or `isc==3`.
-
-### Output file-unit registry (`timefp_7pt`)
+### Output file-unit registry (`timefp_7pt`, `timefp_7pt_nl`, `timefp_ms`)
 
 New output files must use units not in this table:
 
@@ -317,7 +395,8 @@ New output files must use units not in this table:
 | 470–479 | power_coll_tot / per-species | `iplot_pow=-1` |
 | 480 | power_RF_vs_time | RF |
 | 490 | power_NBI_vs_time | NBI |
-| 500 | power_coll_self_vs_time | `isc≠0` |
+| 495 | power_lossE_vs_time | `tau_E>0` |
+| 500 | power_coll_self_vs_time | `isc=-1` (`timefp_7pt_nl`) |
 | 505 | coulomb_log_vs_time | `nbulk>1` |
 | 506 | coulomb_log_self_vs_time | `isc=-1` (`timefp_7pt_nl`) |
 | 507 | Teff_vs_time | always |
@@ -330,7 +409,9 @@ New output files must use units not in this table:
 | 570–579 | momentum_coll_tot / per-species | `iplot_mom=-1` |
 | 580 | momentum_RF_vs_time | RF |
 | 590 | momentum_NBI_vs_time | NBI |
-| 600 | momentum_coll_self_vs_time | `isc≠0` |
+| 600 | momentum_coll_self_vs_time | `isc=-1` (`timefp_7pt_nl`) |
+| 620–628 | ms_moments, ms_power_pairs, ms_power_nrl, ms_momentum_pairs, ms_density_pairs, ms_coulomb_log, ms_power_other, ms_corrections, ms_source (`_vs_time`) | `timefp_ms` |
+| 629 | ms_regrid.txt | `timefp_ms` |
 
 ### Output filename convention
 All output files go through `outfile(name)` (defined in `shared_timer`):
