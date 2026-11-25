@@ -319,10 +319,8 @@ New output files must use units not in this table:
 | 490 | power_NBI_vs_time | NBI |
 | 500 | power_coll_self_vs_time | `isc≠0` |
 | 505 | coulomb_log_vs_time | `nbulk>1` |
-| 506 | coulomb_log_self_vs_time | `isc=1,2,3` (`timefp_7pt_nl`: `isc≠0`) |
+| 506 | coulomb_log_self_vs_time | `isc=-1` (`timefp_7pt_nl`) |
 | 507 | Teff_vs_time | always |
-| 508–509 | fsc_maxw / fsc_maxw_at_vpar0 | `isc=2,3` |
-| 514 | Tn_vs_time | always |
 | 515 | tau_rf_vs_time (RF tail formation time) | RF |
 | 516 | tau_coll_vs_time (effective tau_ii, tau_ie) | always |
 | 518 | conv_diag_vs_time.csv (full convergence history) | `i_ss_check=-1` |

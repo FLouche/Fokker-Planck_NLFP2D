@@ -59,8 +59,6 @@
 !  valid only for a beam much less dense than the plasma).
    icn = 1, ntimes = 200, 600, 0, timestep = 5.d-3, 25.d-3, 25.d-3,
    iold = 0, istart = 0, isc = -1,
-!  core_frac: core fraction of the Tn diagnostic (Tn_vs_time output only).
-   core_frac = 4.d-3,
 
 ! ---- Linear solver -----------------------------------------------------------
    i_lu_reuse = -1, lu_reuse_tol = 1.d-10,

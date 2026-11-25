@@ -88,7 +88,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   !--- Scalars and temporaries -------------------------------------
   REAL(dp) :: theta
   REAL(dp) :: time, dens_tmp, tk, tkperp, tkpar,teff,teff_tmp
-  REAL(dp) :: Tn          ! density-characteristic temperature (diagnostic)
   REAL(dp) :: pcoll(nbulk), pRF, psource, plosses, pcoll_self
   REAL(dp) :: ncoll_d(nbulk), nsc_d, nRF_d, nsrc_d, nloss_d   ! dn/dt per operator term
   REAL(dp) :: tau_rf            ! RF tail formation time [s]
@@ -252,7 +251,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')), status='unknown')
     IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown')
                    OPEN(507, file=TRIM(outfile('Teff_vs_time.txt')),              status='unknown')
-                   OPEN(514, file=TRIM(outfile('Tn_vs_time.txt')),                status='unknown')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='unknown')
       DO ib = 1, nbulk
@@ -295,7 +293,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     IF (nbulk > 1) OPEN(505, file=TRIM(outfile('coulomb_log_vs_time.txt')), status='old', access='append')
     IF (isc /= 0)  OPEN(506, file=TRIM(outfile('coulomb_log_self_vs_time.txt')), status='unknown', position='append')
                    OPEN(507, file=TRIM(outfile('Teff_vs_time.txt')),              status='old',     access='append')
-                   OPEN(514, file=TRIM(outfile('Tn_vs_time.txt')),                status='old',     access='append')
     IF (iplot_pow == -1) THEN
       OPEN(470,file=TRIM(outfile('power_coll_tot_vs_time.txt')), status='old', access='append')
       DO ib = 1, nbulk
@@ -527,8 +524,6 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
     anisotropy = merge(100.0_dp*tkperp/(2.0_dp*tk - tkperp), 0.0_dp, tk > 0.0_dp)
     WRITE(47,*) time, anisotropy
     WRITE(507,*) time, teff
-    CALL time_Tn(fout, dens_tmp, Tn)
-    WRITE(514,*) time, Tn
 
     CALL time_power_7pt(x_vec, dens_tmp, pcoll, pRF, psource, plosses, &
                         pcoll_self, pcoll_self_perp, pcoll_self_par, &
@@ -615,7 +610,7 @@ SUBROUTINE timefp_7pt_nl(all00_lin, all10_lin, all01_lin, &
   END IF
   IF (nbulk > 1) CLOSE(505)
   IF (isc /= 0)  CLOSE(506)
-                 CLOSE(507); CLOSE(514)
+                 CLOSE(507)
   CLOSE(47); CLOSE(46); CLOSE(45)
   IF (iplot_mom == -1) THEN
     IF (irf     == -1) CLOSE(580)

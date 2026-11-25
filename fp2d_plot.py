@@ -214,7 +214,8 @@ FILE_META = {
     # Effective temperature
     "Teff_vs_time":                 {"ptype": "ts",  "ylabel": "T_eff (keV)",
                                      "title":  "Effective temperature vs time"},
-    # Density-characteristic (log-slope) temperature
+    # Density-characteristic (log-slope) temperature: written by versions
+    # before 4.0 only (removed with core_frac); kept to plot older runs.
     "Tn_vs_time":                   {"ptype": "ts",  "ylabel": "T_n (keV)",
                                      "title":  "Density-characteristic temperature vs time"},
     # RF tail formation time, tau_RF = npart*Teff/P_RF (time_power_7pt): the

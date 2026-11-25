@@ -64,7 +64,12 @@ program FP_Coll_2D_ms
     !     fsc_maxw*.txt and coulomb_log_self (linear solver) are removed.
     !     isc = 0 is allowed in the coupled loop, with a warning: the
     !     self-collisions of the heated species are then neglected, which is
-    !     valid for a minority only.  core_frac is kept for the Tn diagnostic.
+    !     valid for a minority only.
+    !
+    !  7) The density-characteristic temperature Tn (routine time_Tn, output
+    !     Tn_vs_time.txt) and its namelist entry core_frac are removed: Tn was
+    !     the background temperature of isc = 3.  A namelist that still sets
+    !     core_frac is rejected with a message.
     !
     !     New namelist entries: i_multi, tau_E, nperp_b, npar_b, vbox_b,
     !     lmax_leg, lmax_bulk, nr_leg, nxi_leg, i_ms_check, i_sc00, i_coupled,
@@ -292,6 +297,8 @@ double precision, dimension (:,:), allocatable :: fout
 double precision time1
 character(len=256) :: xout_head   ! first line of xout.dat: time [, nstep]
 integer :: ios_head
+integer :: ios_nml                 ! iostat of the namelist read
+character(len=256) :: msg_nml     ! its message
 
 ! do loops indexes
 
@@ -393,7 +400,7 @@ namelist /INPUT/ casename, &
                 beam_dvperp, beam_dvpar, taus, &
                 irf,eplus,emin,kperp, &
                 kpar,frek,delta_RF,b0,nharm, &
-                icn, ntimes, timestep, iold, istart, isc, core_frac, &
+                icn, ntimes, timestep, iold, istart, isc, &
                 i_ss_check, n_ss_window, &
                 ss_tol_eps, ss_tol_tail, ss_tol_moment, i_conv_shape, &
                 iplot_pow, iplot_mom, notxt, &
@@ -405,14 +412,13 @@ namelist /INPUT/ casename, &
 
 !write(*,*) 'Read namelist'
 
-! Core fraction of the density-characteristic temperature Tn (time_Tn, the
-! Tn_vs_time diagnostic): the log-slope fit of ln f vs v^2 uses the cells with
-! f > core_frac*max(f).  Default 4.0d-3; it must be set above read(5,INPUT) so
-! that a namelist value overrides it.  (It was the background parameter of the
-! removed isc = 3 option.)
-core_frac = 4.0d-3
-
-read(5,INPUT)
+read(5, INPUT, iostat=ios_nml, iomsg=msg_nml)
+if (ios_nml /= 0) then
+    write(*,'(A)') 'ERROR reading the namelist &INPUT: '//trim(msg_nml)
+    write(*,'(A)') '       Version 4.0 removed the entry core_frac (and the Tn diagnostic):'
+    write(*,'(A)') '       delete it from the namelist if it is still there.'
+    stop
+endif
 
 ! Multispecies extension: checks on the new namelist entries
 if (i_multi /= 0 .and. i_multi /= -1) then
