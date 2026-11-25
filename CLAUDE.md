@@ -260,10 +260,7 @@ namelist, compare with `fp2d_plot.py compare`). Points to know:
   next to the reports stay ignored.
 - The folder is ~2.9 GB; adding more results grows the clone size for good.
 
-### Cold-plasma dispersion for an FP2D namelist (moved to the `Cold_Plasma` repository, `fortran/`)
-
-Moved on 2026-11-25 from `Tools/cold_dispersion/` to the separate repository
-FLouche/Cold_Plasma, folder `fortran/`.
+### `Tools/cold_dispersion/` — cold-plasma dispersion for an FP2D namelist
 
 Standalone Fortran program (not part of the `.vfproj`), built by `build.bat`
 (ifx from a plain cmd; uses `vcvars64.bat` + the oneAPI 2025.2 directories, since
